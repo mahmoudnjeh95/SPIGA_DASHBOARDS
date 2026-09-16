@@ -1,0 +1,198 @@
+<Application x:Class="SpigaDashboards.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SpigaDashboards.App"
+             xmlns:conv="clr-namespace:SpigaDashboards.App.Converters">
+    <Application.Resources>
+        <conv:EnumToBoolConverter x:Key="EnumToBool"/>
+        <conv:InverseBoolConverter x:Key="InverseBool"/>
+        <conv:TestResultBrushConverter x:Key="TestResultBrush"/>
+        <conv:SqlLoginVisibilityConverter x:Key="SqlLoginVisibility"/>
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <conv:BoolToStatusBrushConverter x:Key="BoolToStatusBrush"/>
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility"/>
+        <conv:InverseNullToVisibilityConverter x:Key="InverseNullToVisibility"/>
+        <conv:PercentBandBrushConverter x:Key="PercentBandBrush"/>
+        <conv:WeightDeviationBrushConverter x:Key="WeightDeviationBrush"/>
+
+        <!-- Note: the active theme's brushes (Themes/DarkTheme.xaml or LightTheme.xaml)
+             are merged in at startup by ThemeService.Apply, before any window is
+             created, so every {DynamicResource ...} below resolves correctly and
+             updates instantly across all open windows when the theme is toggled. -->
+
+        <!-- Shared dashboard styles: used by MainWindow's chrome and every slide
+             content control (MachinePanel today; PDF/annual-summary slides later). -->
+        <Style x:Key="KpiTile" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="6"/>
+        </Style>
+        <Style x:Key="KpiLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style x:Key="KpiValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <!-- Smaller headline value for the detail (tolerance-breakdown) tile row,
+             so the two rows read as a clear primary/secondary hierarchy. -->
+        <Style x:Key="KpiValueSmall" TargetType="TextBlock" BasedOn="{StaticResource KpiValue}">
+            <Setter Property="FontSize" Value="24"/>
+        </Style>
+        <Style x:Key="KpiSubtext" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+        <Style x:Key="StatusDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
+            <Setter Property="Margin" Value="4,0,10,0"/>
+        </Style>
+        <Style x:Key="ChartTile" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="6"/>
+        </Style>
+        <Style x:Key="ChartTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="4,0,0,4"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource WindowBackgroundBrush}"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- DatePickerTextBox is only ever used inside a DatePicker, so this can
+             safely be implicit (no x:Key): every DatePicker in the app (Settings,
+             History) wants the themed input area instead of WPF's default white one.
+             DatePicker's own chrome (border/button) is left default-templated:
+             only property setters, not a full ControlTemplate, to avoid risking
+             the calendar popup's PART_Button/PART_Popup wiring.
+
+             DatePickerTextBox derives from TextBox, so its template must provide
+             PART_ContentHost (the TextBoxBase contract), not a nested child
+             TextBox, which is a different (and broken) control entirely: it
+             crashed WPF's internals as soon as the calendar tried to write a
+             selected date back into the text surface. -->
+        <Style TargetType="DatePickerTextBox">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DatePickerTextBox">
+                        <Border Background="{TemplateBinding Background}" BorderThickness="0">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="6" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="DatePicker">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        </Style>
+
+        <!-- Keyed (not implicit) so this doesn't touch the period-selector ComboBox
+             on the live kiosk dashboard: applied explicitly on admin-window
+             ComboBoxes (Settings roster grid, History filters) only. -->
+        <Style x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="ClickMode" Value="Press"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="Transparent">
+                            <Path Data="M0,0 L4,4 L8,0 Z" Fill="{DynamicResource SecondaryTextBrush}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DarkComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="{DynamicResource InputBackgroundBrush}" Padding="8,5">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <!-- Selected item sits on AccentBrush (a saturated blue in both themes),
+                 so its text stays a fixed white rather than following PrimaryTextBrush
+                 (which would go near-black in light mode: unreadable on blue). -->
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DarkComboBox" TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"/>
+                            <ToggleButton Style="{StaticResource DarkComboBoxToggleButton}"
+                                          IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                                <Border Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <ScrollViewer SnapsToDevicePixels="True">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
+</Application>

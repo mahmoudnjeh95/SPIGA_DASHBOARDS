@@ -1,0 +1,17 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+publish/
+
+# WiX installer build outputs (regenerate via `dotnet build installer/SpigaDashboards.Installer.wixproj -c Release`)
+installer/bin/
+installer/obj/
+
+# VS / Rider / VS Code local state
+.vs/
+.vscode/
+*.user
+*.suo
+
+# NuGet
+*.nupkg

@@ -1,0 +1,78 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="SPIGA Dashboards"
+           Manufacturer="L2I - Leader de l'Innovation Industrielle"
+           Version="1.0.0"
+           UpgradeCode="D28AD530-83ED-4FCE-BE8D-E8AAE001E645"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="SPIGA Dashboards - Supervision machines de controle de poids" />
+
+    <MajorUpgrade DowngradeErrorMessage="Une version plus recente de SPIGA Dashboards est deja installee." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SPIGA Dashboards" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppProgramMenuFolder" Name="SPIGA Dashboards" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="Main" Title="SPIGA Dashboards" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="DevDatabase" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+  </Package>
+
+  <!-- The full self-contained publish output (app + .NET runtime + all native
+       dependencies): output of "dotnet publish -c Release -r win-x64 (self
+       contained)", harvested recursively so nothing has to be listed by hand. -->
+  <Fragment>
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+  </Fragment>
+
+  <!-- Dev seed database, placed directly beside the exe: DatabasePathResolver
+       checks AppContext.BaseDirectory\spiga_dashboards.db first, so the app
+       has real sample data immediately after install with no extra setup. -->
+  <Fragment>
+    <ComponentGroup Id="DevDatabase" Directory="INSTALLFOLDER">
+      <Component Id="DevDbComponent" Guid="6A6F7F1E-9B7A-4C3D-8E7A-2B5B9C6D1A3F">
+        <File Id="DevDbFile" Source="$(var.DevDbFile)" Name="spiga_dashboards.db" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="StartMenuShortcut" Directory="AppProgramMenuFolder" Guid="1F2E3D4C-5B6A-4978-8877-665544332211">
+      <Shortcut Id="StartMenuShortcutFile"
+                Name="SPIGA Dashboards"
+                Description="Supervision machines de controle de poids"
+                Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveStartMenuFolder" Directory="AppProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="2A3B4C5D-6E7F-4890-9911-223344556677">
+      <Shortcut Id="DesktopShortcutFile"
+                Name="SPIGA Dashboards"
+                Description="Supervision machines de controle de poids"
+                Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+</Wix>

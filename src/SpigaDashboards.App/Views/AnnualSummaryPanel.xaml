@@ -1,0 +1,69 @@
+<UserControl x:Class="SpigaDashboards.App.Views.AnnualSummaryPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:models="clr-namespace:SpigaDashboards.App.Models"
+             mc:Ignorable="d"
+             d:DesignWidth="1560" d:DesignHeight="760" Background="Transparent">
+
+    <!-- Slides 9-13: annual synthesis (cumul mensuel + graphiques) for one sector.
+         DataContext is an AnnualSummarySlideViewModel. -->
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="1.3*"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource ChartTile}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Cumul mensuel" Style="{StaticResource ChartTitle}"/>
+                <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="6" Margin="0,4,0,6">
+                    <TextBlock Text="Mois" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                    <TextBlock Text="Poids moyen (g)" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                    <TextBlock Text="TRS %" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                    <TextBlock Text="Conformes" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                    <TextBlock Text="Eleves" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                    <TextBlock Text="Faibles" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                </UniformGrid>
+                <ItemsControl ItemsSource="{Binding MonthlyKpis}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:MonthlySectorKpi}">
+                            <UniformGrid Rows="1" Columns="6" Margin="0,2,0,2">
+                                <TextBlock Text="{Binding MonthName}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding AvgWeight}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding TrsPercent}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsConform}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsOver}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsUnder}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                            </UniformGrid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource ChartTile}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="TRS mensuel" Style="{StaticResource ChartTitle}"/>
+                <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                    Series="{Binding TrsTrendSeries}"
+                                    XAxes="{Binding TrsTrendXAxes}"/>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource ChartTile}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Tendance des ecarts de poids" Style="{StaticResource ChartTitle}"/>
+                <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                    Series="{Binding WeightDeviationTrendSeries}"
+                                    XAxes="{Binding WeightDeviationTrendXAxes}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

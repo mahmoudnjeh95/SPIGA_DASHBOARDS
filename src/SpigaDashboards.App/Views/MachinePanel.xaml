@@ -1,0 +1,173 @@
+<UserControl x:Class="SpigaDashboards.App.Views.MachinePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             mc:Ignorable="d"
+             d:DesignWidth="780" d:DesignHeight="820" Background="Transparent">
+
+    <!-- One machine's live KPIs and charts. Hosted 1-2 up per sector slide
+         by MainWindow's MachinePairSlideViewModel DataTemplate. -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Machine identity + live status -->
+        <Grid Grid.Row="0" Margin="10,4,10,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="{Binding MachineName}"
+                       FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding IsConnected, Converter={StaticResource BoolToStatusBrush}}"/>
+                <TextBlock Text="Connecte" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+
+                <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding BeltRunning, Converter={StaticResource BoolToStatusBrush}}"/>
+                <TextBlock Text="Bande" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+
+                <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding AlarmActive, Converter={StaticResource BoolToStatusBrush}, ConverterParameter=Invert}"/>
+                <TextBlock Text="Alarme" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- KPI tiles: row 1 is the headline glance (how is it running), row 2
+             is the weight-quality detail. Two rows read as a clear hierarchy
+             instead of six same-weight tiles in a row. -->
+        <StackPanel Grid.Row="1">
+            <UniformGrid Rows="1" Columns="4">
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="TRS" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
+                                   Foreground="{Binding Kpis.TrsPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <TextBlock Text="estime - a valider" Style="{StaticResource KpiSubtext}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Vitesse (sacs/min)" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute}" Style="{StaticResource KpiValue}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Total sacs" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.TotalBags}" Style="{StaticResource KpiValue}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
+                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+            <UniformGrid Rows="1" Columns="4">
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g}" Style="{StaticResource KpiValueSmall}"
+                                   Foreground="{Binding Kpis.WeightDeviationGrams, Converter={StaticResource WeightDeviationBrush}}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="En tolerance" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.BagsInTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource SuccessBrush}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Sous tolerance" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.BagsUnderTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource WarningBrush}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource KpiTile}">
+                    <StackPanel>
+                        <TextBlock Text="Au-dessus tolerance" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="{Binding Kpis.BagsOverTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource DangerBrush}"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+        </StackPanel>
+
+        <!-- Charts -->
+        <Grid Grid.Row="2" Margin="0,6,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="On/off (aujourd'hui)" Style="{StaticResource ChartTitle}"/>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding OnOffSeries}"
+                                        XAxes="{Binding OnOffXAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Vitesse (sacs/min)" Style="{StaticResource ChartTitle}"/>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding SpeedSeries}"
+                                        XAxes="{Binding SpeedXAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Poids moyen vs cible" Style="{StaticResource ChartTitle}"/>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding WeightSeries}"
+                                        XAxes="{Binding WeightXAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource ChartTitle}">
+                        <Run Text="Historique equipe "/>
+                        <Run Text="{Binding CurrentShiftName}"/>
+                    </TextBlock>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding TeamHistorySeries}"
+                                        XAxes="{Binding TeamHistoryXAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Production par equipe" Style="{StaticResource ChartTitle}"/>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding ShiftSeries}"
+                                        XAxes="{Binding ShiftXAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="TRS - detail (Disponibilite / Performance / Qualite)" Style="{StaticResource ChartTitle}"/>
+                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                        Series="{Binding TrsBreakdownSeries}"
+                                        YAxes="{Binding TrsBreakdownYAxes}"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
