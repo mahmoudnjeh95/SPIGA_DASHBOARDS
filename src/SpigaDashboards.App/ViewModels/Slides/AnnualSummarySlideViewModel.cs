@@ -54,7 +54,7 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 : 0;
 
             var kpi = KpiCalculator.Summarize(monthLots, availabilityPercent);
-            var totalBags = monthLots.Sum(l => l.TotalBags);
+            var totalBags = monthLots.Sum(l => (long)l.TotalBags);
             var avgWeight = totalBags > 0 ? monthLots.Sum(l => l.AvgWeight * l.TotalBags) / totalBags : 0;
 
             monthly.Add(new MonthlySectorKpi

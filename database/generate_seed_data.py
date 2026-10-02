@@ -24,21 +24,19 @@ START_DATE = END_DATE - timedelta(days=NUM_DAYS - 1)
 # Reference data
 # ---------------------------------------------------------------------------
 
+# Real roster (IPs confirmed by client). CC=couscous, PC=pate courte, PL=pate longue.
 MACHINES = [
-    # id,    name,             type, sector,     ip
-    ("CC01", "Controle CC01", "CC", "Couscous", "192.168.2.30"),
-    ("CC02", "Controle CC02", "CC", "Couscous", "192.168.2.31"),
-    ("CC03", "Controle CC03", "CC", "Couscous", "192.168.2.32"),
-    ("CC04", "Controle CC04", "CC", "Couscous", "192.168.2.39"),
-    ("PC01", "Peseuse PC01", "PC", "PC1", "192.168.2.34"),
-    ("PC02", "Peseuse PC02", "PC", "PC1", "192.168.2.35"),
-    ("PC03", "Peseuse PC03", "PC", "PC2", "192.168.2.36"),
-    ("PC04", "Peseuse PC04", "PC", "PC2", "192.168.2.40"),
-    ("PC05", "Peseuse PC05", "PC", "PC2", "192.168.2.41"),
-    ("PL01", "Ligne PL01", "PL", "PL1", "192.168.2.37"),
-    ("PL02", "Ligne PL02", "PL", "PL1", "192.168.2.33"),
-    ("PL03", "Ligne PL03", "PL", "PL2", "192.168.2.38"),
-    ("PL04", "Ligne PL04", "PL", "PL2", "192.168.2.42"),
+    # id,    name,            type, sector,        ip
+    ("CC01", "Controle CC01", "CC", "Couscous",    "192.168.2.30"),
+    ("CC02", "Controle CC02", "CC", "Couscous",    "192.168.2.31"),
+    ("CC03", "Controle CC03", "CC", "Couscous",    "192.168.2.38"),
+    ("CC04", "Controle CC04", "CC", "Couscous",    "192.168.2.39"),
+    ("PC01", "Peseuse PC01",  "PC", "Pate courte", "192.168.2.35"),
+    ("PC02", "Peseuse PC02",  "PC", "Pate courte", "192.168.2.36"),
+    ("PC03", "Peseuse PC03",  "PC", "Pate courte", "192.168.2.37"),
+    ("PL01", "Ligne PL01",    "PL", "Pate longue", "192.168.2.32"),
+    ("PL02", "Ligne PL02",    "PL", "Pate longue", "192.168.2.33"),
+    ("PL03", "Ligne PL03",    "PL", "Pate longue", "192.168.2.34"),
 ]
 
 # Spiga = wheat spike -> semolina / flour / couscous / pasta producer

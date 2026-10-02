@@ -20,8 +20,8 @@ public enum AppTheme
 
 public class SqlServerSettings
 {
-    public string Host { get; set; } = "";
-    public string Database { get; set; } = "";
+    public string Host { get; set; } = @".\SQLEXPRESS";
+    public string Database { get; set; } = "stats";
     public SqlAuthMode AuthMode { get; set; } = SqlAuthMode.Windows;
     public string Username { get; set; } = "";
 
@@ -74,7 +74,10 @@ public class TeamRotationSettings
 
 public class AppSettings
 {
-    public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
+    // Default to the real Stiavelli production DB (SQL Server `stats`); the
+    // SqlServer defaults below point at the local .\SQLEXPRESS instance. A
+    // missing/blank settings.json therefore connects to real data out of the box.
+    public DatabaseProvider Provider { get; set; } = DatabaseProvider.SqlServer;
     public SqlServerSettings SqlServer { get; set; } = new();
     public List<string> HiddenMachineIds { get; set; } = new();
 

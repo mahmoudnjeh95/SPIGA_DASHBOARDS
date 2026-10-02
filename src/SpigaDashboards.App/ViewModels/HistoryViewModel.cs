@@ -55,6 +55,20 @@ public partial class HistoryViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchAsync()
     {
+        // An unhandled exception here (async command) would take the whole app
+        // down, so surface any failure as a status message instead.
+        try
+        {
+            await RunSearchAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Echec de la recherche : {ex.Message}";
+        }
+    }
+
+    private async Task RunSearchAsync()
+    {
         var from = (FromDate ?? DateTime.Now.Date.AddDays(-7)).Date;
         var to = (ToDate ?? DateTime.Now.Date).Date.AddDays(1);
 

@@ -27,8 +27,7 @@ public class ProductionRepository
             @"SELECT MachineId, Timestamp, IsConnected, BeltRunning, AlarmActive
               FROM MachineStatusLog
               WHERE MachineId = @machineId
-              ORDER BY Timestamp DESC
-              LIMIT 1",
+                AND Timestamp = (SELECT MAX(Timestamp) FROM MachineStatusLog WHERE MachineId = @machineId)",
             new { machineId });
     }
 
@@ -125,7 +124,8 @@ public class ProductionRepository
     {
         using var connection = _connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<NoteEntry>(
-            "SELECT NoteId, Content, CreatedByEmployeeId, CreatedAt, IsActive FROM Notes WHERE IsActive = 1 ORDER BY CreatedAt DESC LIMIT 1");
+            @"SELECT NoteId, Content, CreatedByEmployeeId, CreatedAt, IsActive FROM Notes
+              WHERE IsActive = 1 AND CreatedAt = (SELECT MAX(CreatedAt) FROM Notes WHERE IsActive = 1)");
     }
 
     public async Task SetActiveNoteAsync(string content)

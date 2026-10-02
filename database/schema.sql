@@ -8,7 +8,7 @@ CREATE TABLE Machines (
     MachineId    VARCHAR(10)   NOT NULL PRIMARY KEY,   -- e.g. CC01, PC02, PL03
     MachineName  NVARCHAR(50)  NOT NULL,
     MachineType  VARCHAR(5)    NOT NULL,                -- CC / PC / PL
-    Sector       VARCHAR(10)   NOT NULL,                -- Couscous / PC1 / PC2 / PL1 / PL2 (dashboard slide grouping)
+    Sector       VARCHAR(20)   NOT NULL,                -- Couscous / Pate courte / Pate longue (dashboard slide grouping)
     IPAddress    VARCHAR(15)   NOT NULL,
     IsActive     BIT           NOT NULL DEFAULT 1
 );

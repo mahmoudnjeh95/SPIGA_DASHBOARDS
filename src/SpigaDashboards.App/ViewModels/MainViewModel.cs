@@ -10,8 +10,9 @@ namespace SpigaDashboards.App.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    // Sector display order per the client spec's slide table.
-    private static readonly string[] SectorOrder = { "Couscous", "PC1", "PC2", "PL1", "PL2" };
+    // Sector display order. CC = couscous, PC = pate courte, PL = pate longue.
+    // Machines within a sector are auto-paired (2 per slide, odd one gets its own).
+    private static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue" };
 
     private static readonly TimeSpan NoteRefreshInterval = TimeSpan.FromMinutes(1);
 

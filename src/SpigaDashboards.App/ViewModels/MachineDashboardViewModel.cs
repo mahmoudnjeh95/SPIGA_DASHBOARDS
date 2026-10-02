@@ -203,7 +203,7 @@ public partial class MachineDashboardViewModel : ObservableObject
         TeamHistoryXAxes = new[] { ChartHelpers.BuildXAxis(daily.Select(d => d.Date.ToString("dd/MM"))) };
     }
 
-    private static ColumnSeries<int> BuildColumnSeries(IEnumerable<int> values) => new()
+    private static ColumnSeries<long> BuildColumnSeries(IEnumerable<long> values) => new()
     {
         Values = values.ToArray(),
         Name = "Sacs",

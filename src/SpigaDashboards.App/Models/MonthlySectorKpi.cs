@@ -9,7 +9,7 @@ public class MonthlySectorKpi
     public double AvgWeight { get; set; }
     public double WeightDeviationGrams { get; set; }
     public double TrsPercent { get; set; }
-    public int BagsConform { get; set; }
-    public int BagsOver { get; set; }
-    public int BagsUnder { get; set; }
+    public long BagsConform { get; set; }
+    public long BagsOver { get; set; }
+    public long BagsUnder { get; set; }
 }

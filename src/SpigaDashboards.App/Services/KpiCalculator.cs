@@ -37,11 +37,11 @@ public static class KpiCalculator
         if (lots.Count == 0)
             return new KpiSummary { AvailabilityPercent = Math.Round(availabilityPercent, 1) };
 
-        var totalBags = lots.Sum(l => l.TotalBags);
+        var totalBags = lots.Sum(l => (long)l.TotalBags);
         var totalMinutes = lots.Sum(l => l.DurationMinutes);
         var conformLots = lots.Count(l => l.IsConform);
 
-        var qualityPercent = totalBags > 0 ? 100.0 * lots.Sum(l => l.BagsInTolerance) / totalBags : 0;
+        var qualityPercent = totalBags > 0 ? 100.0 * lots.Sum(l => (long)l.BagsInTolerance) / totalBags : 0;
 
         var actualRate = totalMinutes > 0 ? totalBags / totalMinutes : 0;
         var weightedNominalRate = totalBags > 0 ? lots.Sum(l => l.NominalRatePerMinute * l.TotalBags) / totalBags : 0;
@@ -56,11 +56,11 @@ public static class KpiCalculator
         return new KpiSummary
         {
             TotalBags = totalBags,
-            BagsUnderTolerance = lots.Sum(l => l.BagsUnderTolerance),
-            BagsInTolerance = lots.Sum(l => l.BagsInTolerance),
-            BagsOverTolerance = lots.Sum(l => l.BagsOverTolerance),
-            BagsIndeterminate = lots.Sum(l => l.BagsIndeterminate),
-            MetalRejects = lots.Sum(l => l.MetalRejects),
+            BagsUnderTolerance = lots.Sum(l => (long)l.BagsUnderTolerance),
+            BagsInTolerance = lots.Sum(l => (long)l.BagsInTolerance),
+            BagsOverTolerance = lots.Sum(l => (long)l.BagsOverTolerance),
+            BagsIndeterminate = lots.Sum(l => (long)l.BagsIndeterminate),
+            MetalRejects = lots.Sum(l => (long)l.MetalRejects),
             SpeedBagsPerMinute = totalMinutes > 0 ? Math.Round(totalBags / totalMinutes, 2) : 0,
             ConformRatePercent = Math.Round(100.0 * conformLots / lots.Count, 1),
             AvailabilityPercent = Math.Round(availabilityPercent, 1),
@@ -79,7 +79,7 @@ public static class KpiCalculator
             {
                 ShiftId = g.Key,
                 ShiftName = ShiftNames.GetValueOrDefault(g.Key, $"Shift {g.Key}"),
-                TotalBags = g.Sum(l => l.TotalBags),
+                TotalBags = g.Sum(l => (long)l.TotalBags),
             })
             .OrderBy(s => s.ShiftId)
             .ToList();
@@ -89,7 +89,7 @@ public static class KpiCalculator
     {
         return lots
             .GroupBy(l => l.StartTime.Date)
-            .Select(g => new DailyProduction { Date = g.Key, TotalBags = g.Sum(l => l.TotalBags) })
+            .Select(g => new DailyProduction { Date = g.Key, TotalBags = g.Sum(l => (long)l.TotalBags) })
             .OrderBy(d => d.Date)
             .ToList();
     }
