@@ -23,7 +23,7 @@ public partial class App : Application
             : "Demarrage avec SQLite (dev)");
 
         var activeFactory = new SwitchableConnectionFactory(BuildFactory(settings));
-        var repository = new ProductionRepository(activeFactory);
+        var repository = new ProductionRepository(activeFactory, settings);
         var teamSchedule = new TeamScheduleService(settings);
         var mainViewModel = new MainViewModel(repository, settings, teamSchedule);
 

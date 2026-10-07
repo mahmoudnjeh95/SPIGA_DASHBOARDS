@@ -21,6 +21,9 @@ public partial class SettingsWindow : Window
 
     private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
+        // Bad cadence cell: keep the window open, the message says which one.
+        if (!_viewModel.ValidateNominalRates())
+            return;
         await _viewModel.SaveCommand.ExecuteAsync(null);
         Close();
     }

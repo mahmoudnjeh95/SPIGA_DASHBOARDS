@@ -5,7 +5,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
         mc:Ignorable="d"
-        Title="Parametres" Height="760" Width="520"
+        Title="Parametres" Icon="/Assets/spiga-logo.png" Height="760" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource WindowBackgroundBrush}">
@@ -81,10 +81,10 @@
                                  IsChecked="{Binding Provider, Converter={StaticResource EnumToBool}, ConverterParameter=Sqlite}"/>
                 </StackPanel>
 
-                <TextBlock Text="Serveur (hote\instance ou hote,port)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Serveur (ex. NOM-DU-PC\SQLEXPRESS, ou adresse IP,port)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Base de donnees" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Nom de la base (Stiavelli : stats)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}"/>
 
                 <TextBlock Text="Authentification" Style="{StaticResource FieldLabel}"/>
@@ -103,12 +103,10 @@
                     <PasswordBox x:Name="PasswordBox" PasswordChanged="PasswordBox_PasswordChanged"/>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                    <Button Content="Tester la connexion" Style="{StaticResource SecondaryButton}"
-                            Command="{Binding TestConnectionCommand}" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBool}}"/>
-                    <TextBlock Text="{Binding TestResultMessage}" VerticalAlignment="Center"
-                               TextWrapping="Wrap" Foreground="{Binding TestResultSuccess, Converter={StaticResource TestResultBrush}}"/>
-                </StackPanel>
+                <Button Content="Tester la connexion" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                        Command="{Binding TestConnectionCommand}" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBool}}"/>
+                <TextBlock Text="{Binding TestResultMessage}" Margin="0,6,0,0"
+                           TextWrapping="Wrap" Foreground="{Binding TestResultSuccess, Converter={StaticResource TestResultBrush}}"/>
 
                 <Button Content="Ouvrir la console de diagnostic" Style="{StaticResource SecondaryButton}"
                         HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding OpenConsoleCommand}"
@@ -135,6 +133,41 @@
                 <TextBox Text="{Binding SlideDurationSeconds, UpdateSourceTrigger=PropertyChanged}"/>
                 <TextBlock Text="Frequence d'actualisation des donnees (minutes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Text="Cadence nominale par poids (TRS)" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Vitesse ideale de la ligne (sacs/min) pour chaque poids de sac. Sert au calcul de la Performance et du TRS : une production est associee au poids le plus proche de son poids cible (a 5 % pres). Cadence vide = TRS a 0 pour ce poids."
+                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                <Grid Margin="0,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="140"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Poids (g)" Style="{StaticResource FieldLabel}"/>
+                    <TextBlock Grid.Column="1" Text="Cadence (sacs/min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding NominalRates}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:NominalRateRowViewModel}">
+                            <Grid Margin="0,3,0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding WeightText, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Column="1" Margin="8,0,0,0" Text="{Binding RateText, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Grid.Column="2" Content="Supprimer" Style="{StaticResource SecondaryButton}"
+                                        HorizontalAlignment="Left" Margin="8,0,0,0" Padding="10,4"
+                                        Command="{Binding DataContext.RemoveNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="+ Poids" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                        Command="{Binding AddNominalRateCommand}"/>
+                <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                 <TextBlock Text="Equipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}"/>
                 <TextBlock Text="Cycle par defaut (aucun planning client fourni) : chaque equipe travaille 3 jours de suite sur un poste different, puis se repose 1 jour. A ajuster une fois le vrai planning connu."

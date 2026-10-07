@@ -3,7 +3,7 @@ namespace SpigaDashboards.App.Models;
 public class KpiSummary
 {
     // Sums across many lots overflow int on real production volumes, so these
-    // period totals are long (per-lot ProductionLot values stay int).
+    // period totals are long (per-lot ProductionBucket values stay int).
     public long TotalBags { get; set; }
     public long BagsUnderTolerance { get; set; }
     public long BagsInTolerance { get; set; }

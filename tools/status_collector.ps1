@@ -1,6 +1,12 @@
 <#
   SpigaDashboards status collector (data-freshness mode)
   ------------------------------------------------------
+  NO LONGER REQUIRED: the app now derives connected / belt running /
+  availability directly from the produzione snapshots (ProductionLots view),
+  and no longer reads MachineStatusLog. The scheduled task can be removed.
+  Note: Stiavelli writes a snapshot every ~30 min, so the 15/5 min windows
+  below always reported connected=0.
+
   Writes one MachineStatusLog row per active machine each run, so the live
   dashboard slides know which machines are connected / running. Also keeps the
   Products and Employees lookups in sync with any new article/operator codes in

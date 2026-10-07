@@ -1,4 +1,5 @@
 using System.Data;
+using SpigaDashboards.App.Models;
 
 namespace SpigaDashboards.App.Data;
 
@@ -15,5 +16,9 @@ public class SwitchableConnectionFactory : IDbConnectionFactory
 
     public void SwitchTo(IDbConnectionFactory inner) => _inner = inner;
 
+    public DatabaseProvider Provider => _inner.Provider;
+
     public IDbConnection CreateConnection() => _inner.CreateConnection();
+
+    public void ResetPool() => _inner.ResetPool();
 }

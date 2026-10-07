@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.Data.Sqlite;
+using SpigaDashboards.App.Models;
 
 namespace SpigaDashboards.App.Data;
 
@@ -18,6 +19,8 @@ public class SqliteConnectionFactory : IDbConnectionFactory
             Mode = SqliteOpenMode.ReadWrite,
         }.ToString();
     }
+
+    public DatabaseProvider Provider => DatabaseProvider.Sqlite;
 
     public IDbConnection CreateConnection() => new SqliteConnection(_connectionString);
 }

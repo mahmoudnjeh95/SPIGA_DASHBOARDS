@@ -22,7 +22,8 @@ public class SqlServerSettings
 {
     public string Host { get; set; } = @".\SQLEXPRESS";
     public string Database { get; set; } = "stats";
-    public SqlAuthMode AuthMode { get; set; } = SqlAuthMode.Windows;
+    // The production server is reached with a SQL login (user + password).
+    public SqlAuthMode AuthMode { get; set; } = SqlAuthMode.SqlLogin;
     public string Username { get; set; } = "";
 
     // DPAPI-protected (CurrentUser scope), base64. Never store the plain password on disk.
@@ -72,6 +73,13 @@ public class TeamRotationSettings
     }
 }
 
+// Ideal line speed (bags/min) for a bag weight: the Performance input for TRS.
+public class NominalRateEntry
+{
+    public double WeightGrams { get; set; }
+    public double RatePerMinute { get; set; }
+}
+
 public class AppSettings
 {
     // Default to the real Stiavelli production DB (SQL Server `stats`); the
@@ -88,6 +96,15 @@ public class AppSettings
     // machines, refreshes underlying data). Spec calls for 1-5 min, configurable.
     public int DataRefreshIntervalMinutes { get; set; } = 2;
 
+    // A line counts as "connected" while its latest produzione snapshot is
+    // younger than this many minutes. 0 = automatic: 2.5x the line's own
+    // snapshot interval (Stiavelli's cadence is configurable, 30 min down to
+    // under 1 min), bounded to 2 min..2 h.
+    public int ConnectedWindowMinutes { get; set; } = 0;
+
+    // While the DB is unreachable, the dashboard retries on its own this often.
+    public int ReconnectIntervalSeconds { get; set; } = 30;
+
     public TeamRotationSettings TeamRotation { get; set; } = new();
 
     // Full path to the PDF shown on the "document externe" slide (consignes,
@@ -95,4 +112,30 @@ public class AppSettings
     public string PdfDocumentPath { get; set; } = "";
 
     public AppTheme Theme { get; set; } = AppTheme.Dark;
+
+    // Cadence nominale per bag weight, set in Parametres. A production is
+    // matched on its target net weight (see FindNominalRate); 0 = not set yet,
+    // so Performance and TRS stay at 0 for that weight.
+    public List<NominalRateEntry> NominalRates { get; set; } = new()
+    {
+        new() { WeightGrams = 200 },
+        new() { WeightGrams = 400 },
+        new() { WeightGrams = 500 },
+        new() { WeightGrams = 800 },
+        new() { WeightGrams = 1000 },
+    };
+
+    // Rate of the entry closest to targetWeight, if within 5 % of it (Stiavelli
+    // targets can be a few grams off the nominal size, e.g. 1005 g for 1 kg).
+    public double FindNominalRate(double targetWeight)
+    {
+        if (targetWeight <= 0)
+            return 0;
+        var best = NominalRates
+            .Where(r => r.WeightGrams > 0 && r.RatePerMinute > 0)
+            .MinBy(r => Math.Abs(r.WeightGrams - targetWeight));
+        return best != null && Math.Abs(best.WeightGrams - targetWeight) <= 0.05 * best.WeightGrams
+            ? best.RatePerMinute
+            : 0;
+    }
 }

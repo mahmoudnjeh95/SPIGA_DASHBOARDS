@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -31,15 +31,40 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
     [ObservableProperty] private ISeries[] weightDeviationTrendSeries = Array.Empty<ISeries>();
     [ObservableProperty] private Axis[] weightDeviationTrendXAxes = Array.Empty<Axis>();
 
+    // A year of sub-minute Stiavelli snapshots is heavy to re-aggregate on
+    // SQLEXPRESS, and these monthly figures barely move: keep each sector's
+    // table for CacheDuration. Only the data is cached -- charts are rebuilt
+    // every time so they follow the current theme.
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
+    private static readonly Dictionary<string, (DateTime LoadedAt, int Year, List<MonthlySectorKpi> Monthly)> Cache = new();
+
+    public static void ClearCache() => Cache.Clear();
+
     public static async Task<AnnualSummarySlideViewModel> LoadAsync(ProductionRepository repository, string sector)
     {
         var slide = new AnnualSummarySlideViewModel { SectorLabel = sector, Year = DateTime.Now.Year };
 
-        var from = new DateTime(slide.Year, 1, 1);
+        if (!Cache.TryGetValue(sector, out var cached)
+            || cached.Year != slide.Year
+            || DateTime.Now - cached.LoadedAt > CacheDuration)
+        {
+            cached = (DateTime.Now, slide.Year, await LoadMonthlyAsync(repository, sector, slide.Year));
+            Cache[sector] = cached;
+        }
+
+        slide.MonthlyKpis = cached.Monthly;
+        slide.BuildTrsTrendChart(cached.Monthly);
+        slide.BuildWeightDeviationTrendChart(cached.Monthly);
+
+        return slide;
+    }
+
+    private static async Task<List<MonthlySectorKpi>> LoadMonthlyAsync(ProductionRepository repository, string sector, int year)
+    {
+        var from = new DateTime(year, 1, 1);
         var to = from.AddYears(1);
 
         var lots = await repository.GetLotsForSectorAsync(sector, from, to);
-        var statusHistory = await repository.GetStatusHistoryForSectorAsync(sector, from, to);
 
         var monthly = new List<MonthlySectorKpi>();
         for (var month = 1; month <= 12; month++)
@@ -48,14 +73,8 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
             if (monthLots.Count == 0)
                 continue;
 
-            var monthStatus = statusHistory.Where(h => h.Timestamp.Month == month).ToList();
-            var availabilityPercent = monthStatus.Count > 0
-                ? 100.0 * monthStatus.Count(h => h.BeltRunning) / monthStatus.Count
-                : 0;
-
-            var kpi = KpiCalculator.Summarize(monthLots, availabilityPercent);
-            var totalBags = monthLots.Sum(l => (long)l.TotalBags);
-            var avgWeight = totalBags > 0 ? monthLots.Sum(l => l.AvgWeight * l.TotalBags) / totalBags : 0;
+            var kpi = KpiCalculator.Summarize(monthLots, KpiCalculator.AvailabilityPercent(monthLots));
+            var avgWeight = KpiCalculator.WeightedAverageWeight(monthLots) ?? 0;
 
             monthly.Add(new MonthlySectorKpi
             {
@@ -70,11 +89,7 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
             });
         }
 
-        slide.MonthlyKpis = monthly;
-        slide.BuildTrsTrendChart(monthly);
-        slide.BuildWeightDeviationTrendChart(monthly);
-
-        return slide;
+        return monthly;
     }
 
     private void BuildTrsTrendChart(List<MonthlySectorKpi> monthly)
@@ -87,7 +102,7 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 Name = "TRS %",
                 Stroke = new SolidColorPaint(new SKColor(0x3B, 0x82, 0xF6), 3),
                 Fill = null,
-                GeometrySize = 6,
+                GeometrySize = 10,
                 GeometryStroke = new SolidColorPaint(new SKColor(0x3B, 0x82, 0xF6), 2),
             },
         };
@@ -104,7 +119,7 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 Name = "Ecart (g)",
                 Stroke = new SolidColorPaint(new SKColor(0xE7, 0x4C, 0x3C), 3),
                 Fill = null,
-                GeometrySize = 6,
+                GeometrySize = 10,
                 GeometryStroke = new SolidColorPaint(new SKColor(0xE7, 0x4C, 0x3C), 2),
             },
         };

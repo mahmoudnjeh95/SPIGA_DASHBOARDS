@@ -96,9 +96,9 @@ public partial class HistoryViewModel : ObservableObject
             MachineId = x.Lot.MachineId,
             ShiftName = KpiCalculator.ShiftName(x.Lot.ShiftId),
             Team = x.Team,
-            ProductName = x.Lot.ProductName,
+            ProductName = x.Lot.ProductName ?? "",
             TargetNetWeight = x.Lot.TargetNetWeight,
-            AvgWeight = x.Lot.AvgWeight,
+            AvgWeight = Math.Round(x.Lot.AvgWeight, 1),
             TotalBags = x.Lot.TotalBags,
             BagsInTolerance = x.Lot.BagsInTolerance,
             BagsOverTolerance = x.Lot.BagsOverTolerance,
@@ -114,7 +114,7 @@ public partial class HistoryViewModel : ObservableObject
         // multi-machine, non-contiguous lot set, so it's left at 0 and TRS isn't
         // shown in the summary strip -- this view is about raw records, not OEE.
         Summary = KpiCalculator.Summarize(lotsWithTeam.Select(x => x.Lot).ToList(), availabilityPercent: 0);
-        StatusMessage = $"{rowList.Count} lot(s) trouve(s).";
+        StatusMessage = $"{rowList.Count} heure(s) de production trouvee(s) (une ligne par machine et par heure).";
     }
 
     [RelayCommand]

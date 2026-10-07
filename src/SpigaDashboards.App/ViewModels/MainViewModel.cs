@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _rotationTimer;
     private readonly DispatcherTimer _noteTimer;
     private readonly DispatcherTimer _refreshTimer;
+    private readonly DispatcherTimer _reconnectTimer;
 
     private List<SlideDescriptor> _slides = new();
     private Dictionary<string, Machine> _machinesById = new();
@@ -36,6 +37,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string noteSaveStatus = "";
     [ObservableProperty] private string currentTeamLabel = "";
     [ObservableProperty] private bool isRotationPaused;
+    [ObservableProperty] private bool isReconnecting;
+    [ObservableProperty] private string reconnectStatus = "";
 
     public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule)
     {
@@ -49,10 +52,27 @@ public partial class MainViewModel : ObservableObject
         // Also doubles as the "current team" refresh: cheap (no DB call) and a
         // 1-minute cadence is more than enough precision for a poste changeover.
         _noteTimer = new DispatcherTimer { Interval = NoteRefreshInterval };
-        _noteTimer.Tick += async (_, _) => { RefreshCurrentTeam(); await RefreshNoteAsync(); };
+        _noteTimer.Tick += async (_, _) =>
+        {
+            RefreshCurrentTeam();
+            // async void handler: an exception escaping here (DB dropped) would
+            // crash the kiosk, so route it to the disconnected state instead.
+            try
+            {
+                await RefreshNoteAsync();
+            }
+            catch (Exception ex)
+            {
+                SetConnectionState(healthy: false, ex.Message);
+            }
+        };
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
         _refreshTimer.Tick += async (_, _) => await RebuildSlidesAsync();
+
+        // Only runs while the DB is unreachable (see SetConnectionState).
+        _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
+        _reconnectTimer.Tick += async (_, _) => await ReconnectAsync();
     }
 
     public async Task InitializeAsync()
@@ -69,6 +89,9 @@ public partial class MainViewModel : ObservableObject
 
         // A resync should always resume playback, even if the rotation was paused before.
         IsRotationPaused = false;
+
+        // Settings may now point at another server/database.
+        AnnualSummarySlideViewModel.ClearCache();
 
         try
         {
@@ -95,11 +118,29 @@ public partial class MainViewModel : ObservableObject
         _refreshTimer.Start();
     }
 
+    // "Reconnecter" button (top bar + disconnected overlay), the automatic
+    // retry timer, and Settings > Enregistrer all come through here.
     [RelayCommand]
-    private async Task ResyncAsync()
+    private async Task ReconnectAsync()
     {
-        AppLogger.Log("Resynchronisation demandee...");
-        await InitializeAsync();
+        if (IsReconnecting)
+            return;
+
+        IsReconnecting = true;
+        ReconnectStatus = "Reconnexion en cours...";
+        AppLogger.Log("Tentative de reconnexion a la base de donnees...");
+        try
+        {
+            _repository.ResetConnections();
+            await InitializeAsync();
+        }
+        finally
+        {
+            IsReconnecting = false;
+            ReconnectStatus = IsConnectionHealthy
+                ? ""
+                : $"Echec a {DateTime.Now:HH:mm:ss} - nouvelle tentative automatique dans {(int)_reconnectTimer.Interval.TotalSeconds} s.";
+        }
     }
 
     [RelayCommand]
@@ -220,18 +261,15 @@ public partial class MainViewModel : ObservableObject
             .Where(m => m.IsActive && !_settings.HiddenMachineIds.Contains(m.MachineId))
             .ToList();
 
-        // Spec: machines that aren't currently connected drop out of the rotation entirely.
-        var statuses = await Task.WhenAll(visible.Select(m => _repository.GetLatestStatusAsync(m.MachineId)));
-        var connected = visible
-            .Zip(statuses, (machine, status) => (machine, status))
-            .Where(x => x.status?.IsConnected == true)
-            .Select(x => x.machine)
-            .ToList();
-
+        // Every machine ticked in Parametres stays in the rotation, connected or
+        // not: a line with no recent production is shown greyed out with a
+        // "Production en arret" badge
+        // (MachinePanel) so a stopped line is visible on the TV instead of
+        // silently vanishing (deliberate change from the spec's "drop out").
         var slides = new List<SlideDescriptor>();
         foreach (var sector in SectorOrder)
         {
-            var sectorMachines = connected
+            var sectorMachines = visible
                 .Where(m => m.Sector == sector)
                 .OrderBy(m => m.MachineId)
                 .ToList();
@@ -289,6 +327,17 @@ public partial class MainViewModel : ObservableObject
 
         IsConnectionHealthy = healthy;
         ConnectionErrorMessage = healthy ? "" : errorMessage;
+
+        if (healthy)
+        {
+            _reconnectTimer.Stop();
+            ReconnectStatus = "";
+        }
+        else if (!_reconnectTimer.IsEnabled)
+        {
+            _reconnectTimer.Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds));
+            _reconnectTimer.Start();
+        }
     }
 
     private void RefreshCurrentTeam()

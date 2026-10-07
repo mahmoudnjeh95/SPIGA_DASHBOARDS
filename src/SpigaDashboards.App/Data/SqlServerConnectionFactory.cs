@@ -15,7 +15,12 @@ public class SqlServerConnectionFactory : IDbConnectionFactory
         {
             DataSource = settings.Host,
             InitialCatalog = settings.Database,
-            ConnectTimeout = 5,
+            // 10 s: a remote named instance (HOST\SQLEXPRESS) goes through SQL Browser first.
+            ConnectTimeout = 10,
+            // Year-long sector aggregations over sub-minute snapshots can take a
+            // while on SQLEXPRESS; give them room beyond the 30 s default.
+            CommandTimeout = 60,
+            ApplicationName = "SpigaDashboards",
             TrustServerCertificate = true,
         };
 
@@ -32,5 +37,9 @@ public class SqlServerConnectionFactory : IDbConnectionFactory
         _connectionString = builder.ConnectionString;
     }
 
+    public DatabaseProvider Provider => DatabaseProvider.SqlServer;
+
     public IDbConnection CreateConnection() => new SqlConnection(_connectionString);
+
+    public void ResetPool() => SqlConnection.ClearAllPools();
 }

@@ -51,7 +51,7 @@ public partial class MainWindow : Window
     {
         var settingsViewModel = new SettingsViewModel(
             _settingsService, _settings, _activeFactory, _repository,
-            onApplied: () => _ = _viewModel.ResyncCommand.ExecuteAsync(null));
+            onApplied: () => _ = _viewModel.ReconnectCommand.ExecuteAsync(null));
 
         var window = new SettingsWindow(settingsViewModel) { Owner = this };
         window.ShowDialog();

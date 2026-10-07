@@ -1,6 +1,6 @@
 namespace SpigaDashboards.App.ViewModels;
 
-// One history-browser row: a ProductionLot flattened for display, with Team
+// One history-browser row: a ProductionBucket (one machine, one hour) flattened for display, with Team
 // computed via TeamScheduleService since it isn't stored on the lot itself.
 public class HistoryRow
 {
@@ -11,9 +11,9 @@ public class HistoryRow
     public string ProductName { get; init; } = "";
     public double TargetNetWeight { get; init; }
     public double AvgWeight { get; init; }
-    public int TotalBags { get; init; }
-    public int BagsInTolerance { get; init; }
-    public int BagsOverTolerance { get; init; }
-    public int BagsUnderTolerance { get; init; }
+    public long TotalBags { get; init; }
+    public long BagsInTolerance { get; init; }
+    public long BagsOverTolerance { get; init; }
+    public long BagsUnderTolerance { get; init; }
     public bool IsConform { get; init; }
 }

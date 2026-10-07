@@ -4,7 +4,7 @@ namespace SpigaDashboards.App.Services;
 
 // Which of the 4 rotating teams is on a given poste, as a pure function of
 // (shift date, ShiftId) against the configurable roster in AppSettings.TeamRotation.
-// Deliberately stateless and DB-free: team attribution for a past ProductionLot
+// Deliberately stateless and DB-free: team attribution for a past ProductionBucket
 // (Stage 6 history) uses the exact same lookup as the live "who's on now"
 // display, just fed that lot's own StartTime/ShiftId instead of DateTime.Now.
 public class TeamScheduleService

@@ -36,7 +36,7 @@ public partial class PdfSlideViewModel : ObservableObject
         try
         {
             using var pdfStream = File.OpenRead(pdfPath);
-            using var bitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: 0);
+            using var bitmap = PDFtoImage.Conversion.ToImage(pdfStream, page: new Index(0));
             using var pngData = bitmap.Encode(SKEncodedImageFormat.Png, 100);
             using var pngStream = new MemoryStream(pngData.ToArray());
 

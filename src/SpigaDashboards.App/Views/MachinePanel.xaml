@@ -1,4 +1,4 @@
-<UserControl x:Class="SpigaDashboards.App.Views.MachinePanel"
+﻿<UserControl x:Class="SpigaDashboards.App.Views.MachinePanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -22,52 +22,94 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <TextBlock Grid.Column="0" Text="{Binding MachineName}"
-                       FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <TextBlock Text="{Binding MachineName}"
+                           FontSize="30" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                <!-- Lines with no recent production stay in the rotation, flagged here and greyed out below. -->
+                <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3" Margin="16,0,0,0" VerticalAlignment="Center">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock Text="PRODUCTION EN ARRET" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                </Border>
+            </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding IsConnected, Converter={StaticResource BoolToStatusBrush}}"/>
-                <TextBlock Text="Connecte" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <TextBlock Text="Connecte" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
 
                 <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding BeltRunning, Converter={StaticResource BoolToStatusBrush}}"/>
-                <TextBlock Text="Bande" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <TextBlock Text="Bande" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
 
                 <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding AlarmActive, Converter={StaticResource BoolToStatusBrush}, ConverterParameter=Invert}"/>
-                <TextBlock Text="Alarme" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                <TextBlock Text="Alarme" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
             </StackPanel>
+
+            <!-- Current Stiavelli production (ID_produzione): one article run on this line -->
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding CurrentProductionLabel}" FontSize="16"
+                       Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                       ToolTip="{Binding CurrentProduction.ProductionId}"/>
         </Grid>
 
         <!-- KPI tiles: row 1 is the headline glance (how is it running), row 2
              is the weight-quality detail. Two rows read as a clear hierarchy
              instead of six same-weight tiles in a row. -->
         <StackPanel Grid.Row="1">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
             <UniformGrid Rows="1" Columns="4">
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="TRS" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
-                                   Foreground="{Binding Kpis.TrsPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
+                                       Foreground="{Binding Kpis.TrsPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        </Viewbox>
                         <TextBlock Text="estime - a valider" Style="{StaticResource KpiSubtext}"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Vitesse (sacs/min)" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute}" Style="{StaticResource KpiValue}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute}" Style="{StaticResource KpiValue}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Total sacs" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.TotalBags}" Style="{StaticResource KpiValue}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.TotalBags, StringFormat={}{0:N0}, ConverterCulture=fr-FR}" Style="{StaticResource KpiValue}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
-                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
+                                       Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
             </UniformGrid>
@@ -75,58 +117,70 @@
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g}" Style="{StaticResource KpiValueSmall}"
-                                   Foreground="{Binding Kpis.WeightDeviationGrams, Converter={StaticResource WeightDeviationBrush}}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g}" Style="{StaticResource KpiValueSmall}"
+                                       Foreground="{Binding Kpis.WeightDeviationGrams, Converter={StaticResource WeightDeviationBrush}}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="En tolerance" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.BagsInTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource SuccessBrush}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.BagsInTolerance, StringFormat={}{0:N0}, ConverterCulture=fr-FR}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource SuccessBrush}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Sous tolerance" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.BagsUnderTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource WarningBrush}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.BagsUnderTolerance, StringFormat={}{0:N0}, ConverterCulture=fr-FR}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource WarningBrush}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
-                        <TextBlock Text="Au-dessus tolerance" Style="{StaticResource KpiLabel}"/>
-                        <TextBlock Text="{Binding Kpis.BagsOverTolerance}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource DangerBrush}"/>
+                        <TextBlock Text="Sur tolerance" Style="{StaticResource KpiLabel}"/>
+                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Kpis.BagsOverTolerance, StringFormat={}{0:N0}, ConverterCulture=fr-FR}" Style="{StaticResource KpiValueSmall}" Foreground="{DynamicResource DangerBrush}"/>
+                        </Viewbox>
                     </StackPanel>
                 </Border>
             </UniformGrid>
         </StackPanel>
 
-        <!-- Charts -->
+        <!-- Charts: 2 rows x 3 columns, so each chart keeps enough height to be
+             read on the 60" TV with two machines side by side. The on/off
+             timeline (24 hourly bars) spans two columns. Speed has no chart:
+             its KPI tile above already shows it. -->
         <Grid Grid.Row="2" Margin="0,6,0,0">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsConnected}" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
             <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource ChartTile}">
+            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource ChartTile}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="On/off (aujourd'hui)" Style="{StaticResource ChartTitle}"/>
                     <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
                                         Series="{Binding OnOffSeries}"
-                                        XAxes="{Binding OnOffXAxes}"/>
-                </DockPanel>
-            </Border>
-
-            <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource ChartTile}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Vitesse (sacs/min)" Style="{StaticResource ChartTitle}"/>
-                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
-                                        Series="{Binding SpeedSeries}"
-                                        XAxes="{Binding SpeedXAxes}"/>
+                                        XAxes="{Binding OnOffXAxes}"
+                                        YAxes="{Binding OnOffYAxes}"/>
                 </DockPanel>
             </Border>
 
@@ -135,37 +189,60 @@
                     <TextBlock DockPanel.Dock="Top" Text="Poids moyen vs cible" Style="{StaticResource ChartTitle}"/>
                     <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
                                         Series="{Binding WeightSeries}"
-                                        XAxes="{Binding WeightXAxes}"/>
+                                        XAxes="{Binding WeightXAxes}"
+                                        YAxes="{Binding WeightYAxes}"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource ChartTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="TRS - detail" Style="{StaticResource ChartTitle}"/>
+                    <!-- Three numbers read better as large text than as bars on the TV
+                         (Performance can pass 100 % and pushed bar labels off the tile). -->
+                    <Grid VerticalAlignment="Center" Margin="4,0,4,0" TextElement.FontSize="20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Disponibilite" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
+                                   Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <TextBlock Grid.Row="1" Text="Performance" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
+                                   Foreground="{Binding Kpis.PerformancePercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <TextBlock Grid.Row="2" Text="Qualite" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
+                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                    </Grid>
                 </DockPanel>
             </Border>
 
             <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource ChartTile}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource ChartTitle}">
-                        <Run Text="Historique equipe "/>
+                        <Run Text="Poste"/>
                         <Run Text="{Binding CurrentShiftName}"/>
+                        <Run Text="- 14 j"/>
                     </TextBlock>
                     <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
                                         Series="{Binding TeamHistorySeries}"
-                                        XAxes="{Binding TeamHistoryXAxes}"/>
+                                        XAxes="{Binding TeamHistoryXAxes}"
+                                        YAxes="{Binding TeamHistoryYAxes}"/>
                 </DockPanel>
             </Border>
 
-            <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource ChartTile}">
+            <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource ChartTile}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Production par equipe" Style="{StaticResource ChartTitle}"/>
                     <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
                                         Series="{Binding ShiftSeries}"
-                                        XAxes="{Binding ShiftXAxes}"/>
-                </DockPanel>
-            </Border>
-
-            <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource ChartTile}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="TRS - detail (Disponibilite / Performance / Qualite)" Style="{StaticResource ChartTitle}"/>
-                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
-                                        Series="{Binding TrsBreakdownSeries}"
-                                        YAxes="{Binding TrsBreakdownYAxes}"/>
+                                        XAxes="{Binding ShiftXAxes}"
+                                        YAxes="{Binding ShiftYAxes}"/>
                 </DockPanel>
             </Border>
         </Grid>

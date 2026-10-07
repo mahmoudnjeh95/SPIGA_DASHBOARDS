@@ -1,13 +1,28 @@
 /* =============================================================================
-   SPIGA_DASHBOARDS - Stiavelli compatibility layer  (approach A)
+   SPIGA_DASHBOARDS - Stiavelli compatibility layer
    Target DB: stats  (SQL Server / SQLEXPRESS)
 
-   Presents the dashboard's expected schema (schema.sql) on top of the real
-   Stiavelli tables (produzione, lotto, codici, linee, operatori) WITHOUT
+   Adds what the dashboard needs next to the real Stiavelli tables WITHOUT
    touching the Stiavelli data:
      - Real, writable tables for what the app writes or the Stiavelli DB
-       doesn't store: Machines, Shifts, Employees, Products, MachineStatusLog, Notes
-     - A read-only VIEW  ProductionLots  = produzione (+ lotto when present)
+       doesn't store: Machines, Shifts, Employees, Products, Notes
+       (+ MachineStatusLog, kept for older installs / the optional collector)
+     - An index on dbo.produzione for the dashboard's time-range reads
+
+   HOW dbo.produzione REALLY WORKS (checked against a 1000-row export):
+     - One row is NOT a lot. Stiavelli writes a SNAPSHOT row every ~30 min for
+       each line, for the production currently running on it (ID_produzione).
+     - totale_confezioni / confezioni_* / espulsi_metal are CUMULATIVE since
+       tempo_inizio of that production; a production can stay open for months.
+     - tempo_fine = time the snapshot was written; tempo_inizio = production start.
+     - media_totale / deviazione_std / peso_min/max = running stats of the whole
+       production, not of the last 30 min.
+     - operatore, turno, linea_produzione are empty / 0.
+   The app turns consecutive snapshots of a production into per-interval
+   deltas and sums them per hour/day itself (ProductionRepository), reading
+   only the time range it needs -- see the index below. The snapshot cadence
+   (30 min, or under 1 min) doesn't matter.
+
    Idempotent: safe to re-run.
    ============================================================================= */
 USE stats;
@@ -28,10 +43,9 @@ GO
 IF COL_LENGTH('dbo.Machines','Sector') < 20
     ALTER TABLE dbo.Machines ALTER COLUMN Sector VARCHAR(20) NOT NULL;
 GO
--- Real machine roster (IPs confirmed by the client). Full sync: inserts new,
--- fixes changed IPs/names, and removes any machine not in this list.
--- NOTE: MachineType is derived from the ID prefix; Sector is the dashboard
--- slide grouping -- adjust the Sector values if the real grouping differs.
+-- Real machine roster (IPs confirmed by the client). MachineId must equal
+-- produzione.numero_linea. Full sync: inserts new, fixes changed IPs, and
+-- removes any machine not in this list (display names edited in the app are kept).
 MERGE dbo.Machines AS t
 USING (VALUES
     ('CC01','Controle CC01','CC','Couscous','192.168.2.30'),
@@ -55,7 +69,9 @@ WHEN NOT MATCHED BY SOURCE THEN
     DELETE;
 GO
 
-/* ---------- Shifts (real table; no Stiavelli source) --------------------- */
+/* ---------- Shifts (real table; reference only) -------------------------
+   produzione.turno is always 0, so the app derives the poste from the time
+   of day (Matin 06-14 / Soir 14-22 / Nuit 22-06). */
 IF OBJECT_ID('dbo.Shifts','U') IS NULL
 CREATE TABLE dbo.Shifts (
     ShiftId   INT          NOT NULL PRIMARY KEY,
@@ -71,8 +87,8 @@ WHEN NOT MATCHED THEN INSERT (ShiftId,ShiftName,StartHour,EndHour) VALUES (s.Shi
 GO
 
 /* ---------- Employees (real table) --------------------------------------
-   Maps Stiavelli operator CODE (produzione.operatore, char(3)) -> int id.
-   Seeded from operatori if populated, else from codes seen in produzione. */
+   produzione.operatore is blank on this site, so this usually stays empty.
+   The app only needs it for the sticky note's CreatedByEmployeeId. */
 IF OBJECT_ID('dbo.Employees','U') IS NULL
 CREATE TABLE dbo.Employees (
     EmployeeId INT IDENTITY(1,1) PRIMARY KEY,
@@ -82,26 +98,24 @@ CREATE TABLE dbo.Employees (
 );
 GO
 INSERT INTO dbo.Employees (Code, FullName, Role)
-SELECT src.Code,
-       COALESCE(NULLIF(RTRIM(o.Descrizione),''), 'Operateur ' + src.Code),
-       'Operateur'
+SELECT src.Code, 'Operateur ' + src.Code, 'Operateur'
 FROM (
     SELECT DISTINCT RTRIM(operatore) AS Code FROM dbo.produzione
     WHERE operatore IS NOT NULL AND RTRIM(operatore) <> ''
 ) src
-LEFT JOIN dbo.operatori o ON RTRIM(o.Codice) = src.Code
 WHERE NOT EXISTS (SELECT 1 FROM dbo.Employees e WHERE e.Code = src.Code);
 GO
 
 /* ---------- Products (real table) ---------------------------------------
-   Bridges Stiavelli article code -> int ProductId. ProductName from codici.
-   TargetWeightGrams taken from the net weight seen in produzione.
-   NominalRatePerMinute has no Stiavelli source -> 0 (set per article later;
-   KpiCalculator treats 0 as "no performance target"). */
+   One row per article code seen in produzione (e.g. 00000000NOUVELLEPROD).
+   ProductName defaults to the code without its zero padding (NOUVELLEPROD);
+   rename it here if needed. NominalRatePerMinute (ideal bags/min) has no
+   Stiavelli source: set it per article to get a TRS Performance figure
+   (0 = no target -> Performance and TRS show 0). */
 IF OBJECT_ID('dbo.Products','U') IS NULL
 CREATE TABLE dbo.Products (
     ProductId            INT IDENTITY(1,1) PRIMARY KEY,
-    Code                 VARCHAR(20)   NOT NULL UNIQUE,  -- normalized article code
+    Code                 VARCHAR(20)   NOT NULL UNIQUE,  -- RTRIM(produzione.codice_articolo)
     ProductName          NVARCHAR(100) NOT NULL,
     TargetWeightGrams    DECIMAL(10,2) NOT NULL DEFAULT 0,
     PackagingSize        NVARCHAR(20)  NOT NULL DEFAULT '',
@@ -110,22 +124,21 @@ CREATE TABLE dbo.Products (
 GO
 INSERT INTO dbo.Products (Code, ProductName, TargetWeightGrams, PackagingSize, NominalRatePerMinute)
 SELECT src.Code,
-       COALESCE(NULLIF(RTRIM(c.Descrizione),''), src.Code),
-       src.TargetW,
-       '', 0
+       COALESCE(NULLIF(SUBSTRING(src.Code, PATINDEX('%[^0]%', src.Code + 'x'), 20), ''), src.Code),
+       src.TargetW, '', 0
 FROM (
     SELECT RTRIM(codice_articolo) AS Code, MAX(CAST(peso_netto_impostato AS DECIMAL(10,2))) AS TargetW
     FROM dbo.produzione
     WHERE codice_articolo IS NOT NULL AND RTRIM(codice_articolo) <> ''
     GROUP BY RTRIM(codice_articolo)
 ) src
-/* match codici.Codice as the trailing (non zero-padded) part of the article code */
-LEFT JOIN dbo.codici c ON src.Code LIKE '%' + RTRIM(c.Codice)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.Products p WHERE p.Code = src.Code);
 GO
 
-/* ---------- MachineStatusLog (real table; live status not in Stiavelli DB)
-   Empty for now; a collector/the dashboard can write connect/belt/alarm here. */
+/* ---------- MachineStatusLog (legacy) -------------------------------------
+   No longer read by the app: connected / belt-running / availability are now
+   derived from produzione snapshots (see ProductionRepository). Kept so older
+   installs and tools/status_collector.ps1 don't break. */
 IF OBJECT_ID('dbo.MachineStatusLog','U') IS NULL
 CREATE TABLE dbo.MachineStatusLog (
     LogId       BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -135,9 +148,6 @@ CREATE TABLE dbo.MachineStatusLog (
     BeltRunning BIT         NOT NULL,
     AlarmActive BIT         NOT NULL
 );
-GO
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_MachineStatusLog_Machine_Timestamp')
-CREATE INDEX IX_MachineStatusLog_Machine_Timestamp ON dbo.MachineStatusLog(MachineId, Timestamp);
 GO
 
 /* ---------- Notes (real table; dashboard-only) --------------------------- */
@@ -151,40 +161,45 @@ CREATE TABLE dbo.Notes (
 );
 GO
 
-/* ---------- ProductionLots (VIEW) = produzione (+ lotto when present) -----
-   Column names/types match what ProductionRepository selects & ProductionLot
-   expects. lotto is joined on ID_produzione; when absent, CorrectedAvgWeight
-   and IsConform fall back to values derived from produzione. */
-CREATE OR ALTER VIEW dbo.ProductionLots AS
-SELECT
-    CAST(p.progressivo AS INT)                      AS LotId,
-    RTRIM(p.numero_linea)                           AS MachineId,
-    pr.ProductId                                    AS ProductId,
-    CAST(COALESCE(l.progressivo_lotto, 0) AS INT)   AS LotNumber,
-    CAST(p.turno AS INT)                            AS ShiftId,
-    CAST(COALESCE(e.EmployeeId, 0) AS INT)          AS EmployeeId,
-    p.tempo_inizio                                  AS StartTime,
-    COALESCE(p.tempo_fine, p.tempo_inizio)          AS EndTime,
-    CAST(p.peso_netto_impostato AS DECIMAL(10,2))   AS TargetNetWeight,
-    CAST(p.peso_min_registrato  AS DECIMAL(10,2))   AS MinWeight,
-    CAST(p.peso_max_registrato  AS DECIMAL(10,2))   AS MaxWeight,
-    p.totale_confezioni                             AS TotalBags,
-    p.confezioni_sotto_toll                         AS BagsUnderTolerance,
-    p.confezioni_ok                                 AS BagsInTolerance,
-    p.confezioni_sopra_toll                         AS BagsOverTolerance,
-    p.confezioni_indeterminate                      AS BagsIndeterminate,
-    CAST(p.deviazione_std AS DECIMAL(10,4))         AS StdDev,
-    CAST(p.media_totale   AS DECIMAL(10,2))         AS AvgWeight,
-    CAST(COALESCE(l.media_corretta, p.media_totale) AS DECIMAL(10,2)) AS CorrectedAvgWeight,
-    p.espulsi_metal                                 AS MetalRejects,
-    CAST(COALESCE(l.lotto_conforme,
-         CASE WHEN p.totale_confezioni > 0
-                   AND CAST(p.confezioni_sotto_toll + p.confezioni_sopra_toll AS FLOAT)
-                       / p.totale_confezioni < 0.08
-              THEN 1 ELSE 0 END) AS BIT)            AS IsConform
-FROM dbo.produzione p
-LEFT JOIN dbo.lotto     l  ON l.ID_produzione = p.ID_produzione
-LEFT JOIN dbo.Products  pr ON pr.Code = RTRIM(p.codice_articolo)
-LEFT JOIN dbo.Employees e  ON e.Code  = RTRIM(p.operatore)
-WHERE p.numero_linea IS NOT NULL AND RTRIM(p.numero_linea) <> '';
+/* ---------- Index on produzione (read path of the dashboard) -------------
+   Every dashboard query reads one line's snapshots over a time range
+   (WHERE numero_linea = ... AND tempo_fine BETWEEN ...). Stiavelli's snapshot
+   cadence can go under 1 minute (~26 000 rows/day for 9 lines, ~10 M/year):
+   without this index each query would scan the whole table.
+   It only adds an index -- no Stiavelli data or column is changed. The cost
+   for Stiavelli's own INSERTs is negligible at a few rows per second.
+   SQLEXPRESS builds it offline: Stiavelli's inserts wait while it's created
+   (seconds to a few minutes on a large table) -- run it at a quiet moment.
+   To remove it: DROP INDEX IX_produzione_linea_fine ON dbo.produzione; */
+IF NOT EXISTS (SELECT 1 FROM sys.indexes
+               WHERE name = 'IX_produzione_linea_fine' AND object_id = OBJECT_ID('dbo.produzione'))
+CREATE NONCLUSTERED INDEX IX_produzione_linea_fine
+    ON dbo.produzione (numero_linea, tempo_fine)
+    INCLUDE (ID_produzione, progressivo, tempo_inizio, codice_articolo, peso_netto_impostato,
+             totale_confezioni, confezioni_sotto_toll, confezioni_ok, confezioni_sopra_toll,
+             confezioni_indeterminate, media_totale, espulsi_metal);
 GO
+
+/* ---------- ProductionLots view (previous version) --------------------------
+   No longer used: it ran LAG over each line's whole history on every query,
+   which doesn't scale to sub-minute snapshots. The app now aggregates
+   time-bounded ranges itself (ProductionRepository). */
+IF OBJECT_ID('dbo.ProductionLots','V') IS NOT NULL
+    DROP VIEW dbo.ProductionLots;
+GO
+
+/* ---------- Optional: dedicated SQL login for the dashboard ----------------
+   Uncomment and run once (as an admin) to create the login entered in
+   Parametres > Login SQL. Reads everything, writes only the Notes and
+   Machines tables (sticky note + machine display names).
+
+USE master;
+CREATE LOGIN spiga_dashboard WITH PASSWORD = 'ChangeMe!2026', CHECK_POLICY = OFF;
+GO
+USE stats;
+CREATE USER spiga_dashboard FOR LOGIN spiga_dashboard;
+ALTER ROLE db_datareader ADD MEMBER spiga_dashboard;
+GRANT INSERT, UPDATE ON dbo.Notes    TO spiga_dashboard;
+GRANT UPDATE         ON dbo.Machines TO spiga_dashboard;
+GO
+*/

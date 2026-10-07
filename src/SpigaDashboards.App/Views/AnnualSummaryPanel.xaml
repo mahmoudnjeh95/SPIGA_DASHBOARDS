@@ -23,7 +23,8 @@
         <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Style="{StaticResource ChartTile}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Cumul mensuel" Style="{StaticResource ChartTitle}"/>
-                <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="6" Margin="0,4,0,6">
+                <!-- Table text sized for the 60" TV, like the KPI tiles. -->
+                <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="6" Margin="4,8,0,10" TextElement.FontSize="18">
                     <TextBlock Text="Mois" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
                     <TextBlock Text="Poids moyen (g)" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
                     <TextBlock Text="TRS %" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
@@ -34,7 +35,7 @@
                 <ItemsControl ItemsSource="{Binding MonthlyKpis}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type models:MonthlySectorKpi}">
-                            <UniformGrid Rows="1" Columns="6" Margin="0,2,0,2">
+                            <UniformGrid Rows="1" Columns="6" Margin="4,5,0,5" TextElement.FontSize="24">
                                 <TextBlock Text="{Binding MonthName}" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <TextBlock Text="{Binding AvgWeight}" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 <TextBlock Text="{Binding TrsPercent}" Foreground="{DynamicResource PrimaryTextBrush}"/>

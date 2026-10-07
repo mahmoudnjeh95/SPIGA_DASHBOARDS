@@ -45,6 +45,9 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<MachineVisibilityOption> Machines { get; } = new();
     public ObservableCollection<TeamOption> TeamOptions { get; } = new();
     public ObservableCollection<TeamRosterDayViewModel> RosterDays { get; } = new();
+    public ObservableCollection<NominalRateRowViewModel> NominalRates { get; } = new();
+
+    [ObservableProperty] private string nominalRatesStatusMessage = "";
 
     public event EventHandler? SettingsApplied;
 
@@ -91,6 +94,15 @@ public partial class SettingsViewModel : ObservableObject
 
         PdfDocumentPath = settings.PdfDocumentPath;
         UpdatePdfDocumentStatus();
+
+        foreach (var entry in settings.NominalRates.OrderBy(r => r.WeightGrams))
+        {
+            NominalRates.Add(new NominalRateRowViewModel
+            {
+                WeightText = NominalRateRowViewModel.Format(entry.WeightGrams),
+                RateText = entry.RatePerMinute > 0 ? NominalRateRowViewModel.Format(entry.RatePerMinute) : "",
+            });
+        }
 
         _ = LoadMachinesAsync();
     }
@@ -154,6 +166,44 @@ public partial class SettingsViewModel : ObservableObject
             RosterDays.RemoveAt(RosterDays.Count - 1);
     }
 
+    [RelayCommand]
+    private void AddNominalRate() => NominalRates.Add(new NominalRateRowViewModel());
+
+    [RelayCommand]
+    private void RemoveNominalRate(NominalRateRowViewModel row) => NominalRates.Remove(row);
+
+    // Parses the cadence table; on any bad cell, explains which one in
+    // NominalRatesStatusMessage and returns null so the window stays open.
+    private List<NominalRateEntry>? ParseNominalRates()
+    {
+        var entries = new List<NominalRateEntry>();
+        foreach (var row in NominalRates)
+        {
+            if (row.WeightText.Trim().Length == 0 && row.RateText.Trim().Length == 0)
+                continue;
+            if (!NominalRateRowViewModel.TryParse(row.WeightText, out var weight) || weight <= 0)
+            {
+                NominalRatesStatusMessage = $"Poids invalide : \"{row.WeightText}\" (nombre de grammes attendu).";
+                return null;
+            }
+            if (!NominalRateRowViewModel.TryParse(row.RateText, out var rate))
+            {
+                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g : \"{row.RateText}\".";
+                return null;
+            }
+            if (entries.Any(e => e.WeightGrams == weight))
+            {
+                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparait deux fois.";
+                return null;
+            }
+            entries.Add(new NominalRateEntry { WeightGrams = weight, RatePerMinute = rate });
+        }
+        NominalRatesStatusMessage = "";
+        return entries.OrderBy(e => e.WeightGrams).ToList();
+    }
+
+    public bool ValidateNominalRates() => ParseNominalRates() != null;
+
     private async Task LoadMachinesAsync()
     {
         Machines.Clear();
@@ -216,7 +266,7 @@ public partial class SettingsViewModel : ObservableObject
         var (success, message) = await ConnectionTester.TestAsync(BuildFactoryFromFields());
 
         TestResultSuccess = success;
-        TestResultMessage = success ? "Connexion reussie." : message;
+        TestResultMessage = message;
         IsTesting = false;
     }
 
@@ -253,6 +303,7 @@ public partial class SettingsViewModel : ObservableObject
         _settings.TeamRotation.Pattern = pattern;
 
         _settings.PdfDocumentPath = PdfDocumentPath;
+        _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
 
         _settingsService.Save(_settings);
         _activeFactory.SwitchTo(BuildFactoryFromFields());

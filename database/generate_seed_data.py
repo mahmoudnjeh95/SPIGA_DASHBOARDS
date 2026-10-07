@@ -1,32 +1,38 @@
 """
-Generates a SQLite dev database (spiga_dashboards.db) with a rolling
-31-day window of realistic mock production data, ending "today", matching
-the schema in schema.sql (SQL Server DDL). Used to develop the dashboard
-while real DB access to the Stiavelli Production Supervisor database is
-pending.
+Builds the SQLite dev database (spiga_dashboards.db) from a real export of
+the Stiavelli `stats.dbo.produzione` table (mahmoud_db.csv at the repo root,
+';'-separated, as exported from SSMS).
 
-Run: python generate_seed_data.py
+The dev DB mirrors what database/stiavelli_compat.sql builds on SQL Server:
+  - produzione : the raw Stiavelli snapshot rows (cumulative counters)
+  - Machines, Products, Employees, Shifts, Notes, MachineStatusLog
+The app turns snapshots into per-hour production itself (ProductionRepository).
+
+By default every timestamp is shifted so the newest snapshot lands "now"
+(minus a few minutes): the dashboard's Day/Week/Month views and the
+"connected" status (which compare against DateTime.Now) then show data out
+of the box. Pass --no-shift to keep the original 2024 dates.
+
+The export was taken with Stiavelli writing a snapshot every 30 min. That
+cadence is configurable down to under a minute; --densify N splits every
+interval of up to 2 h into N linearly interpolated snapshots (e.g. 60 ->
+one every 30 s) to exercise the app at that rate.
+
+Run (from the repo root or this folder):
+    python database/generate_seed_data.py [--csv mahmoud_db.csv] [--no-shift] [--densify N]
 """
+import argparse
+import csv
+import os
 import sqlite3
-import random
 from datetime import datetime, timedelta
 
-random.seed(42)
+HERE = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(HERE, "spiga_dashboards.db")
+DEFAULT_CSV = os.path.join(HERE, "..", "mahmoud_db.csv")
 
-DB_PATH = "spiga_dashboards.db"
-# Rolling 31-day window ending "today" so Day/Week/Month views in the app
-# (which compare against DateTime.Now) have real data out of the box.
-END_DATE = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-NUM_DAYS = 31
-START_DATE = END_DATE - timedelta(days=NUM_DAYS - 1)
-
-# ---------------------------------------------------------------------------
-# Reference data
-# ---------------------------------------------------------------------------
-
-# Real roster (IPs confirmed by client). CC=couscous, PC=pate courte, PL=pate longue.
+# Real roster (IPs confirmed by client). MachineId == produzione.numero_linea.
 MACHINES = [
-    # id,    name,            type, sector,        ip
     ("CC01", "Controle CC01", "CC", "Couscous",    "192.168.2.30"),
     ("CC02", "Controle CC02", "CC", "Couscous",    "192.168.2.31"),
     ("CC03", "Controle CC03", "CC", "Couscous",    "192.168.2.38"),
@@ -39,80 +45,7 @@ MACHINES = [
     ("PL03", "Ligne PL03",    "PL", "Pate longue", "192.168.2.34"),
 ]
 
-# Spiga = wheat spike -> semolina / flour / couscous / pasta producer
-# NominalRatePerMinute is the midpoint of gen_lot()'s per-weight-band rate
-# range below, so seeded Performance% lands close to (but not exactly) 100%.
-PRODUCTS = [
-    # name,                 target_g, size,   nominal_rate
-    ("Semoule Fine", 1000.0, "1kg", 25.0),
-    ("Semoule Fine", 5000.0, "5kg", 11.0),
-    ("Semoule Grosse", 1000.0, "1kg", 25.0),
-    ("Farine Superieure", 1000.0, "1kg", 25.0),
-    ("Farine Complete", 1000.0, "1kg", 25.0),
-    ("Couscous Moyen", 1000.0, "1kg", 25.0),
-    ("Couscous Fin", 500.0, "500g", 33.0),
-    ("Pates Spaghetti", 500.0, "500g", 33.0),
-    ("Pates Coquillettes", 500.0, "500g", 33.0),
-    ("Orge Perle", 1000.0, "1kg", 25.0),
-]
-
-# Poste hours per the client spec (06-14 / 14-22 / 22-06). EndHour is the
-# real wall-clock hour (Nuit ends at 6, not "30") -- the day loop below
-# detects EndHour <= StartHour and rolls the shift end to the next day.
-SHIFTS = [
-    (1, "Matin", 6, 14),
-    (2, "Soir", 14, 22),
-    (3, "Nuit", 22, 6),
-]
-
-FIRST_NAMES_M = [
-    "Mohamed", "Ahmed", "Ali", "Karim", "Sami", "Walid", "Nizar", "Anis",
-    "Fares", "Hatem", "Slim", "Bilel", "Aymen", "Rami", "Youssef", "Amine",
-    "Khalil", "Chokri", "Mehdi", "Wassim", "Nabil", "Tarek", "Riadh",
-    "Marwan", "Zied", "Hedi", "Moez", "Seif", "Oussama",
-]
-FIRST_NAMES_F = [
-    "Amira", "Sana", "Rim", "Ines", "Nour", "Sabrine", "Emna", "Wafa",
-    "Salma", "Yasmine", "Manel", "Asma", "Mouna", "Dorra", "Hela", "Rania",
-    "Syrine", "Amel", "Fatma", "Meriem", "Nadia", "Olfa", "Sonia", "Imen",
-]
-LAST_NAMES = [
-    "Ben Ali", "Trabelsi", "Gharbi", "Jlassi", "Bouazizi", "Chaabane",
-    "Mansour", "Hammami", "Khelifi", "Sassi", "Belhaj", "Fendri", "Zouari",
-    "Kacem", "Ayari", "Ben Salah", "Cherif", "Bouzid", "Nasri", "Rekik",
-    "Dridi", "Bahri", "Ben Amor", "Guesmi", "Toumi", "Slama", "Baccouche",
-    "Marzouki", "Chtioui", "Abidi",
-]
-
-def make_employees(n=18):
-    names = set()
-    employees = []
-    while len(employees) < n:
-        if random.random() < 0.6:
-            first = random.choice(FIRST_NAMES_M)
-        else:
-            first = random.choice(FIRST_NAMES_F)
-        last = random.choice(LAST_NAMES)
-        full = f"{first} {last}"
-        if full in names:
-            continue
-        names.add(full)
-        employees.append(full)
-    roles = []
-    for i, name in enumerate(employees):
-        if i == 0:
-            roles.append((name, "Manager"))
-        elif i in (1, 2, 3):
-            roles.append((name, "Chef d'equipe"))
-        else:
-            roles.append((name, "Operateur"))
-    return roles
-
-EMPLOYEES = make_employees()
-
-# ---------------------------------------------------------------------------
-# Schema (SQLite-flavoured mirror of schema.sql)
-# ---------------------------------------------------------------------------
+SHIFTS = [(1, "Matin", 6, 14), (2, "Soir", 14, 22), (3, "Nuit", 22, 6)]
 
 DDL = """
 CREATE TABLE Machines (
@@ -126,16 +59,18 @@ CREATE TABLE Machines (
 
 CREATE TABLE Products (
     ProductId            INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code                 TEXT NOT NULL UNIQUE,
     ProductName          TEXT NOT NULL,
-    TargetWeightGrams    REAL NOT NULL,
-    PackagingSize        TEXT NOT NULL,
+    TargetWeightGrams    REAL NOT NULL DEFAULT 0,
+    PackagingSize        TEXT NOT NULL DEFAULT '',
     NominalRatePerMinute REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE Employees (
     EmployeeId INTEGER PRIMARY KEY AUTOINCREMENT,
+    Code       TEXT NOT NULL UNIQUE,
     FullName   TEXT NOT NULL,
-    Role       TEXT NOT NULL
+    Role       TEXT NOT NULL DEFAULT 'Operateur'
 );
 
 CREATE TABLE Shifts (
@@ -145,33 +80,9 @@ CREATE TABLE Shifts (
     EndHour   INTEGER NOT NULL
 );
 
-CREATE TABLE ProductionLots (
-    LotId              INTEGER PRIMARY KEY AUTOINCREMENT,
-    MachineId          TEXT NOT NULL REFERENCES Machines(MachineId),
-    ProductId          INTEGER NOT NULL REFERENCES Products(ProductId),
-    LotNumber          INTEGER NOT NULL,
-    ShiftId            INTEGER NOT NULL REFERENCES Shifts(ShiftId),
-    EmployeeId         INTEGER NOT NULL REFERENCES Employees(EmployeeId),
-    StartTime          TEXT NOT NULL,
-    EndTime            TEXT NOT NULL,
-    TargetNetWeight    REAL NOT NULL,
-    MinWeight          REAL NOT NULL,
-    MaxWeight          REAL NOT NULL,
-    TotalBags          INTEGER NOT NULL,
-    BagsUnderTolerance INTEGER NOT NULL,
-    BagsInTolerance    INTEGER NOT NULL,
-    BagsOverTolerance  INTEGER NOT NULL,
-    BagsIndeterminate  INTEGER NOT NULL,
-    StdDev             REAL NOT NULL,
-    AvgWeight          REAL NOT NULL,
-    CorrectedAvgWeight REAL NOT NULL,
-    MetalRejects       INTEGER NOT NULL,
-    IsConform          INTEGER NOT NULL
-);
-
 CREATE TABLE MachineStatusLog (
     LogId       INTEGER PRIMARY KEY AUTOINCREMENT,
-    MachineId   TEXT NOT NULL REFERENCES Machines(MachineId),
+    MachineId   TEXT NOT NULL,
     Timestamp   TEXT NOT NULL,
     IsConnected INTEGER NOT NULL,
     BeltRunning INTEGER NOT NULL,
@@ -179,196 +90,180 @@ CREATE TABLE MachineStatusLog (
 );
 
 CREATE TABLE Notes (
-    NoteId             INTEGER PRIMARY KEY AUTOINCREMENT,
-    Content            TEXT NOT NULL,
-    CreatedByEmployeeId INTEGER NOT NULL REFERENCES Employees(EmployeeId),
-    CreatedAt          TEXT NOT NULL,
-    IsActive           INTEGER NOT NULL DEFAULT 1
+    NoteId              INTEGER PRIMARY KEY AUTOINCREMENT,
+    Content             TEXT NOT NULL,
+    CreatedByEmployeeId INTEGER NOT NULL,
+    CreatedAt           TEXT NOT NULL,
+    IsActive            INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE INDEX IX_ProductionLots_Machine_Start ON ProductionLots(MachineId, StartTime);
-CREATE INDEX IX_MachineStatusLog_Machine_Timestamp ON MachineStatusLog(MachineId, Timestamp);
+-- Same columns as stats.dbo.produzione (timestamps as 'yyyy-MM-dd HH:mm:ss').
+CREATE TABLE produzione (
+    progressivo              INTEGER PRIMARY KEY,
+    ID_produzione            TEXT,
+    numero_linea             TEXT,
+    tempo_inizio             TEXT,
+    tempo_fine               TEXT,
+    terminata                INTEGER,
+    codice_articolo          TEXT,
+    operatore                TEXT,
+    turno                    INTEGER,
+    linea_produzione         TEXT,
+    peso_netto_impostato     INTEGER,
+    peso_max_registrato      REAL,
+    peso_min_registrato      REAL,
+    totale_confezioni        INTEGER,
+    confezioni_sotto_toll    INTEGER,
+    confezioni_ok            INTEGER,
+    confezioni_sopra_toll    INTEGER,
+    confezioni_indeterminate INTEGER,
+    media_totale             REAL,
+    deviazione_std           REAL,
+    espulsi_metal            INTEGER
+);
+
+-- Same index as stiavelli_compat.sql: the app reads one line's time range at a time.
+CREATE INDEX IX_produzione_linea_fine ON produzione(numero_linea, tempo_fine);
 """
 
-# ---------------------------------------------------------------------------
-# Data generation
-# ---------------------------------------------------------------------------
-
-def gen_lot(machine_id, product, shift_start, shift_end, lot_no):
-    """One production lot within [shift_start, shift_end)."""
-    product_name, target_weight, _size = product
-    max_span = (shift_end - shift_start).total_seconds() / 60
-    duration_min = random.randint(45, max(60, int(max_span // 2)))
-    duration_min = min(duration_min, int(max_span))
-    start = shift_start
-    end = start + timedelta(minutes=duration_min)
-
-    # smaller packages -> faster nominal rate (bags/min)
-    if target_weight <= 500:
-        rate = random.uniform(28, 38)
-    elif target_weight <= 1000:
-        rate = random.uniform(20, 30)
-    else:
-        rate = random.uniform(8, 14)
-
-    total_bags = max(1, int(duration_min * rate))
-
-    in_pct = random.uniform(0.90, 0.98)
-    under_pct = random.uniform(0.005, (1 - in_pct) * 0.5)
-    over_pct = random.uniform(0.005, (1 - in_pct) * 0.5)
-    indet_pct = max(0.0, 1 - in_pct - under_pct - over_pct)
-
-    bags_in = int(total_bags * in_pct)
-    bags_under = int(total_bags * under_pct)
-    bags_over = int(total_bags * over_pct)
-    bags_indet = total_bags - bags_in - bags_under - bags_over
-
-    std_dev = round(random.uniform(1.5, 6.5), 4)
-    avg_weight = round(target_weight + random.uniform(-3, 3), 2)
-    corrected_avg = round(avg_weight + random.uniform(-0.5, 0.5), 2)
-    min_weight = round(target_weight - random.uniform(5, 15), 2)
-    max_weight = round(target_weight + random.uniform(5, 15), 2)
-    metal_rejects = random.choices([0, 1, 2, 3, 4], weights=[60, 20, 10, 6, 4])[0]
-    is_conform = 1 if (bags_over + bags_under) / total_bags < 0.08 else 0
-
-    return {
-        "MachineId": machine_id,
-        "ProductName": product_name,
-        "TargetWeight": target_weight,
-        "LotNumber": lot_no,
-        "StartTime": start,
-        "EndTime": end,
-        "MinWeight": min_weight,
-        "MaxWeight": max_weight,
-        "TotalBags": total_bags,
-        "BagsUnder": bags_under,
-        "BagsIn": bags_in,
-        "BagsOver": bags_over,
-        "BagsIndet": bags_indet,
-        "StdDev": std_dev,
-        "AvgWeight": avg_weight,
-        "CorrectedAvg": corrected_avg,
-        "MetalRejects": metal_rejects,
-        "IsConform": is_conform,
-    }, end
+TS_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def build():
+def parse_ts(value):
+    value = (value or "").strip()
+    if not value or value.upper() == "NULL":
+        return None
+    return datetime.strptime(value[:19], TS_FORMAT)
+
+
+def as_int(value):
+    value = (value or "").strip()
+    return None if value == "" or value.upper() == "NULL" else int(value)
+
+
+def as_float(value):
+    value = (value or "").strip()
+    return None if value == "" or value.upper() == "NULL" else float(value)
+
+
+COUNTERS = ["confezioni_sotto_toll", "confezioni_ok", "confezioni_sopra_toll",
+            "confezioni_indeterminate", "espulsi_metal"]
+
+
+def densify(rows, factor):
+    """Splits each interval (<= 2 h) between two snapshots of the same
+    production into `factor` snapshots, interpolating the cumulative counters,
+    then renumbers progressivo in time order."""
+    by_production = {}
+    for r in rows:
+        by_production.setdefault((r["numero_linea"], r["ID_produzione"]), []).append(r)
+
+    out = []
+    for snaps in by_production.values():
+        snaps.sort(key=lambda r: int(r["progressivo"]))
+        out.append(snaps[0])
+        for a, b in zip(snaps, snaps[1:]):
+            ta, tb = parse_ts(a["tempo_fine"]), parse_ts(b["tempo_fine"])
+            if ta and tb and timedelta(0) < tb - ta <= timedelta(hours=2):
+                for k in range(1, factor):
+                    f = k / factor
+                    mid = dict(b)
+                    mid["tempo_fine"] = (ta + (tb - ta) * f).strftime(TS_FORMAT)
+                    for c in COUNTERS:
+                        mid[c] = str(round(int(a[c]) + (int(b[c]) - int(a[c])) * f))
+                    # Keep Stiavelli's invariant: total = sum of the categories.
+                    mid["totale_confezioni"] = str(sum(int(mid[c]) for c in COUNTERS[:4]))
+                    out.append(mid)
+            out.append(b)
+
+    out.sort(key=lambda r: (r["tempo_fine"], r["numero_linea"], int(r["progressivo"])))
+    for i, r in enumerate(out, start=1):
+        r["progressivo"] = str(i)
+    return out
+
+
+def build(csv_path, shift_to_now, densify_factor):
+    with open(csv_path, encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter=";"))
+    if not rows:
+        raise SystemExit(f"No rows in {csv_path}")
+    if densify_factor > 1:
+        rows = densify(rows, densify_factor)
+
+    shift = timedelta(0)
+    if shift_to_now:
+        latest = max(parse_ts(r["tempo_fine"]) for r in rows if parse_ts(r["tempo_fine"]))
+        # Newest snapshot = now. The app's automatic "connected" window is 2.5x
+        # the snapshot interval (min 2 min), so with --densify the lines turn
+        # "disconnected" a couple of minutes after generation: regenerate, or set
+        # ConnectedWindowMinutes in settings.json while testing.
+        target = datetime.now().replace(second=0, microsecond=0)
+        shift = target - latest
+
+    def ts(value):
+        parsed = parse_ts(value)
+        return None if parsed is None else (parsed + shift).strftime(TS_FORMAT)
+
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.executescript(DDL)
+    conn.executescript(DDL)
 
-    cur.executemany(
-        "INSERT INTO Machines VALUES (?,?,?,?,?,1)", MACHINES
+    conn.executemany("INSERT INTO Machines VALUES (?,?,?,?,?,1)", MACHINES)
+    conn.executemany("INSERT INTO Shifts VALUES (?,?,?,?)", SHIFTS)
+
+    conn.executemany(
+        "INSERT INTO produzione VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            (
+                as_int(r["progressivo"]), r["ID_produzione"], r["numero_linea"],
+                ts(r["tempo_inizio"]), ts(r["tempo_fine"]), as_int(r["terminata"]),
+                r["codice_articolo"], r["operatore"], as_int(r["turno"]), r["linea_produzione"],
+                as_int(r["peso_netto_impostato"]), as_float(r["peso_max_registrato"]),
+                as_float(r["peso_min_registrato"]), as_int(r["totale_confezioni"]),
+                as_int(r["confezioni_sotto_toll"]), as_int(r["confezioni_ok"]),
+                as_int(r["confezioni_sopra_toll"]), as_int(r["confezioni_indeterminate"]),
+                as_float(r["media_totale"]), as_float(r["deviazione_std"]), as_int(r["espulsi_metal"]),
+            )
+            for r in rows
+        ],
     )
-    cur.executemany(
-        "INSERT INTO Products (ProductName, TargetWeightGrams, PackagingSize, NominalRatePerMinute) VALUES (?,?,?,?)",
-        PRODUCTS,
+
+    # Same seeding rule as stiavelli_compat.sql: name = code without zero padding.
+    conn.execute(
+        """INSERT INTO Products (Code, ProductName, TargetWeightGrams)
+           SELECT TRIM(codice_articolo),
+                  COALESCE(NULLIF(LTRIM(TRIM(codice_articolo), '0'), ''), TRIM(codice_articolo)),
+                  MAX(peso_netto_impostato)
+           FROM produzione
+           WHERE TRIM(IFNULL(codice_articolo, '')) <> ''
+           GROUP BY TRIM(codice_articolo)"""
     )
-    cur.executemany(
-        "INSERT INTO Shifts VALUES (?,?,?,?)", SHIFTS
-    )
-    cur.executemany(
-        "INSERT INTO Employees (FullName, Role) VALUES (?,?)", EMPLOYEES
-    )
-    conn.commit()
 
-    employee_ids = [row[0] for row in cur.execute("SELECT EmployeeId FROM Employees")]
-    product_rows = list(cur.execute("SELECT ProductId, ProductName, TargetWeightGrams, PackagingSize FROM Products"))
-
-    lot_counter = {m[0]: 0 for m in MACHINES}
-    lots_inserted = 0
-    status_inserted = 0
-
-    for day_offset in range(NUM_DAYS):
-        date = START_DATE + timedelta(days=day_offset)
-        is_sunday = date.weekday() == 6  # Monday=0 ... Sunday=6
-
-        for machine_id, _name, _type, _sector, _ip in MACHINES:
-            for shift_id, _shift_name, start_h, end_h in SHIFTS:
-                shift_start = date + timedelta(hours=start_h)
-                # Nuit (22h-06h) crosses midnight: EndHour <= StartHour means "next day".
-                end_day_offset = 1 if end_h <= start_h else 0
-                shift_end = date + timedelta(days=end_day_offset, hours=end_h)
-
-                active_prob = 0.25 if is_sunday else 0.90
-                active = random.random() < active_prob
-
-                # status log: one snapshot per hour of the shift regardless
-                cursor_time = shift_start
-                while cursor_time < shift_end:
-                    connected = 1 if random.random() < (0.97 if active else 0.6) else 0
-                    belt_running = 1 if (active and connected and random.random() < 0.92) else 0
-                    alarm = 1 if random.random() < 0.03 else 0
-                    cur.execute(
-                        "INSERT INTO MachineStatusLog (MachineId, Timestamp, IsConnected, BeltRunning, AlarmActive) "
-                        "VALUES (?,?,?,?,?)",
-                        (machine_id, cursor_time.isoformat(sep=" "), connected, belt_running, alarm),
-                    )
-                    status_inserted += 1
-                    cursor_time += timedelta(hours=1)
-
-                if not active:
-                    continue
-
-                n_lots = random.randint(1, 3)
-                cursor_time = shift_start
-                for _ in range(n_lots):
-                    remaining = (shift_end - cursor_time).total_seconds() / 60
-                    if remaining < 45:
-                        break
-                    product = random.choice(product_rows)
-                    product_id, product_name, target_weight, _size = product
-                    lot_counter[machine_id] += 1
-                    lot, end_time = gen_lot(
-                        machine_id,
-                        (product_name, target_weight, _size),
-                        cursor_time,
-                        shift_end,
-                        lot_counter[machine_id],
-                    )
-                    employee_id = random.choice(employee_ids)
-                    cur.execute(
-                        """INSERT INTO ProductionLots
-                        (MachineId, ProductId, LotNumber, ShiftId, EmployeeId, StartTime, EndTime,
-                         TargetNetWeight, MinWeight, MaxWeight, TotalBags, BagsUnderTolerance,
-                         BagsInTolerance, BagsOverTolerance, BagsIndeterminate, StdDev, AvgWeight,
-                         CorrectedAvgWeight, MetalRejects, IsConform)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (
-                            machine_id, product_id, lot["LotNumber"], shift_id, employee_id,
-                            lot["StartTime"].isoformat(sep=" "), lot["EndTime"].isoformat(sep=" "),
-                            lot["TargetWeight"], lot["MinWeight"], lot["MaxWeight"], lot["TotalBags"],
-                            lot["BagsUnder"], lot["BagsIn"], lot["BagsOver"], lot["BagsIndet"],
-                            lot["StdDev"], lot["AvgWeight"], lot["CorrectedAvg"], lot["MetalRejects"],
-                            lot["IsConform"],
-                        ),
-                    )
-                    lots_inserted += 1
-                    # small changeover gap before next lot
-                    cursor_time = end_time + timedelta(minutes=random.randint(5, 20))
-
-    manager_id = employee_ids[0]
-    cur.execute(
+    conn.execute(
         "INSERT INTO Notes (Content, CreatedByEmployeeId, CreatedAt, IsActive) VALUES (?,?,?,1)",
-        (
-            "Objectif du mois: reduire les rejets metal detector de 10%. "
-            "Merci de respecter les procedures de nettoyage entre les lots.",
-            manager_id,
-            START_DATE.replace(hour=8, minute=0).isoformat(sep=" "),
-        ),
+        ("Base de dev construite a partir de mahmoud_db.csv (export reel de produzione).", 1,
+         datetime.now().strftime(TS_FORMAT)),
     )
 
     conn.commit()
-    conn.close()
 
-    print(f"Machines: {len(MACHINES)}")
-    print(f"Products: {len(PRODUCTS)}")
-    print(f"Employees: {len(EMPLOYEES)}")
-    print(f"ProductionLots: {lots_inserted}")
-    print(f"MachineStatusLog: {status_inserted}")
-    print(f"DB written to: {DB_PATH}")
+    count = conn.execute("SELECT COUNT(*) FROM produzione").fetchone()[0]
+    span = conn.execute("SELECT MIN(tempo_fine), MAX(tempo_fine) FROM produzione").fetchone()
+    print(f"{DB_PATH}: {count} snapshots, {span[0]} -> {span[1]} (shift {shift})")
+    for machine_id, snapshots in conn.execute(
+        """SELECT p.numero_linea, COUNT(*) FROM produzione p
+           JOIN Machines m ON m.MachineId = p.numero_linea GROUP BY p.numero_linea ORDER BY 1"""
+    ):
+        print(f"  {machine_id}: {snapshots} snapshots")
+    conn.close()
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--csv", default=DEFAULT_CSV, help="produzione export (';'-separated)")
+    parser.add_argument("--no-shift", action="store_true", help="keep the original timestamps")
+    parser.add_argument("--densify", type=int, default=1, metavar="N",
+                        help="interpolate N snapshots per original interval (simulates a faster cadence)")
+    args = parser.parse_args()
+    build(os.path.abspath(args.csv), shift_to_now=not args.no_shift, densify_factor=args.densify)
