@@ -16,8 +16,9 @@ public partial class App : Application
         // culture: switch every StringFormat (N0, 0.0, ...) to French
         // (66,8 % / 1 234 567) before any window or control is created.
         var french = XmlLanguage.GetLanguage("fr-FR");
+        // FrameworkElement only: FrameworkContentElement already owns metadata
+        // for the same property and overriding it throws at startup.
         FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(french));
-        FrameworkContentElement.LanguageProperty.OverrideMetadata(typeof(FrameworkContentElement), new FrameworkPropertyMetadata(french));
 
         base.OnStartup(e);
 
