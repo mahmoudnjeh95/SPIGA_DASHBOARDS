@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiveChartsCore;
 using LiveChartsCore.Measure;
@@ -20,10 +21,12 @@ public enum DashboardPeriod
 public partial class MachineDashboardViewModel : ObservableObject
 {
     private readonly ProductionRepository _repository;
+    private readonly TeamScheduleService _teamSchedule;
 
-    public MachineDashboardViewModel(ProductionRepository repository)
+    public MachineDashboardViewModel(ProductionRepository repository, TeamScheduleService teamSchedule)
     {
         _repository = repository;
+        _teamSchedule = teamSchedule;
     }
 
     [ObservableProperty] private string machineId = "";
@@ -33,6 +36,12 @@ public partial class MachineDashboardViewModel : ObservableObject
     [ObservableProperty] private bool alarmActive;
     [ObservableProperty] private KpiSummary kpis = new();
     [ObservableProperty] private DashboardPeriod period = DashboardPeriod.Day;
+
+    // Caption of the KPI tiles / period charts (they follow the period selector).
+    [ObservableProperty] private string periodLabel = "";
+
+    // Ecart de poids colour band, relative to the target (see KpiCalculator).
+    [ObservableProperty] private KpiSeverity weightDeviationSeverity;
 
     // Current Stiavelli production on this line (one article run, since its start).
     [ObservableProperty] private ProductionInfo? currentProduction;
@@ -44,9 +53,11 @@ public partial class MachineDashboardViewModel : ObservableObject
     [ObservableProperty] private Axis[] onOffYAxes = Array.Empty<Axis>();
 
     // Weight drift: average recorded weight vs target, per hour (Day) or per day (Week/Month).
+    // HasWeightData = false shows a "Pas de donnees" placeholder instead of an empty chart.
     [ObservableProperty] private ISeries[] weightSeries = Array.Empty<ISeries>();
     [ObservableProperty] private Axis[] weightXAxes = Array.Empty<Axis>();
     [ObservableProperty] private Axis[] weightYAxes = Array.Empty<Axis>();
+    [ObservableProperty] private bool hasWeightData;
 
     // This machine's current-shift team: daily total bags over the last 14 days.
     [ObservableProperty] private ISeries[] teamHistorySeries = Array.Empty<ISeries>();
@@ -54,65 +65,90 @@ public partial class MachineDashboardViewModel : ObservableObject
     [ObservableProperty] private Axis[] teamHistoryYAxes = Array.Empty<Axis>();
     [ObservableProperty] private string currentShiftName = "";
 
-    // Production by shift, for the selected period.
-    [ObservableProperty] private ISeries[] shiftSeries = Array.Empty<ISeries>();
-    [ObservableProperty] private Axis[] shiftXAxes = Array.Empty<Axis>();
-    [ObservableProperty] private Axis[] shiftYAxes = Array.Empty<Axis>();
+    // Production by team (roster in Parametres), for the selected period.
+    [ObservableProperty] private ISeries[] teamSeries = Array.Empty<ISeries>();
+    [ObservableProperty] private Axis[] teamXAxes = Array.Empty<Axis>();
+    [ObservableProperty] private Axis[] teamYAxes = Array.Empty<Axis>();
 
     public async Task LoadAsync(Machine machine, DashboardPeriod selectedPeriod)
     {
         MachineId = machine.MachineId;
         MachineName = machine.MachineName;
         Period = selectedPeriod;
+        PeriodLabel = selectedPeriod switch
+        {
+            DashboardPeriod.Week => "Cette semaine",
+            DashboardPeriod.Month => "Ce mois",
+            _ => "Aujourd'hui",
+        };
 
         var status = await _repository.GetLatestStatusAsync(machine.MachineId);
         IsConnected = status?.IsConnected ?? false;
         BeltRunning = status?.BeltRunning ?? false;
         AlarmActive = status?.AlarmActive ?? false;
         CurrentProduction = status?.CurrentProduction;
-        CurrentProductionLabel = FormatProduction(CurrentProduction);
 
         var (from, to) = GetRange(selectedPeriod);
         var lots = await _repository.GetLotsAsync(machine.MachineId, from, to);
 
         // Disponibilite input for TRS: fraction of this period's snapshot
-        // intervals in which the line produced (separate from BuildOnOffChartAsync's
+        // intervals in which the line produced (separate from the on/off
         // chart, which always shows today regardless of the selected period).
         Kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots));
+        WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(Kpis.WeightDeviationPercent);
+        CurrentProductionLabel = FormatProduction(CurrentProduction, lots);
 
         var buckets = BucketLots(lots, selectedPeriod);
         BuildWeightChart(buckets);
-        BuildShiftChart(KpiCalculator.ByShift(lots));
+        BuildTeamChart(KpiCalculator.ByTeam(lots, _teamSchedule));
 
-        await BuildOnOffChartAsync(machine.MachineId);
+        // "Aujourd'hui" already loaded today's hours: no second read.
+        var today = DateTime.Now.Date;
+        var todayLots = selectedPeriod == DashboardPeriod.Day
+            ? lots
+            : await _repository.GetLotsAsync(machine.MachineId, today, today.AddDays(1), includeWeights: false);
+        BuildOnOffChart(todayLots);
         await BuildTeamHistoryChartAsync(machine.MachineId);
     }
 
-    private static string FormatProduction(ProductionInfo? production)
+    // Same French number format as the tiles (WPF bindings use fr-FR, see App).
+    private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
+
+    private static string FormatProduction(ProductionInfo? production, IReadOnlyCollection<ProductionBucket> lots)
     {
         if (production == null)
-            return "Aucune production enregistree ces 6 dernieres heures";
+            return "Aucune donnee recue de StatsViewer depuis 6 h";
 
         var state = production.IsTerminated ? "Production terminee" : "Production en cours";
-        var weight = production.AvgWeight is { } avg ? $" - moyen {avg:0.0} g / cible {production.TargetNetWeight:0} g" : "";
-        return $"{state} : {production.ProductName} depuis le {production.StartTime:dd/MM HH:mm} - " +
-               $"{production.TotalBags:N0} sacs, {production.QualityPercent:0.0} % conformes{weight}";
+        // Lots of this production in the loaded period first (real lot
+        // averages); otherwise Stiavelli's running average, if it looks sane.
+        var avgWeight = KpiCalculator.ProductionAverageWeight(lots, production.ProductionId) ?? production.AvgWeight;
+        var weight = avgWeight is { } avg ? string.Create(French, $" - moyen {avg:0.0} g / cible {production.TargetNetWeight:0} g") : "";
+        var quality = production.TotalBags > 0 ? string.Create(French, $"{production.QualityPercent:0.0} %") : "— %";
+        return string.Create(French, $"{state} : {production.ProductName} depuis le {production.StartTime:dd/MM/yyyy HH:mm} - ") +
+               string.Create(French, $"{production.TotalBags:N0} sacs, {quality} conformes{weight}");
     }
 
     private sealed record ChartBucket(string Label, double? AvgWeight, double TargetWeight);
 
     // Repository returns hour buckets: one point per hour for "Aujourd'hui",
-    // regrouped per day for week/month so the charts stay readable.
+    // regrouped per day for week/month so the charts stay readable. The
+    // target is bags-weighted like the average, so a changeover inside a
+    // bucket compares each bag with its own target.
     private static List<ChartBucket> BucketLots(List<ProductionBucket> lots, DashboardPeriod period)
     {
         var byDay = period != DashboardPeriod.Day;
         return lots
             .GroupBy(l => byDay ? l.StartTime.Date : l.StartTime.Date.AddHours(l.StartTime.Hour))
             .OrderBy(g => g.Key)
-            .Select(g => new ChartBucket(
-                g.Key.ToString(byDay ? "dd" : "HH"),
-                KpiCalculator.WeightedAverageWeight(g) is { } avg ? Math.Round(avg, 1) : null,
-                g.Max(l => l.TargetNetWeight)))
+            .Select(g =>
+            {
+                var bags = g.Sum(l => l.WeighedBags);
+                return new ChartBucket(
+                    g.Key.ToString(byDay ? "dd" : "HH"),
+                    bags > 0 ? Math.Round(g.Sum(l => l.WeighedWeightSum) / bags, 1) : null,
+                    bags > 0 ? Math.Round(g.Sum(l => l.WeighedTargetSum) / bags, 1) : 0);
+            })
             .ToList();
     }
 
@@ -120,6 +156,16 @@ public partial class MachineDashboardViewModel : ObservableObject
     {
         // Buckets without trustworthy weight data are skipped, not drawn as 0 g.
         var weighed = buckets.Where(b => b.AvgWeight.HasValue).ToList();
+        HasWeightData = weighed.Count > 0;
+        if (!HasWeightData)
+        {
+            // No fake 0-5 g axis: the view shows "Pas de donnees" instead.
+            WeightSeries = Array.Empty<ISeries>();
+            WeightXAxes = new[] { ChartHelpers.BuildXAxis(Array.Empty<string>()) };
+            WeightYAxes = new[] { ChartHelpers.BuildYAxis() };
+            return;
+        }
+
         WeightSeries = new ISeries[]
         {
             new LineSeries<double>
@@ -142,57 +188,67 @@ public partial class MachineDashboardViewModel : ObservableObject
         WeightXAxes = new[] { ChartHelpers.BuildXAxis(weighed.Select(b => b.Label)) };
         // Fixed range around the data with 3 labels: auto-scaling packed 5+
         // labels into the short tile.
-        var weights = weighed.SelectMany(b => new[] { b.AvgWeight!.Value, b.TargetWeight }).DefaultIfEmpty(0).ToList();
+        var weights = weighed.SelectMany(b => new[] { b.AvgWeight!.Value, b.TargetWeight }).ToList();
         var pad = Math.Max(5, (weights.Max() - weights.Min()) * 0.2);
         var low = Math.Max(0, Math.Floor(weights.Min() - pad));
         var high = Math.Ceiling(weights.Max() + pad);
         WeightYAxes = new[] { ChartHelpers.BuildYAxis(low, high, minStep: (high - low) / 2, labeler: v => $"{v:0} g") };
     }
 
-    private void BuildShiftChart(List<ShiftKpi> shiftBreakdown)
+    private void BuildTeamChart(List<TeamKpi> teamBreakdown)
     {
-        ShiftSeries = new ISeries[] { BuildColumnSeries(shiftBreakdown.Select(s => s.TotalBags)) };
-        ShiftXAxes = new[] { ChartHelpers.BuildXAxis(shiftBreakdown.Select(s => s.ShiftName)) };
-        ShiftYAxes = new[] { BarValueAxis(shiftBreakdown.Select(s => s.TotalBags)) };
+        TeamSeries = new ISeries[] { BuildColumnSeries(teamBreakdown.Select(t => t.TotalBags)) };
+        TeamXAxes = new[] { ChartHelpers.BuildXAxis(teamBreakdown.Select(t => t.TeamName)) };
+        TeamYAxes = new[] { BarValueAxis(teamBreakdown.Select(t => t.TotalBags)) };
     }
 
-    private async Task BuildOnOffChartAsync(string machineId)
+    private void BuildOnOffChart(IReadOnlyCollection<ProductionBucket> todayLots)
     {
-        var today = DateTime.Now.Date;
-        var hours = await _repository.GetLotsAsync(machineId, today, today.AddDays(1));
+        // One column per hour from 00 to the current hour: share of the hour
+        // the line was producing (1 = ran the whole observed hour, 0 = stopped
+        // or no snapshot at all).
+        var now = DateTime.Now;
+        var hours = Enumerable.Range(0, now.Hour + 1).Select(h => now.Date.AddHours(h)).ToList();
+        var byHour = todayLots
+            .GroupBy(l => l.StartTime)
+            .ToDictionary(g => g.Key, g => (Observed: g.Sum(l => l.ObservedMinutes), Run: g.Sum(l => l.RunMinutes)));
 
-        // One column per hour: share of the hour the line was producing
-        // (1 = ran the whole observed hour, 0 = stopped).
         OnOffSeries = new ISeries[]
         {
             new ColumnSeries<double>
             {
-                Values = hours.Select(h => h.ObservedMinutes > 0 ? Math.Round(h.RunMinutes / h.ObservedMinutes, 2) : 0).ToArray(),
+                Values = hours.Select(h => byHour.TryGetValue(h, out var v) && v.Observed > 0 ? Math.Round(v.Run / v.Observed, 2) : 0).ToArray(),
                 Name = "Bande en marche",
                 Fill = new SolidColorPaint(new SKColor(0x2E, 0xCC, 0x71)),
                 Padding = 2,
                 MaxBarWidth = 40,
             },
         };
-        OnOffXAxes = new[] { ChartHelpers.BuildXAxis(hours.Select(h => h.StartTime.ToString("HH"))) };
+        OnOffXAxes = new[] { ChartHelpers.BuildXAxis(hours.Select(h => h.ToString("HH"))) };
         OnOffYAxes = new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1, minStep: 0.5, labeler: v => $"{v:P0}") };
     }
 
     private async Task BuildTeamHistoryChartAsync(string machineId)
     {
-        var currentShiftId = KpiCalculator.CurrentShiftId(DateTime.Now);
+        var now = DateTime.Now;
+        var currentShiftId = KpiCalculator.CurrentShiftId(now);
         CurrentShiftName = KpiCalculator.ShiftName(currentShiftId);
 
-        var today = DateTime.Now.Date;
-        var windowStart = today.AddDays(-13);
-        var lots = await _repository.GetLotsAsync(machineId, windowStart, today.AddDays(1));
+        // 14 shift dates ending with the current poste's (a Nuit after
+        // midnight belongs to yesterday), days without production at 0.
+        // Reading from the first date's 00:00 also catches the tail of the
+        // Nuit before it: dropped here rather than drawn as a partial bar.
+        var lastDate = TeamScheduleService.GetShiftDate(now, currentShiftId);
+        var dates = Enumerable.Range(0, 14).Select(i => lastDate.AddDays(i - 13)).ToList();
+        var lots = await _repository.GetLotsAsync(machineId, dates[0], now.Date.AddDays(1), includeWeights: false);
 
-        var daily = KpiCalculator.ByDayForShift(lots, currentShiftId);
+        var byDate = KpiCalculator.ByDayForShift(lots, currentShiftId).ToDictionary(d => d.Date, d => d.TotalBags);
+        var daily = dates.Select(d => byDate.GetValueOrDefault(d)).ToList();
 
-        TeamHistorySeries = new ISeries[] { BuildColumnSeries(daily.Select(d => d.TotalBags)) };
+        TeamHistorySeries = new ISeries[] { BuildColumnSeries(daily) };
         // Day number only: 14 "dd/MM" labels don't fit side by side at TV text size.
-        TeamHistoryXAxes = new[] { ChartHelpers.BuildXAxis(daily.Select(d => d.Date.ToString("dd"))) };
-        TeamHistoryYAxes = new[] { BarValueAxis(daily.Select(d => d.TotalBags)) };
+        TeamHistoryXAxes = new[] { ChartHelpers.BuildXAxis(dates.Select(d => d.ToString("dd"))) };
+        TeamHistoryYAxes = new[] { BarValueAxis(daily) };
     }
 
     // Bar charts print each value on its bar, so their value axis is hidden

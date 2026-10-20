@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
@@ -36,7 +37,9 @@ public static class ExportService
             sheet.Cell(row, 4).Value = r.Team;
             sheet.Cell(row, 5).Value = r.ProductName;
             sheet.Cell(row, 6).Value = r.TargetNetWeight;
-            sheet.Cell(row, 7).Value = r.AvgWeight;
+            // Unknown weight stays blank, never 0.
+            if (r.AvgWeight is { } avg)
+                sheet.Cell(row, 7).Value = avg;
             sheet.Cell(row, 8).Value = r.TotalBags;
             sheet.Cell(row, 9).Value = r.BagsInTolerance;
             sheet.Cell(row, 10).Value = r.BagsOverTolerance;
@@ -56,6 +59,17 @@ public static class ExportService
     };
 
     private static readonly double[] PdfColumnWidths = { 85, 50, 45, 60, 65, 45, 45, 40, 40, 40, 40, 30 };
+
+    // French number format (1 234,5) with a plain space as thousands
+    // separator: .NET's fr-FR uses U+202F, which the PDF's Arial may not draw.
+    private static readonly NumberFormatInfo PdfNumbers = CreatePdfNumbers();
+
+    private static NumberFormatInfo CreatePdfNumbers()
+    {
+        var format = (NumberFormatInfo)CultureInfo.GetCultureInfo("fr-FR").NumberFormat.Clone();
+        format.NumberGroupSeparator = " ";
+        return format;
+    }
 
     public static void ExportToPdf(KpiSummary summary, IReadOnlyList<HistoryRow> rows, string path)
     {
@@ -98,9 +112,11 @@ public static class ExportService
         StartPage();
 
         gfx.DrawString(
-            $"Historique de production -- {rows.Count} lot(s) -- "
-            + $"Total sacs: {summary.TotalBags}  Conformes: {summary.BagsInTolerance}  Eleves: {summary.BagsOverTolerance}  "
-            + $"Faibles: {summary.BagsUnderTolerance}  Taux conformite: {summary.QualityPercent}%",
+            // One row = one machine over one hour, not a Stiavelli lot.
+            $"Historique de production -- {rows.Count.ToString("N0", PdfNumbers)} heure(s) de production -- "
+            + $"Total sacs: {summary.TotalBags.ToString("N0", PdfNumbers)}  Conformes: {summary.BagsInTolerance.ToString("N0", PdfNumbers)}  "
+            + $"Eleves: {summary.BagsOverTolerance.ToString("N0", PdfNumbers)}  Faibles: {summary.BagsUnderTolerance.ToString("N0", PdfNumbers)}  "
+            + $"Taux conformite: {summary.QualityPercent.ToString("0.0", PdfNumbers)}%",
             summaryFont, XBrushes.Black, new XRect(marginLeft, 8, pageWidth - 2 * marginLeft, 24), XStringFormats.TopLeft);
 
         foreach (var row in rows)
@@ -111,8 +127,9 @@ public static class ExportService
             var values = new[]
             {
                 row.StartTime.ToString("dd/MM/yy HH:mm"), row.MachineId, row.ShiftName, row.Team, row.ProductName,
-                row.TargetNetWeight.ToString("0"), row.AvgWeight.ToString("0.0"), row.TotalBags.ToString(),
-                row.BagsInTolerance.ToString(), row.BagsOverTolerance.ToString(), row.BagsUnderTolerance.ToString(),
+                row.TargetNetWeight.ToString("N0", PdfNumbers), row.AvgWeight?.ToString("N1", PdfNumbers) ?? "",
+                row.TotalBags.ToString("N0", PdfNumbers), row.BagsInTolerance.ToString("N0", PdfNumbers),
+                row.BagsOverTolerance.ToString("N0", PdfNumbers), row.BagsUnderTolerance.ToString("N0", PdfNumbers),
                 row.IsConform ? "Oui" : "Non",
             };
 

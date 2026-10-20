@@ -30,8 +30,10 @@
             <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <TextBlock Text="{Binding MachineName}"
                            FontSize="30" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
-                <!-- Lines with no recent production stay in the rotation, flagged here and greyed out below. -->
-                <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3" Margin="16,0,0,0" VerticalAlignment="Center">
+                <!-- Lines with no recent snapshot stay in the rotation, flagged here and greyed out below.
+                     Not reporting is not the same as stopped: the belt state is the Bande dot. -->
+                <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3" Margin="16,0,0,0" VerticalAlignment="Center"
+                        ToolTip="Aucune donnee recue de StatsViewer pour cette ligne">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -42,7 +44,7 @@
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <TextBlock Text="PRODUCTION EN ARRET" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                    <TextBlock Text="PAS DE DONNEES" FontSize="18" FontWeight="Bold" Foreground="White"/>
                 </Border>
             </StackPanel>
 
@@ -53,8 +55,12 @@
                 <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding BeltRunning, Converter={StaticResource BoolToStatusBrush}}"/>
                 <TextBlock Text="Bande" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
 
-                <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding AlarmActive, Converter={StaticResource BoolToStatusBrush}, ConverterParameter=Invert}"/>
-                <TextBlock Text="Alarme" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                <!-- Stiavelli stores no alarm data: neutral grey, never a reassuring green. -->
+                <StackPanel Orientation="Horizontal" Background="Transparent"
+                            ToolTip="Alarme non disponible : aucune donnee d'alarme dans la base Stiavelli">
+                    <Ellipse Style="{StaticResource StatusDot}" Fill="{DynamicResource SubtleTextBrush}"/>
+                    <TextBlock Text="Alarme n/d" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- Current Stiavelli production (ID_produzione): one article run on this line -->
@@ -76,12 +82,17 @@
                     </Style.Triggers>
                 </Style>
             </StackPanel.Style>
+            <!-- The tiles (and the weight / team charts) follow the period selector. -->
+            <TextBlock Margin="10,0,10,0" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}">
+                <Run Text="Periode :"/>
+                <Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
+            </TextBlock>
             <UniformGrid Rows="1" Columns="4">
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="TRS" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
+                            <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
                                        Foreground="{Binding Kpis.TrsPercent, Converter={StaticResource PercentBandBrush}}"/>
                         </Viewbox>
                         <TextBlock Text="estime - a valider" Style="{StaticResource KpiSubtext}"/>
@@ -89,7 +100,7 @@
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
-                        <TextBlock Text="Vitesse (sacs/min)" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute}" Style="{StaticResource KpiValue}"/>
                         </Viewbox>
@@ -107,8 +118,8 @@
                     <StackPanel>
                         <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0}%}" Style="{StaticResource KpiValue}"
-                                       Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource KpiValue}"
+                                       Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </Viewbox>
                     </StackPanel>
                 </Border>
@@ -118,8 +129,9 @@
                     <StackPanel>
                         <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g}" Style="{StaticResource KpiValueSmall}"
-                                       Foreground="{Binding Kpis.WeightDeviationGrams, Converter={StaticResource WeightDeviationBrush}}"/>
+                            <!-- No weight data = "—" in grey, never a green 0.0 g. -->
+                            <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueSmall}"
+                                       Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </Viewbox>
                     </StackPanel>
                 </Border>
@@ -187,10 +199,36 @@
             <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource ChartTile}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Poids moyen vs cible" Style="{StaticResource ChartTitle}"/>
-                    <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
-                                        Series="{Binding WeightSeries}"
-                                        XAxes="{Binding WeightXAxes}"
-                                        YAxes="{Binding WeightYAxes}"/>
+                    <Grid>
+                        <Border>
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasWeightData}" Value="False">
+                                            <Setter Property="Visibility" Value="Hidden"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
+                                                Series="{Binding WeightSeries}"
+                                                XAxes="{Binding WeightXAxes}"
+                                                YAxes="{Binding WeightYAxes}"/>
+                        </Border>
+                        <TextBlock Text="Pas de donnees" FontSize="20" Foreground="{DynamicResource SubtleTextBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasWeightData}" Value="False">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
                 </DockPanel>
             </Border>
 
@@ -213,11 +251,13 @@
                         <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
                                    Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
                         <TextBlock Grid.Row="1" Text="Performance" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
-                                   Foreground="{Binding Kpis.PerformancePercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <!-- "—" when no nominal rate is set (Parametres) for what was produced. -->
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;}" FontWeight="Bold" Margin="8,4,0,4"
+                                   Foreground="{Binding Kpis.PerformancePercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Performance}"/>
                         <TextBlock Grid.Row="2" Text="Qualite" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0}%}" FontWeight="Bold" Margin="8,4,0,4"
-                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                        <!-- Same figure and format as the "Taux conformite" tile. -->
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" FontWeight="Bold" Margin="8,4,0,4"
+                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                     </Grid>
                 </DockPanel>
             </Border>
@@ -240,9 +280,9 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Production par equipe" Style="{StaticResource ChartTitle}"/>
                     <lvc:CartesianChart Background="{DynamicResource TileBackgroundBrush}"
-                                        Series="{Binding ShiftSeries}"
-                                        XAxes="{Binding ShiftXAxes}"
-                                        YAxes="{Binding ShiftYAxes}"/>
+                                        Series="{Binding TeamSeries}"
+                                        XAxes="{Binding TeamXAxes}"
+                                        YAxes="{Binding TeamYAxes}"/>
                 </DockPanel>
             </Border>
         </Grid>

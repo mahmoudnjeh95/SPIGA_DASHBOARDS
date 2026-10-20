@@ -28,26 +28,39 @@ public static class KpiCalculator
     // don't collect yet). `lots` are hour/day buckets (see ProductionBucket):
     //  - Disponibilite: share of the observed time in which the line produced
     //    (passed in, see AvailabilityPercent).
-    //  - Performance: bags/min over producing time only vs. a bags-weighted
-    //    average of each product's NominalRatePerMinute (0 until set per article).
+    //  - Performance: minutes the bags would have taken at each production's
+    //    own nominal rate / producing minutes they actually took. Productions
+    //    with no known rate are left out of both sides; none at all -> null
+    //    (and TRS null) rather than a misleading 0 %. Not clamped: > 100 %
+    //    means the nominal rate is set too low (flagged orange on screen).
     //  - Qualite: bags in tolerance / total bags.
     public static KpiSummary Summarize(IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent)
     {
+        // Weight comes from lots / sane running averages, which can sit in a
+        // bucket with no counter delta (lot closed just after the snapshot).
+        var (deviationGrams, deviationPercent) = WeightedDeviation(lots);
+
         var producing = lots.Where(l => l.IsProducing).ToList();
         if (producing.Count == 0)
-            return new KpiSummary { AvailabilityPercent = Math.Round(availabilityPercent, 1) };
+        {
+            return new KpiSummary
+            {
+                AvailabilityPercent = Math.Round(availabilityPercent, 1),
+                WeightDeviationGrams = deviationGrams,
+                WeightDeviationPercent = deviationPercent,
+            };
+        }
 
         var totalBags = producing.Sum(l => (long)l.TotalBags);
         var runMinutes = producing.Sum(l => l.RunMinutes);
-        var conformIntervals = producing.Count(l => l.IsConform);
 
         var qualityPercent = totalBags > 0 ? 100.0 * producing.Sum(l => (long)l.BagsInTolerance) / totalBags : 0;
 
         var actualRate = runMinutes > 0 ? totalBags / runMinutes : 0;
-        var weightedNominalRate = totalBags > 0 ? producing.Sum(l => l.NominalRatePerMinute * l.TotalBags) / totalBags : 0;
-        var performancePercent = weightedNominalRate > 0 ? 100.0 * actualRate / weightedNominalRate : 0;
+        var ratedRunMinutes = producing.Sum(l => l.RatedRunMinutes);
+        double? performancePercent = ratedRunMinutes > 0 ? 100.0 * producing.Sum(l => l.IdealMinutes) / ratedRunMinutes : null;
 
-        var trsPercent = availabilityPercent * performancePercent * qualityPercent / 10000.0;
+        double? trsPercent = performancePercent is { } perf ? availabilityPercent * perf * qualityPercent / 10000.0 : null;
 
         return new KpiSummary
         {
@@ -58,12 +71,12 @@ public static class KpiCalculator
             BagsIndeterminate = producing.Sum(l => (long)l.BagsIndeterminate),
             MetalRejects = producing.Sum(l => (long)l.MetalRejects),
             SpeedBagsPerMinute = Math.Round(actualRate, 2),
-            ConformRatePercent = Math.Round(100.0 * conformIntervals / producing.Count, 1),
             AvailabilityPercent = Math.Round(availabilityPercent, 1),
-            PerformancePercent = Math.Round(performancePercent, 1),
+            PerformancePercent = performancePercent is { } p ? Math.Round(p, 1) : null,
             QualityPercent = Math.Round(qualityPercent, 1),
-            TrsPercent = Math.Round(trsPercent, 1),
-            WeightDeviationGrams = Math.Round(WeightedDeviation(producing), 2),
+            TrsPercent = trsPercent is { } t ? Math.Round(t, 1) : null,
+            WeightDeviationGrams = deviationGrams,
+            WeightDeviationPercent = deviationPercent,
         };
     }
 
@@ -76,12 +89,36 @@ public static class KpiCalculator
         return bags > 0 ? list.Sum(l => l.WeighedWeightSum) / bags : null;
     }
 
-    private static double WeightedDeviation(IEnumerable<ProductionBucket> lots)
+    // Average weight of one production's weighed bags in these buckets
+    // (header line), null when it has none.
+    public static double? ProductionAverageWeight(IEnumerable<ProductionBucket> lots, string productionId)
+    {
+        var parts = lots.SelectMany(l => l.WeightParts).Where(p => p.ProductionId == productionId).ToList();
+        var bags = parts.Sum(p => p.Bags);
+        return bags > 0 ? parts.Sum(p => p.WeightSum) / bags : null;
+    }
+
+    private static (double? Grams, double? Percent) WeightedDeviation(IEnumerable<ProductionBucket> lots)
     {
         var list = lots.ToList();
         var bags = list.Sum(l => l.WeighedBags);
-        return bags > 0 ? list.Sum(l => l.WeighedDeviationSum) / bags : 0;
+        var targetSum = list.Sum(l => l.WeighedTargetSum);
+        if (bags <= 0 || targetSum <= 0)
+            return (null, null);
+        var deviationSum = list.Sum(l => l.WeighedDeviationSum);
+        return (Math.Round(deviationSum / bags, 2), Math.Round(100.0 * deviationSum / targetSum, 2));
     }
+
+    // Colour band of the weight deviation, relative to the target: within
+    // 0.5 % green, within 1.5 % orange, beyond red (1 g means nothing on a
+    // 5 kg bag but is a lot on a 200 g one).
+    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent) => deviationPercent switch
+    {
+        null => KpiSeverity.Unknown,
+        { } d when Math.Abs(d) <= 0.5 => KpiSeverity.Good,
+        { } d when Math.Abs(d) <= 1.5 => KpiSeverity.Warning,
+        _ => KpiSeverity.Bad,
+    };
 
     // Share (0-100) of the observed time in which the line produced bags.
     public static double AvailabilityPercent(IReadOnlyCollection<ProductionBucket> lots)
@@ -90,18 +127,23 @@ public static class KpiCalculator
         return observed > 0 ? 100.0 * lots.Sum(l => l.RunMinutes) / observed : 0;
     }
 
-    public static List<ShiftKpi> ByShift(IReadOnlyCollection<ProductionBucket> lots)
+    // Bags per team (TeamScheduleService roster) over the period. Every
+    // configured team is listed, even at 0, so the bars compare like for like;
+    // hours on a poste with no team assigned go to "Sans equipe".
+    public static List<TeamKpi> ByTeam(IReadOnlyCollection<ProductionBucket> lots, TeamScheduleService teamSchedule)
     {
-        return lots
-            .GroupBy(l => l.ShiftId)
-            .Select(g => new ShiftKpi
-            {
-                ShiftId = g.Key,
-                ShiftName = ShiftNames.GetValueOrDefault(g.Key, $"Shift {g.Key}"),
-                TotalBags = g.Sum(l => (long)l.TotalBags),
-            })
-            .OrderBy(s => s.ShiftId)
+        var byTeam = lots
+            .GroupBy(l => teamSchedule.GetTeamForShift(TeamScheduleService.GetShiftDate(l.StartTime, l.ShiftId), l.ShiftId))
+            .ToDictionary(g => g.Key, g => g.Sum(l => (long)l.TotalBags));
+
+        var teamNames = teamSchedule.TeamNames;
+        var result = teamNames
+            .Select(name => new TeamKpi { TeamName = name, TotalBags = byTeam.GetValueOrDefault(name) })
             .ToList();
+        var unassigned = byTeam.Where(kv => !teamNames.Contains(kv.Key)).Sum(kv => kv.Value);
+        if (unassigned > 0)
+            result.Add(new TeamKpi { TeamName = "Sans equipe", TotalBags = unassigned });
+        return result;
     }
 
     public static List<DailyProduction> ByDay(IReadOnlyCollection<ProductionBucket> lots)

@@ -10,10 +10,15 @@ public class HistoryRow
     public string Team { get; init; } = "";
     public string ProductName { get; init; } = "";
     public double TargetNetWeight { get; init; }
-    public double AvgWeight { get; init; }
+
+    // Null = no trustworthy weight data for that hour (left blank in the grid and exports).
+    public double? AvgWeight { get; init; }
     public long TotalBags { get; init; }
     public long BagsInTolerance { get; init; }
     public long BagsOverTolerance { get; init; }
     public long BagsUnderTolerance { get; init; }
     public bool IsConform { get; init; }
+
+    // Same wording as the Excel/PDF exports.
+    public string ConformLabel => IsConform ? "Oui" : "Non";
 }

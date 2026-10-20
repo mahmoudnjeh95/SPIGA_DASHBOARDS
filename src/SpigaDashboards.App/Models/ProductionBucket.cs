@@ -5,12 +5,19 @@ namespace SpigaDashboards.App.Models;
 // snapshots (see ProductionRepository). Counters are what was produced inside
 // the bucket, so buckets can be summed over any period whatever Stiavelli's
 // snapshot cadence is (30 min or under a minute).
+//
+// A bucket can span several productions (changeover inside the hour): the
+// repository aggregates them per production first, so rate and weight
+// figures are computed with each production's own target, and only the
+// display fields (ProductCode/ProductName/TargetNetWeight) pick one of them.
 public class ProductionBucket
 {
     public string MachineId { get; set; } = "";
+
+    // Display only: the article / target that made the most bags in the bucket.
     public string ProductCode { get; set; } = "";
     public string? ProductName { get; set; }
-    public double NominalRatePerMinute { get; set; }
+    public double TargetNetWeight { get; set; }
 
     // produzione.turno is always 0: derived from StartTime by the repository.
     // Hour buckets never straddle a poste change (06h / 14h / 22h).
@@ -18,7 +25,6 @@ public class ProductionBucket
 
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
-    public double TargetNetWeight { get; set; }
     public long TotalBags { get; set; }
     public long BagsUnderTolerance { get; set; }
     public long BagsInTolerance { get; set; }
@@ -31,15 +37,27 @@ public class ProductionBucket
     public double ObservedMinutes { get; set; }
     public double RunMinutes { get; set; }
 
-    // Bags whose Stiavelli running average looked sane (within 50 % of the
-    // target -- CC01 reports e.g. 2.9 g on 1000 g), with the bags-weighted
-    // sums of that average and of its gap to the target.
-    public long WeighedBags { get; set; }
-    public double WeighedWeightSum { get; set; }
-    public double WeighedDeviationSum { get; set; }
+    // Performance inputs, over the productions whose nominal rate is known
+    // only: minutes the bags would have taken at the nominal rate, and the
+    // producing minutes they actually took.
+    public double IdealMinutes { get; set; }
+    public double RatedRunMinutes { get; set; }
+
+    // Weight data, one entry per production: Stiavelli lots (lotto, real lot
+    // averages) when the line has lots in the range, otherwise Stiavelli's
+    // running average when it looks sane (see ProductionRepository).
+    public List<WeightPart> WeightParts { get; } = new();
+
+    public long WeighedBags => WeightParts.Sum(p => p.Bags);
+    public double WeighedWeightSum => WeightParts.Sum(p => p.WeightSum);
+    public double WeighedTargetSum => WeightParts.Sum(p => p.Target * p.Bags);
+    public double WeighedDeviationSum => WeighedWeightSum - WeighedTargetSum;
 
     public bool IsProducing => TotalBags > 0;
     public bool HasWeightData => WeighedBags > 0;
-    public double AvgWeight => HasWeightData ? WeighedWeightSum / WeighedBags : 0;
+    public double? AvgWeight => HasWeightData ? WeighedWeightSum / WeighedBags : null;
     public bool IsConform => TotalBags > 0 && (double)(BagsUnderTolerance + BagsOverTolerance) / TotalBags < 0.08;
 }
+
+// Bags weighed for one production in one bucket: WeightSum = average weight x Bags.
+public sealed record WeightPart(string ProductionId, double Target, long Bags, double WeightSum);

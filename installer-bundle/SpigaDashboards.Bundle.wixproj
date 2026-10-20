@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputName>SpigaDashboards-Setup</OutputName>
+    <OutputType>Bundle</OutputType>
+    <Platform>x64</Platform>
+    <DefineConstants>MsiFile=$(MSBuildProjectDirectory)\..\installer\bin\x64\Release\SpigaDashboards-Setup.msi</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Bal.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>

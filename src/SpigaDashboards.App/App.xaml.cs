@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Markup;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
@@ -11,6 +12,13 @@ public partial class App : Application
 {
     protected override void OnStartup(StartupEventArgs e)
     {
+        // WPF bindings format with en-US by default, whatever the Windows
+        // culture: switch every StringFormat (N0, 0.0, ...) to French
+        // (66,8 % / 1 234 567) before any window or control is created.
+        var french = XmlLanguage.GetLanguage("fr-FR");
+        FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(french));
+        FrameworkContentElement.LanguageProperty.OverrideMetadata(typeof(FrameworkContentElement), new FrameworkPropertyMetadata(french));
+
         base.OnStartup(e);
 
         var settingsService = new SettingsService();

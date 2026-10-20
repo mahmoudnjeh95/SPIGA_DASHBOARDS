@@ -105,6 +105,11 @@ public class AppSettings
     // While the DB is unreachable, the dashboard retries on its own this often.
     public int ReconnectIntervalSeconds { get; set; } = 30;
 
+    // Snapshots and lots saved before this date are ignored everywhere
+    // (dashboard, annual slides, history, exports): the stats DB still holds
+    // 2024-2025 test data and machine counters from before go-live.
+    public DateTime DataStartDate { get; set; } = new(2026, 10, 20);
+
     public TeamRotationSettings TeamRotation { get; set; } = new();
 
     // Full path to the PDF shown on the "document externe" slide (consignes,

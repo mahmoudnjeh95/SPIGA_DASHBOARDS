@@ -98,7 +98,7 @@ public partial class HistoryViewModel : ObservableObject
             Team = x.Team,
             ProductName = x.Lot.ProductName ?? "",
             TargetNetWeight = x.Lot.TargetNetWeight,
-            AvgWeight = Math.Round(x.Lot.AvgWeight, 1),
+            AvgWeight = x.Lot.AvgWeight is { } avg ? Math.Round(avg, 1) : null,
             TotalBags = x.Lot.TotalBags,
             BagsInTolerance = x.Lot.BagsInTolerance,
             BagsOverTolerance = x.Lot.BagsOverTolerance,

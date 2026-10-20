@@ -95,27 +95,27 @@
         <UniformGrid Grid.Row="2" Rows="1" Columns="5" Margin="0,14,0,10">
             <StackPanel>
                 <TextBlock Text="Total sacs" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.TotalBags}" Style="{StaticResource SummaryValue}"/>
+                <TextBlock Text="{Binding Summary.TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Conformes" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsInTolerance}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource SuccessBrush}"/>
+                <TextBlock Text="{Binding Summary.BagsInTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource SuccessBrush}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Eleves" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsOverTolerance}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource DangerBrush}"/>
+                <TextBlock Text="{Binding Summary.BagsOverTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource DangerBrush}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Faibles" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsUnderTolerance}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource WarningBrush}"/>
+                <TextBlock Text="{Binding Summary.BagsUnderTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource WarningBrush}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Taux conformite" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0}%}" Style="{StaticResource SummaryValue}"/>
+                <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
         </UniformGrid>
 
-        <!-- Results -->
+        <!-- Results (unknown average weight = blank cell, never 0) -->
         <DataGrid Grid.Row="3" ItemsSource="{Binding Results}" AutoGenerateColumns="False"
                   IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="None"
                   Background="{DynamicResource TileBackgroundBrush}" RowBackground="{DynamicResource TileBackgroundBrush}" AlternatingRowBackground="{DynamicResource AlternatingRowBrush}"
@@ -126,13 +126,13 @@
                 <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="70"/>
                 <DataGridTextColumn Header="Equipe" Binding="{Binding Team}" Width="90"/>
                 <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="140"/>
-                <DataGridTextColumn Header="Cible (g)" Binding="{Binding TargetNetWeight}" Width="70"/>
-                <DataGridTextColumn Header="Moyen (g)" Binding="{Binding AvgWeight}" Width="80"/>
-                <DataGridTextColumn Header="Sacs" Binding="{Binding TotalBags}" Width="60"/>
-                <DataGridTextColumn Header="Conformes" Binding="{Binding BagsInTolerance}" Width="80"/>
-                <DataGridTextColumn Header="Eleves" Binding="{Binding BagsOverTolerance}" Width="60"/>
-                <DataGridTextColumn Header="Faibles" Binding="{Binding BagsUnderTolerance}" Width="60"/>
-                <DataGridTextColumn Header="OK" Binding="{Binding IsConform}" Width="50"/>
+                <DataGridTextColumn Header="Cible (g)" Binding="{Binding TargetNetWeight, StringFormat={}{0:N0}}" Width="70"/>
+                <DataGridTextColumn Header="Moyen (g)" Binding="{Binding AvgWeight, StringFormat={}{0:N1}}" Width="80"/>
+                <DataGridTextColumn Header="Sacs" Binding="{Binding TotalBags, StringFormat={}{0:N0}}" Width="60"/>
+                <DataGridTextColumn Header="Conformes" Binding="{Binding BagsInTolerance, StringFormat={}{0:N0}}" Width="80"/>
+                <DataGridTextColumn Header="Eleves" Binding="{Binding BagsOverTolerance, StringFormat={}{0:N0}}" Width="60"/>
+                <DataGridTextColumn Header="Faibles" Binding="{Binding BagsUnderTolerance, StringFormat={}{0:N0}}" Width="60"/>
+                <DataGridTextColumn Header="OK" Binding="{Binding ConformLabel}" Width="50"/>
             </DataGrid.Columns>
         </DataGrid>
 

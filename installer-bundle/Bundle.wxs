@@ -1,0 +1,23 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <!-- Single-file .exe setup wrapping the MSI built by ..\installer.
+       Build that project first; keep Version in sync with Package.wxs. -->
+  <Bundle Name="SPIGA Dashboards"
+          Manufacturer="L2I - Leader de l'Innovation Industrielle"
+          Version="1.1.2"
+          UpgradeCode="7C4E2B91-3F5A-4D8E-9A61-0B2C7D8E4F15"
+          IconSourceFile="..\src\SpigaDashboards.App\Assets\spiga.ico">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense"
+                                              LicenseUrl=""
+                                              LogoFile="..\src\SpigaDashboards.App\Assets\spiga-logo.png" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage SourceFile="$(var.MsiFile)" Compressed="yes" />
+    </Chain>
+
+  </Bundle>
+</Wix>

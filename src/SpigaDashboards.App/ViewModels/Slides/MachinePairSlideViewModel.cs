@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
+using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
 
 namespace SpigaDashboards.App.ViewModels.Slides;
@@ -16,19 +17,20 @@ public partial class MachinePairSlideViewModel : ObservableObject
 
     public static async Task<MachinePairSlideViewModel> LoadAsync(
         ProductionRepository repository,
+        TeamScheduleService teamSchedule,
         string sector,
         IReadOnlyList<Machine> machines,
         DashboardPeriod period)
     {
         var slide = new MachinePairSlideViewModel { SectorLabel = sector };
 
-        var primary = new MachineDashboardViewModel(repository);
+        var primary = new MachineDashboardViewModel(repository, teamSchedule);
         await primary.LoadAsync(machines[0], period);
         slide.Primary = primary;
 
         if (machines.Count > 1)
         {
-            var secondary = new MachineDashboardViewModel(repository);
+            var secondary = new MachineDashboardViewModel(repository, teamSchedule);
             await secondary.LoadAsync(machines[1], period);
             slide.Secondary = secondary;
         }

@@ -8,6 +8,7 @@
        doesn't store: Machines, Shifts, Employees, Products, Notes
        (+ MachineStatusLog, kept for older installs / the optional collector)
      - An index on dbo.produzione for the dashboard's time-range reads
+     - An index on dbo.lotto (if present) for the weight reads
 
    HOW dbo.produzione REALLY WORKS (checked against a 1000-row export):
      - One row is NOT a lot. Stiavelli writes a SNAPSHOT row every ~30 min for
@@ -178,6 +179,22 @@ CREATE NONCLUSTERED INDEX IX_produzione_linea_fine
     INCLUDE (ID_produzione, progressivo, tempo_inizio, codice_articolo, peso_netto_impostato,
              totale_confezioni, confezioni_sotto_toll, confezioni_ok, confezioni_sopra_toll,
              confezioni_indeterminate, media_totale, espulsi_metal);
+GO
+
+/* ---------- Index on lotto (weights of the dashboard) ----------------------
+   Weight KPIs (poids moyen, ecart de poids) come from Stiavelli's lotto table:
+   media_effettiva weighted by dimensione, read by time range
+   (WHERE ora_fine >= ... AND ora_fine < ...). Without this index each read
+   scans the whole lotto table. Same rules as the produzione index above:
+   only adds an index, no Stiavelli data or column is changed; run it at a
+   quiet moment. Skipped if this database has no lotto table.
+   To remove it: DROP INDEX IX_lotto_ora_fine ON dbo.lotto; */
+IF OBJECT_ID('dbo.lotto','U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes
+                   WHERE name = 'IX_lotto_ora_fine' AND object_id = OBJECT_ID('dbo.lotto'))
+CREATE NONCLUSTERED INDEX IX_lotto_ora_fine
+    ON dbo.lotto (ora_fine)
+    INCLUDE (ID_produzione, dimensione, media_effettiva);
 GO
 
 /* ---------- ProductionLots view (previous version) --------------------------

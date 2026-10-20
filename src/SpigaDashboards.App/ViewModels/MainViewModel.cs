@@ -28,6 +28,12 @@ public partial class MainViewModel : ObservableObject
     private Dictionary<string, Machine> _machinesById = new();
     private int _currentIndex;
 
+    // True while the deck is stopped after a failure (timers off, reconnect
+    // timer running): only a successful InitializeAsync resumes it, so a slide
+    // that happens to load in between can't flag the base healthy and stop
+    // the reconnect timer while rotation stays frozen.
+    private bool _suspended = true;
+
     [ObservableProperty] private object? currentSlide;
     [ObservableProperty] private string noteText = "";
     [ObservableProperty] private DashboardPeriod selectedPeriod = DashboardPeriod.Day;
@@ -46,37 +52,46 @@ public partial class MainViewModel : ObservableObject
         _settings = settings;
         _teamSchedule = teamSchedule;
 
+        // Timer handlers are async void: RunGuardedAsync makes sure no
+        // exception can escape them and crash the kiosk.
         _rotationTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_settings.SlideDurationSeconds) };
-        _rotationTimer.Tick += async (_, _) => await AdvanceAsync();
+        _rotationTimer.Tick += async (_, _) => await RunGuardedAsync(AdvanceAsync);
 
         // Also doubles as the "current team" refresh: cheap (no DB call) and a
         // 1-minute cadence is more than enough precision for a poste changeover.
         _noteTimer = new DispatcherTimer { Interval = NoteRefreshInterval };
-        _noteTimer.Tick += async (_, _) =>
+        _noteTimer.Tick += async (_, _) => await RunGuardedAsync(async () =>
         {
             RefreshCurrentTeam();
-            // async void handler: an exception escaping here (DB dropped) would
-            // crash the kiosk, so route it to the disconnected state instead.
-            try
-            {
-                await RefreshNoteAsync();
-            }
-            catch (Exception ex)
-            {
-                SetConnectionState(healthy: false, ex.Message);
-            }
-        };
+            await RefreshNoteAsync();
+        });
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
-        _refreshTimer.Tick += async (_, _) => await RebuildSlidesAsync();
+        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RebuildSlidesAsync);
 
         // Only runs while the DB is unreachable (see SetConnectionState).
         _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
-        _reconnectTimer.Tick += async (_, _) => await ReconnectAsync();
+        _reconnectTimer.Tick += async (_, _) => await RunGuardedAsync(ReconnectAsync);
+    }
+
+    // An exception escaping an async void timer handler (DB dropped) would
+    // crash the kiosk: route it to the disconnected state instead.
+    private async Task RunGuardedAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log($"Erreur non geree : {ex.Message}");
+            SetConnectionState(healthy: false, ex.Message);
+        }
     }
 
     public async Task InitializeAsync()
     {
+        _suspended = true;
         _rotationTimer.Stop();
         _noteTimer.Stop();
         _refreshTimer.Stop();
@@ -101,10 +116,17 @@ public partial class MainViewModel : ObservableObject
 
             _currentIndex = 0;
             if (_slides.Count > 0)
-                await ShowSlideAsync(0);
+            {
+                // Failure already reported (disconnected state + retry timer).
+                if (!await ShowSlideAsync(0))
+                    return;
+            }
             else
+            {
                 CurrentSlide = null;
+            }
 
+            _suspended = false;
             SetConnectionState(healthy: true);
         }
         catch (Exception ex)
@@ -169,7 +191,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (value)
             _rotationTimer.Stop();
-        else if (_slides.Count > 0)
+        else if (_slides.Count > 0 && !_suspended)
             _rotationTimer.Start();
 
         AppLogger.Log(value ? "Rotation automatique mise en pause." : "Rotation automatique reprise.");
@@ -207,7 +229,7 @@ public partial class MainViewModel : ObservableObject
     // next auto-advance, instead of firing right after their click.
     private void RestartRotationTimer()
     {
-        if (IsRotationPaused)
+        if (IsRotationPaused || _suspended)
             return;
 
         _rotationTimer.Stop();
@@ -243,8 +265,10 @@ public partial class MainViewModel : ObservableObject
             if (_currentIndex >= _slides.Count)
                 _currentIndex = 0;
 
-            await ShowSlideAsync(_currentIndex);
-            SetConnectionState(healthy: true);
+            // A failed slide has already stopped the deck and started the
+            // reconnect timer: don't flag the base healthy over it.
+            if (await ShowSlideAsync(_currentIndex) && !_suspended)
+                SetConnectionState(healthy: true);
         }
         catch (Exception ex)
         {
@@ -262,8 +286,8 @@ public partial class MainViewModel : ObservableObject
             .ToList();
 
         // Every machine ticked in Parametres stays in the rotation, connected or
-        // not: a line with no recent production is shown greyed out with a
-        // "Production en arret" badge
+        // not: a line with no recent snapshot is shown greyed out with a
+        // "Pas de donnees" badge
         // (MachinePanel) so a stopped line is visible on the TV instead of
         // silently vanishing (deliberate change from the spec's "drop out").
         var slides = new List<SlideDescriptor>();
@@ -293,10 +317,12 @@ public partial class MainViewModel : ObservableObject
         _slides = slides;
     }
 
-    private async Task ShowSlideAsync(int index)
+    // Returns false when the slide couldn't load: the deck is then stopped
+    // (_suspended) and the reconnect timer takes over. Never throws.
+    private async Task<bool> ShowSlideAsync(int index)
     {
         if (_slides.Count == 0)
-            return;
+            return true;
 
         try
         {
@@ -304,19 +330,24 @@ public partial class MainViewModel : ObservableObject
             CurrentSlide = slide switch
             {
                 MachinePairSlideDescriptor mp => await MachinePairSlideViewModel.LoadAsync(
-                    _repository, mp.Sector, mp.MachineIds.Select(id => _machinesById[id]).ToList(), SelectedPeriod),
+                    _repository, _teamSchedule, mp.Sector, mp.MachineIds.Select(id => _machinesById[id]).ToList(), SelectedPeriod),
                 PdfSlideDescriptor pdf => await PdfSlideViewModel.LoadAsync(pdf.PdfPath),
                 AnnualSummarySlideDescriptor summary => await AnnualSummarySlideViewModel.LoadAsync(_repository, summary.Sector),
                 _ => null,
             };
-            SetConnectionState(healthy: true);
+            // While suspended, recovery is InitializeAsync's job (it restarts the timers).
+            if (!_suspended)
+                SetConnectionState(healthy: true);
+            return true;
         }
         catch (Exception ex)
         {
+            _suspended = true;
             _rotationTimer.Stop();
             _noteTimer.Stop();
             _refreshTimer.Stop();
             SetConnectionState(healthy: false, ex.Message);
+            return false;
         }
     }
 

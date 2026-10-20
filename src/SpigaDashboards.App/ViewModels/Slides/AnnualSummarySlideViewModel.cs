@@ -74,13 +74,20 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 continue;
 
             var kpi = KpiCalculator.Summarize(monthLots, KpiCalculator.AvailabilityPercent(monthLots));
-            var avgWeight = KpiCalculator.WeightedAverageWeight(monthLots) ?? 0;
+            // An average across different targets (500 g and 1 kg bags) means
+            // nothing: only shown when every weighed bag shares one target.
+            var targetCount = monthLots.SelectMany(l => l.WeightParts)
+                .Where(p => p.Bags > 0)
+                .Select(p => Math.Round(p.Target, 1))
+                .Distinct()
+                .Count();
+            var avgWeight = targetCount == 1 ? KpiCalculator.WeightedAverageWeight(monthLots) : null;
 
             monthly.Add(new MonthlySectorKpi
             {
                 Month = month,
                 MonthName = MonthNames[month - 1],
-                AvgWeight = Math.Round(avgWeight, 1),
+                AvgWeight = avgWeight is { } avg ? Math.Round(avg, 1) : null,
                 WeightDeviationGrams = kpi.WeightDeviationGrams,
                 TrsPercent = kpi.TrsPercent,
                 BagsConform = kpi.BagsInTolerance,
@@ -92,13 +99,16 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
         return monthly;
     }
 
+    // Unknown months (null: no nominal rate / no weight data) are left out of
+    // the line rather than drawn as 0.
     private void BuildTrsTrendChart(List<MonthlySectorKpi> monthly)
     {
+        var known = monthly.Where(m => m.TrsPercent.HasValue).ToList();
         TrsTrendSeries = new ISeries[]
         {
             new LineSeries<double>
             {
-                Values = monthly.Select(m => m.TrsPercent).ToArray(),
+                Values = known.Select(m => m.TrsPercent!.Value).ToArray(),
                 Name = "TRS %",
                 Stroke = new SolidColorPaint(new SKColor(0x3B, 0x82, 0xF6), 3),
                 Fill = null,
@@ -106,16 +116,17 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 GeometryStroke = new SolidColorPaint(new SKColor(0x3B, 0x82, 0xF6), 2),
             },
         };
-        TrsTrendXAxes = new[] { ChartHelpers.BuildXAxis(monthly.Select(m => m.MonthName)) };
+        TrsTrendXAxes = new[] { ChartHelpers.BuildXAxis(known.Select(m => m.MonthName)) };
     }
 
     private void BuildWeightDeviationTrendChart(List<MonthlySectorKpi> monthly)
     {
+        var known = monthly.Where(m => m.WeightDeviationGrams.HasValue).ToList();
         WeightDeviationTrendSeries = new ISeries[]
         {
             new LineSeries<double>
             {
-                Values = monthly.Select(m => m.WeightDeviationGrams).ToArray(),
+                Values = known.Select(m => m.WeightDeviationGrams!.Value).ToArray(),
                 Name = "Ecart (g)",
                 Stroke = new SolidColorPaint(new SKColor(0xE7, 0x4C, 0x3C), 3),
                 Fill = null,
@@ -123,6 +134,6 @@ public partial class AnnualSummarySlideViewModel : ObservableObject
                 GeometryStroke = new SolidColorPaint(new SKColor(0xE7, 0x4C, 0x3C), 2),
             },
         };
-        WeightDeviationTrendXAxes = new[] { ChartHelpers.BuildXAxis(monthly.Select(m => m.MonthName)) };
+        WeightDeviationTrendXAxes = new[] { ChartHelpers.BuildXAxis(known.Select(m => m.MonthName)) };
     }
 }

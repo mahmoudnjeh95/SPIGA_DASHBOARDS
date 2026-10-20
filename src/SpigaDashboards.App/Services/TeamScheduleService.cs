@@ -16,6 +16,10 @@ public class TeamScheduleService
         _settings = settings;
     }
 
+    // Configured team names, in roster order (blank entries skipped).
+    public IReadOnlyList<string> TeamNames
+        => _settings.TeamRotation.TeamNames.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().ToList();
+
     // Nuit (22h-06h) spans midnight: a lot or "now" between 00:00 and 06:00
     // belongs to the Nuit poste that started the previous calendar day.
     public static DateTime GetShiftDate(DateTime timestamp, int shiftId)

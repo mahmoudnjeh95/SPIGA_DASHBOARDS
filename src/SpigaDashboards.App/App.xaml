@@ -13,7 +13,7 @@
         <conv:NullToVisibilityConverter x:Key="NullToVisibility"/>
         <conv:InverseNullToVisibilityConverter x:Key="InverseNullToVisibility"/>
         <conv:PercentBandBrushConverter x:Key="PercentBandBrush"/>
-        <conv:WeightDeviationBrushConverter x:Key="WeightDeviationBrush"/>
+        <conv:SeverityBrushConverter x:Key="SeverityBrush"/>
 
         <!-- Note: the active theme's brushes (Themes/DarkTheme.xaml or LightTheme.xaml)
              are merged in at startup by ThemeService.Apply, before any window is

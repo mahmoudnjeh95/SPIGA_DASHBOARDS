@@ -24,6 +24,7 @@
             <DockPanel>
                 <TextBlock DockPanel.Dock="Top" Text="Cumul mensuel" Style="{StaticResource ChartTitle}"/>
                 <!-- Table text sized for the 60" TV, like the KPI tiles. -->
+                <!-- Poids moyen: "—" when the month mixes targets or has no weight data. -->
                 <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="6" Margin="4,8,0,10" TextElement.FontSize="18">
                     <TextBlock Text="Mois" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
                     <TextBlock Text="Poids moyen (g)" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
@@ -37,11 +38,11 @@
                         <DataTemplate DataType="{x:Type models:MonthlySectorKpi}">
                             <UniformGrid Rows="1" Columns="6" Margin="4,5,0,5" TextElement.FontSize="24">
                                 <TextBlock Text="{Binding MonthName}" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="{Binding AvgWeight}" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="{Binding TrsPercent}" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="{Binding BagsConform}" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="{Binding BagsOver}" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                                <TextBlock Text="{Binding BagsUnder}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding AvgWeight, StringFormat={}{0:N1}, TargetNullValue=&#x2014;}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding TrsPercent, StringFormat={}{0:N1}, TargetNullValue=&#x2014;}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsConform, StringFormat={}{0:N0}}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsOver, StringFormat={}{0:N0}}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <TextBlock Text="{Binding BagsUnder, StringFormat={}{0:N0}}" Foreground="{DynamicResource PrimaryTextBrush}"/>
                             </UniformGrid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
