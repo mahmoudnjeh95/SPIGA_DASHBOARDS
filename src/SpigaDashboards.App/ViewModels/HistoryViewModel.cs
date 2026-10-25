@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -8,48 +9,87 @@ using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App.ViewModels;
 
-// Spec S6: queryable history (day/poste/equipe/machine) + Excel/PDF export.
+// Spec S6: queryable history (dates / secteur / machine / poste / equipe /
+// poids) + Excel/PDF report export. Opens with the dashboard's current
+// period and filters.
 public partial class HistoryViewModel : ObservableObject
 {
     private const string AllOption = "Toutes";
 
     private readonly ProductionRepository _repository;
     private readonly TeamScheduleService _teamSchedule;
+    private readonly AppSettings _settings;
+    private List<Machine> _machines = new();
+
+    // Last search, kept for the exports (same buckets as on screen).
+    private ProductionReport? _report;
 
     [ObservableProperty] private DateTime? fromDate = DateTime.Now.Date.AddDays(-7);
     [ObservableProperty] private DateTime? toDate = DateTime.Now.Date;
+    [ObservableProperty] private string selectedSector = AllOption;
     [ObservableProperty] private string selectedShift = AllOption;
     [ObservableProperty] private string selectedTeam = AllOption;
     [ObservableProperty] private string selectedMachine = AllOption;
+    [ObservableProperty] private string selectedWeight = AllOption;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private KpiSummary summary = new();
 
+    public List<string> SectorOptions { get; } = new() { AllOption, "Couscous", "Pate courte", "Pate longue" };
     public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Soir", "Nuit" };
     public ObservableCollection<string> TeamOptions { get; } = new();
     public ObservableCollection<string> MachineOptions { get; } = new();
+    public ObservableCollection<string> WeightOptions { get; } = new();
     public ObservableCollection<HistoryRow> Results { get; } = new();
 
-    public HistoryViewModel(ProductionRepository repository, TeamScheduleService teamSchedule, AppSettings settings)
+    public HistoryViewModel(ProductionRepository repository, TeamScheduleService teamSchedule, AppSettings settings,
+        DashboardFilter? initialFilter = null, (DateTime From, DateTime To)? initialRange = null)
     {
         _repository = repository;
         _teamSchedule = teamSchedule;
+        _settings = settings;
 
         TeamOptions.Add(AllOption);
-        foreach (var name in settings.TeamRotation.TeamNames)
-        {
-            if (!string.IsNullOrWhiteSpace(name))
-                TeamOptions.Add(name);
-        }
+        foreach (var name in teamSchedule.TeamNames)
+            TeamOptions.Add(name);
+
+        WeightOptions.Add(AllOption);
+        foreach (var weight in settings.NominalRates.Where(r => r.WeightGrams > 0).Select(r => r.WeightGrams).Distinct().Order())
+            WeightOptions.Add(weight.ToString("0.##", CultureInfo.InvariantCulture) + " g");
 
         MachineOptions.Add(AllOption);
+
+        if (initialRange is { } range)
+        {
+            FromDate = range.From.Date;
+            ToDate = range.To.AddDays(-1).Date;
+        }
+        if (initialFilter is { } filter)
+        {
+            SelectedSector = filter.Sector ?? AllOption;
+            SelectedShift = filter.ShiftId is { } s ? KpiCalculator.ShiftName(s) : AllOption;
+            SelectedTeam = filter.Team is { } t && TeamOptions.Contains(t) ? t : AllOption;
+            var weightText = filter.TargetWeight?.ToString("0.##", CultureInfo.InvariantCulture) + " g";
+            SelectedWeight = WeightOptions.Contains(weightText) ? weightText : AllOption;
+            // The dashboard's machine selection, as one entry ("PC01, PC02").
+            if (filter.MachineIds.Count > 0)
+                MachineOptions.Add(SelectedMachine = string.Join(", ", filter.MachineIds));
+        }
+
         _ = LoadMachinesAsync();
     }
 
     private async Task LoadMachinesAsync()
     {
-        var machines = await _repository.GetMachinesAsync();
-        foreach (var machine in machines)
-            MachineOptions.Add(machine.MachineId);
+        try
+        {
+            _machines = await _repository.GetMachinesAsync();
+            foreach (var machine in _machines.Where(m => !MachineOptions.Contains(m.MachineId)))
+                MachineOptions.Add(machine.MachineId);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Impossible de charger les machines : {ex.Message}";
+        }
     }
 
     [RelayCommand]
@@ -67,101 +107,109 @@ public partial class HistoryViewModel : ObservableObject
         }
     }
 
+    private DashboardFilter BuildFilter() => new()
+    {
+        Sector = SelectedSector == AllOption ? null : SelectedSector,
+        MachineIds = SelectedMachine == AllOption
+            ? Array.Empty<string>()
+            : SelectedMachine.Split(", ", StringSplitOptions.RemoveEmptyEntries),
+        ShiftId = SelectedShift switch { "Matin" => 1, "Soir" => 2, "Nuit" => 3, _ => null },
+        Team = SelectedTeam == AllOption ? null : SelectedTeam,
+        TargetWeight = SelectedWeight == AllOption ? null : double.Parse(SelectedWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
+    };
+
     private async Task RunSearchAsync()
     {
         var from = (FromDate ?? DateTime.Now.Date.AddDays(-7)).Date;
         var to = (ToDate ?? DateTime.Now.Date).Date.AddDays(1);
+        if (to <= from)
+            (from, to) = (to.AddDays(-1), from.AddDays(1));
 
-        int? shiftId = SelectedShift switch
-        {
-            "Matin" => 1,
-            "Soir" => 2,
-            "Nuit" => 3,
-            _ => null,
-        };
-        var machineId = SelectedMachine == AllOption ? null : SelectedMachine;
+        if (_machines.Count == 0)
+            _machines = await _repository.GetMachinesAsync();
+        var filter = BuildFilter();
+        var machines = _machines.Where(filter.IncludesMachine).ToList();
 
-        var lots = await _repository.GetLotsFilteredAsync(from, to, shiftId, machineId);
+        StatusMessage = "Recherche en cours...";
+        var lots = filter.Apply(
+            await _repository.GetLotsForMachinesAsync(machines.Select(m => m.MachineId).ToList(), from, to),
+            _teamSchedule);
 
-        var lotsWithTeam = lots
-            .Select(l => (Lot: l, Team: _teamSchedule.GetTeamForShift(TeamScheduleService.GetShiftDate(l.StartTime, l.ShiftId), l.ShiftId)))
+        var sectors = machines.ToDictionary(m => m.MachineId, m => m.Sector);
+        var rowList = lots
+            .Where(l => l.IsProducing)
+            .OrderByDescending(l => l.StartTime)
+            .ThenBy(l => l.MachineId)
+            .Select(l =>
+            {
+                var k = KpiCalculator.Summarize(new[] { l }, KpiCalculator.AvailabilityPercent(new[] { l }));
+                var avg = l.AvgWeight;
+                return new HistoryRow
+                {
+                    StartTime = l.StartTime,
+                    MachineId = l.MachineId,
+                    Sector = sectors.GetValueOrDefault(l.MachineId, ""),
+                    ShiftName = KpiCalculator.ShiftName(l.ShiftId),
+                    Team = _teamSchedule.TeamOf(l),
+                    ProductName = l.ProductName ?? "",
+                    TargetNetWeight = l.TargetNetWeight,
+                    TareGrams = _settings.FindTare(l.MachineId, l.TargetNetWeight),
+                    AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
+                    DeviationGrams = k.WeightDeviationGrams,
+                    ProductionKg = Math.Round(l.TotalBags * (avg ?? l.TargetNetWeight) / 1000.0, 1),
+                    TotalBags = l.TotalBags,
+                    BagsInTolerance = l.BagsInTolerance,
+                    BagsOverTolerance = l.BagsOverTolerance,
+                    BagsUnderTolerance = l.BagsUnderTolerance,
+                    SpeedBagsPerMinute = k.SpeedBagsPerMinute,
+                    MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
+                    AvailabilityPercent = k.AvailabilityPercent,
+                    TrsPercent = k.TrsPercent,
+                    IsConform = l.IsConform,
+                };
+            })
             .ToList();
-
-        if (SelectedTeam != AllOption)
-            lotsWithTeam = lotsWithTeam.Where(x => x.Team == SelectedTeam).ToList();
-
-        var rowList = lotsWithTeam.Select(x => new HistoryRow
-        {
-            StartTime = x.Lot.StartTime,
-            MachineId = x.Lot.MachineId,
-            ShiftName = KpiCalculator.ShiftName(x.Lot.ShiftId),
-            Team = x.Team,
-            ProductName = x.Lot.ProductName ?? "",
-            TargetNetWeight = x.Lot.TargetNetWeight,
-            AvgWeight = x.Lot.AvgWeight is { } avg ? Math.Round(avg, 1) : null,
-            TotalBags = x.Lot.TotalBags,
-            BagsInTolerance = x.Lot.BagsInTolerance,
-            BagsOverTolerance = x.Lot.BagsOverTolerance,
-            BagsUnderTolerance = x.Lot.BagsUnderTolerance,
-            IsConform = x.Lot.IsConform,
-        }).ToList();
 
         Results.Clear();
         foreach (var row in rowList)
             Results.Add(row);
 
-        // Availability (needed for TRS) isn't meaningful for a filtered, possibly
-        // multi-machine, non-contiguous lot set, so it's left at 0 and TRS isn't
-        // shown in the summary strip -- this view is about raw records, not OEE.
-        Summary = KpiCalculator.Summarize(lotsWithTeam.Select(x => x.Lot).ToList(), availabilityPercent: 0);
-        StatusMessage = $"{rowList.Count} heure(s) de production trouvee(s) (une ligne par machine et par heure).";
+        _report = ProductionReport.Build(lots, machines, rowList, _teamSchedule, _settings, from, to, filter.Describe());
+        Summary = _report.Summary;
+        StatusMessage = $"{rowList.Count} ligne(s) trouvee(s) (une par machine, heure et production).";
     }
 
     [RelayCommand]
-    private void ExportExcel()
+    private void ExportExcel() => Export("Classeur Excel (*.xlsx)|*.xlsx", "xlsx", ExportService.ExportToExcel);
+
+    [RelayCommand]
+    private void ExportPdf() => Export("Document PDF (*.pdf)|*.pdf", "pdf", ExportService.ExportToPdf);
+
+    private void Export(string dialogFilter, string extension, Action<ProductionReport, string> export)
     {
-        if (Results.Count == 0)
+        if (_report == null || Results.Count == 0)
         {
-            StatusMessage = "Aucun resultat a exporter.";
+            StatusMessage = "Aucun resultat a exporter : lancez d'abord une recherche.";
             return;
         }
 
-        var dialog = new SaveFileDialog { Filter = "Classeur Excel (*.xlsx)|*.xlsx", FileName = "historique.xlsx" };
+        var dialog = new SaveFileDialog
+        {
+            Filter = dialogFilter,
+            FileName = $"rapport_production_{_report.From:yyyyMMdd}_{_report.To.AddDays(-1):yyyyMMdd}.{extension}",
+        };
         if (dialog.ShowDialog() != true)
             return;
 
         try
         {
-            ExportService.ExportToExcel(Results.ToList(), dialog.FileName);
+            export(_report, dialog.FileName);
             StatusMessage = $"Exporte : {dialog.FileName}";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Echec de l'export Excel : {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private void ExportPdf()
-    {
-        if (Results.Count == 0)
-        {
-            StatusMessage = "Aucun resultat a exporter.";
-            return;
-        }
-
-        var dialog = new SaveFileDialog { Filter = "Document PDF (*.pdf)|*.pdf", FileName = "historique.pdf" };
-        if (dialog.ShowDialog() != true)
-            return;
-
-        try
-        {
-            ExportService.ExportToPdf(Summary, Results.ToList(), dialog.FileName);
-            StatusMessage = $"Exporte : {dialog.FileName}";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Echec de l'export PDF : {ex.Message}";
+            AppLogger.Log($"Echec de l'export {extension} : {ex}");
+            StatusMessage = $"Echec de l'export : {ex.Message}";
         }
     }
 }

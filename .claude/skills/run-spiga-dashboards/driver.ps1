@@ -17,7 +17,7 @@
   settext     - set a text control's value by -Name to -Text (falls back to click+SendKeys).
   gettext     - print the Name.Value / text content of the element named -Name.
   select      - select an item in the top-bar period ComboBox by -Name (one of
-                "Aujourd'hui", "Cette semaine", "Ce mois" - see Gotchas: its
+                "Aujourd'hui", "Poste precedent", "Hier", "Cette semaine", "Ce mois", "3 derniers mois", "Dates choisies" - see Gotchas: its
                 ComboBoxItems expose no SelectionItemPattern, so this drives it
                 by keyboard (Home + Down x N + Enter), not by clicking the item).
   close       - gracefully close the app (WindowPattern.Close on the main window).
@@ -234,7 +234,7 @@ public class Win32Driver {
         # this WPF build - no SelectionItemPattern, no InvokePattern - so Select()/Invoke() on
         # the item throws "Unsupported Pattern". Driving it by keyboard (Home resets to index 0,
         # then Down N times) is the verified-working path. Extend $order if new items are added.
-        $order = @("Aujourd'hui", "Cette semaine", "Ce mois")
+        $order = @("Aujourd'hui", "Poste precedent", "Hier", "Cette semaine", "Ce mois", "3 derniers mois", "Dates choisies")
         $targetIndex = [array]::IndexOf($order, $Name)
         if ($targetIndex -lt 0) { throw "Unknown period '$Name'. Expected one of: $($order -join ', ')" }
 

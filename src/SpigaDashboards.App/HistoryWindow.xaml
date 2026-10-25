@@ -4,8 +4,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         mc:Ignorable="d"
-        Title="Historique" Icon="/Assets/spiga-logo.png" Height="760" Width="1200"
+        Title="Historique" Icon="/Assets/spiga-logo.png" Height="800" Width="1450"
         WindowStartupLocation="CenterOwner"
+        Language="fr-FR"
         Background="{DynamicResource WindowBackgroundBrush}">
 
     <Window.Resources>
@@ -54,9 +55,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Filters -->
+        <!-- Filters (opened with the dashboard's current period and filters) -->
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
@@ -74,71 +77,105 @@
                 <DatePicker SelectedDate="{Binding ToDate}"/>
             </StackPanel>
             <StackPanel Grid.Column="2" Margin="0,0,8,0">
-                <TextBlock Text="Poste" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding ShiftOptions}" SelectedItem="{Binding SelectedShift}"/>
+                <TextBlock Text="Secteur" Style="{StaticResource FieldLabel}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding SectorOptions}" SelectedItem="{Binding SelectedSector}"/>
             </StackPanel>
             <StackPanel Grid.Column="3" Margin="0,0,8,0">
-                <TextBlock Text="Equipe" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
-            </StackPanel>
-            <StackPanel Grid.Column="4" Margin="0,0,8,0">
                 <TextBlock Text="Machine" Style="{StaticResource FieldLabel}"/>
                 <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"/>
             </StackPanel>
-            <Button Grid.Column="5" Content="Rechercher" Style="{StaticResource PrimaryButton}"
+            <StackPanel Grid.Column="4" Margin="0,0,8,0">
+                <TextBlock Text="Poste" Style="{StaticResource FieldLabel}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding ShiftOptions}" SelectedItem="{Binding SelectedShift}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="5" Margin="0,0,8,0">
+                <TextBlock Text="Equipe" Style="{StaticResource FieldLabel}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="6" Margin="0,0,8,0">
+                <TextBlock Text="Poids / produit" Style="{StaticResource FieldLabel}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding WeightOptions}" SelectedItem="{Binding SelectedWeight}"/>
+            </StackPanel>
+            <Button Grid.Column="7" Content="Rechercher" Style="{StaticResource PrimaryButton}"
                     VerticalAlignment="Bottom" Command="{Binding SearchCommand}"/>
         </Grid>
 
         <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Foreground="{DynamicResource WarningBrush}" Margin="0,10,0,0"/>
 
         <!-- Summary strip -->
-        <UniformGrid Grid.Row="2" Rows="1" Columns="5" Margin="0,14,0,10">
+        <UniformGrid Grid.Row="2" Rows="1" Columns="8" Margin="0,14,0,10">
             <StackPanel>
-                <TextBlock Text="Total sacs" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="TRS" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="{Binding Summary.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
+            </StackPanel>
+            <StackPanel>
+                <TextBlock Text="Production nette (kg)" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="{Binding Summary.ProductionKg, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}"/>
+            </StackPanel>
+            <StackPanel>
+                <TextBlock Text="Sacs" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Text="{Binding Summary.TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Conformes" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsInTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource SuccessBrush}"/>
+                <TextBlock Text="Ecart de poids" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="{Binding Summary.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Eleves" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsOverTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource DangerBrush}"/>
+                <TextBlock Text="Surpoids (kg)" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="{Binding Summary.GiveawayKg, StringFormat={}{0:+#,##0.0;-#,##0.0;0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Faibles" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.BagsUnderTolerance, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}" Foreground="{DynamicResource WarningBrush}"/>
+                <TextBlock Text="Vitesse moy. / max" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Style="{StaticResource SummaryValue}">
+                    <Run Text="{Binding Summary.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    <Run Text="{Binding Summary.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ &#x2014;', Mode=OneWay, ConverterCulture=fr-FR}"/>
+                </TextBlock>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Taux conformite" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
+            <StackPanel>
+                <TextBlock Text="Sous / sur tolerance" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Style="{StaticResource SummaryValue}">
+                    <Run Text="{Binding Summary.BagsUnderTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{DynamicResource WarningBrush}"/>
+                    <Run Text="/"/>
+                    <Run Text="{Binding Summary.BagsOverTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{DynamicResource DangerBrush}"/>
+                </TextBlock>
+            </StackPanel>
         </UniformGrid>
 
-        <!-- Results (unknown average weight = blank cell, never 0) -->
+        <!-- Results: one row per machine, hour and production (unknown weight = blank cell, never 0) -->
         <DataGrid Grid.Row="3" ItemsSource="{Binding Results}" AutoGenerateColumns="False"
                   IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="None"
                   Background="{DynamicResource TileBackgroundBrush}" RowBackground="{DynamicResource TileBackgroundBrush}" AlternatingRowBackground="{DynamicResource AlternatingRowBrush}"
                   BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CanUserAddRows="False">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Date/Heure" Binding="{Binding StartTime, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Width="140"/>
-                <DataGridTextColumn Header="Machine" Binding="{Binding MachineId}" Width="80"/>
-                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="70"/>
-                <DataGridTextColumn Header="Equipe" Binding="{Binding Team}" Width="90"/>
-                <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="140"/>
-                <DataGridTextColumn Header="Cible (g)" Binding="{Binding TargetNetWeight, StringFormat={}{0:N0}}" Width="70"/>
-                <DataGridTextColumn Header="Moyen (g)" Binding="{Binding AvgWeight, StringFormat={}{0:N1}}" Width="80"/>
+                <DataGridTextColumn Header="Date/Heure" Binding="{Binding StartTime, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Width="125"/>
+                <DataGridTextColumn Header="Machine" Binding="{Binding MachineId}" Width="65"/>
+                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="55"/>
+                <DataGridTextColumn Header="Equipe" Binding="{Binding Team}" Width="80"/>
+                <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="120"/>
+                <DataGridTextColumn Header="Cible (g)" Binding="{Binding TargetNetWeight, StringFormat={}{0:N0}}" Width="65"/>
+                <DataGridTextColumn Header="Sachet (g)" Binding="{Binding TareGrams, StringFormat={}{0:0.#}}" Width="65"/>
+                <DataGridTextColumn Header="Moyen net (g)" Binding="{Binding AvgWeight, StringFormat={}{0:N1}}" Width="90"/>
+                <DataGridTextColumn Header="Ecart (g)" Binding="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0}}" Width="65"/>
                 <DataGridTextColumn Header="Sacs" Binding="{Binding TotalBags, StringFormat={}{0:N0}}" Width="60"/>
-                <DataGridTextColumn Header="Conformes" Binding="{Binding BagsInTolerance, StringFormat={}{0:N0}}" Width="80"/>
-                <DataGridTextColumn Header="Eleves" Binding="{Binding BagsOverTolerance, StringFormat={}{0:N0}}" Width="60"/>
-                <DataGridTextColumn Header="Faibles" Binding="{Binding BagsUnderTolerance, StringFormat={}{0:N0}}" Width="60"/>
-                <DataGridTextColumn Header="OK" Binding="{Binding ConformLabel}" Width="50"/>
+                <DataGridTextColumn Header="Prod. (kg)" Binding="{Binding ProductionKg, StringFormat={}{0:N1}}" Width="75"/>
+                <DataGridTextColumn Header="Vit. moy" Binding="{Binding SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Width="60"/>
+                <DataGridTextColumn Header="Vit. max" Binding="{Binding MaxSpeedBagsPerMinute, StringFormat={}{0:0.0}}" Width="60"/>
+                <DataGridTextColumn Header="Dispo." Binding="{Binding AvailabilityPercent, StringFormat={}{0:0}%}" Width="55"/>
+                <DataGridTextColumn Header="TRS" Binding="{Binding TrsPercent, StringFormat={}{0:0}%}" Width="50"/>
+                <DataGridTextColumn Header="Conformes" Binding="{Binding BagsInTolerance, StringFormat={}{0:N0}}" Width="75"/>
+                <DataGridTextColumn Header="Eleves" Binding="{Binding BagsOverTolerance, StringFormat={}{0:N0}}" Width="55"/>
+                <DataGridTextColumn Header="Faibles" Binding="{Binding BagsUnderTolerance, StringFormat={}{0:N0}}" Width="55"/>
+                <DataGridTextColumn Header="OK" Binding="{Binding ConformLabel}" Width="40"/>
             </DataGrid.Columns>
         </DataGrid>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="Exporter Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"/>
-            <Button Content="Exporter PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"/>
+            <Button Content="Exporter rapport Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"/>
+            <Button Content="Exporter rapport PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"/>
             <Button Content="Fermer" Style="{StaticResource PrimaryButton}" Click="CloseButton_Click"/>
         </StackPanel>
     </Grid>

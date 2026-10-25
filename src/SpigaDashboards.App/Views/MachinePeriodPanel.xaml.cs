@@ -2,9 +2,9 @@ using System.Windows.Controls;
 
 namespace SpigaDashboards.App.Views;
 
-public partial class MachinePanel : UserControl
+public partial class MachinePeriodPanel : UserControl
 {
-    public MachinePanel()
+    public MachinePeriodPanel()
     {
         InitializeComponent();
     }

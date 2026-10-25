@@ -1,0 +1,73 @@
+<UserControl x:Class="SpigaDashboards.App.Views.WeightTable"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:SpigaDashboards.App.Models"
+             x:Name="Root">
+
+    <!-- "Production par poids": one row per target weight the line ran
+         (WeightKpi): bags, net weight produced, net average weight, deviation,
+         weight given away, TRS. Text size follows ValueFontSize. -->
+    <UserControl.Resources>
+        <Style x:Key="Head" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="{Binding HeaderFontSize, ElementName=Root}"/>
+        </Style>
+        <Style x:Key="Cell" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="FontSize" Value="{Binding ValueFontSize, ElementName=Root}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <UniformGrid Rows="1" Columns="7" Margin="0,0,0,2">
+            <TextBlock Text="Poids cible" Style="{StaticResource Head}"/>
+            <TextBlock Text="Sacs" Style="{StaticResource Head}"/>
+            <TextBlock Text="Production" Style="{StaticResource Head}"/>
+            <TextBlock Text="Poids moyen" Style="{StaticResource Head}"/>
+            <TextBlock Text="Ecart" Style="{StaticResource Head}"/>
+            <TextBlock Text="Surpoids" Style="{StaticResource Head}"/>
+            <TextBlock Text="TRS" Style="{StaticResource Head}"/>
+        </UniformGrid>
+        <ItemsControl ItemsSource="{Binding Weights, ElementName=Root}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type models:WeightKpi}">
+                    <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,3">
+                        <UniformGrid Rows="1" Columns="7">
+                            <TextBlock Style="{StaticResource Cell}" ToolTip="{Binding ProductName}">
+                                <Run Text="{Binding TargetWeight, StringFormat={}{0:0} g, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                                <Run Text="{Binding ProductName, Mode=OneWay}" FontWeight="Normal" FontSize="13" Foreground="{DynamicResource SubtleTextBrush}"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource Cell}"/>
+                            <TextBlock Text="{Binding ProductionText}" Style="{StaticResource Cell}"/>
+                            <TextBlock Text="{Binding AvgWeight, StringFormat={}{0:N1} g, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"/>
+                            <TextBlock Style="{StaticResource Cell}" Foreground="{Binding DeviationSeverity, Converter={StaticResource SeverityBrush}}">
+                                <Run Text="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                                <Run Text="{Binding DeviationPercent, StringFormat=({0:+0.00;-0.00;0.00} %), TargetNullValue='', Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Normal" FontSize="13"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding GiveawayText}" Style="{StaticResource Cell}"
+                                       Foreground="{Binding DeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
+                            <TextBlock Text="{Binding TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"
+                                       Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                        </UniformGrid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Text="Pas de production sur la periode" Foreground="{DynamicResource SubtleTextBrush}"
+                   FontSize="{Binding HeaderFontSize, ElementName=Root}" Margin="0,4,0,0">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Weights.Count, ElementName=Root}" Value="0">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

@@ -59,7 +59,8 @@ public partial class MainWindow : Window
 
     private void HistoryButton_Click(object sender, RoutedEventArgs e)
     {
-        var historyViewModel = new HistoryViewModel(_repository, new TeamScheduleService(_settings), _settings);
+        var historyViewModel = new HistoryViewModel(_repository, new TeamScheduleService(_settings), _settings,
+            _viewModel.CurrentFilter, _viewModel.CurrentRange);
         var window = new HistoryWindow(historyViewModel) { Owner = this };
         window.ShowDialog();
     }

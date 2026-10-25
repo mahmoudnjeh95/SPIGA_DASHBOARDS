@@ -31,6 +31,16 @@ public class TeamScheduleService
         return GetTeamForShift(GetShiftDate(now, shiftId), shiftId);
     }
 
+    // Team that worked a bucket's hour; "Sans equipe" for a poste with no team
+    // assigned, or a day bucket (no poste).
+    public string TeamOf(ProductionBucket lot)
+    {
+        var team = GetTeamForShift(GetShiftDate(lot.StartTime, lot.ShiftId), lot.ShiftId);
+        return string.IsNullOrEmpty(team) ? NoTeam : team;
+    }
+
+    public const string NoTeam = "Sans equipe";
+
     public string GetTeamForShift(DateTime shiftDate, int shiftId)
     {
         var rotation = _settings.TeamRotation;

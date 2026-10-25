@@ -46,6 +46,7 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<TeamOption> TeamOptions { get; } = new();
     public ObservableCollection<TeamRosterDayViewModel> RosterDays { get; } = new();
     public ObservableCollection<NominalRateRowViewModel> NominalRates { get; } = new();
+    public ObservableCollection<MachineChoice> MachineChoices { get; } = new();
 
     [ObservableProperty] private string nominalRatesStatusMessage = "";
 
@@ -95,12 +96,20 @@ public partial class SettingsViewModel : ObservableObject
         PdfDocumentPath = settings.PdfDocumentPath;
         UpdatePdfDocumentStatus();
 
-        foreach (var entry in settings.NominalRates.OrderBy(r => r.WeightGrams))
+        // Machines already used by a row are listed right away, the others once
+        // the machine list is loaded (LoadMachinesAsync).
+        MachineChoices.Add(new MachineChoice("", "Toutes"));
+        foreach (var id in settings.NominalRates.Select(r => r.MachineId ?? "").Where(id => id.Length > 0).Distinct().Order())
+            MachineChoices.Add(new MachineChoice(id, id));
+
+        foreach (var entry in settings.NominalRates.OrderBy(r => r.MachineId).ThenBy(r => r.WeightGrams))
         {
             NominalRates.Add(new NominalRateRowViewModel
             {
+                MachineId = entry.MachineId ?? "",
                 WeightText = NominalRateRowViewModel.Format(entry.WeightGrams),
                 RateText = entry.RatePerMinute > 0 ? NominalRateRowViewModel.Format(entry.RatePerMinute) : "",
+                TareText = entry.TareGrams > 0 ? NominalRateRowViewModel.Format(entry.TareGrams) : "",
             });
         }
 
@@ -169,6 +178,18 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void AddNominalRate() => NominalRates.Add(new NominalRateRowViewModel());
 
+    // Copies a row for another machine: the usual way to set a machine's own
+    // cadence / sachet vide from the "Toutes" values.
+    [RelayCommand]
+    private void DuplicateNominalRate(NominalRateRowViewModel row)
+        => NominalRates.Insert(NominalRates.IndexOf(row) + 1, new NominalRateRowViewModel
+        {
+            MachineId = row.MachineId,
+            WeightText = row.WeightText,
+            RateText = row.RateText,
+            TareText = row.TareText,
+        });
+
     [RelayCommand]
     private void RemoveNominalRate(NominalRateRowViewModel row) => NominalRates.Remove(row);
 
@@ -179,30 +200,54 @@ public partial class SettingsViewModel : ObservableObject
         var entries = new List<NominalRateEntry>();
         foreach (var row in NominalRates)
         {
-            if (row.WeightText.Trim().Length == 0 && row.RateText.Trim().Length == 0)
+            if (row.WeightText.Trim().Length == 0 && row.RateText.Trim().Length == 0 && row.TareText.Trim().Length == 0)
                 continue;
+            var machine = row.MachineId ?? "";
+            var where = machine.Length == 0 ? "" : $" ({machine})";
             if (!NominalRateRowViewModel.TryParse(row.WeightText, out var weight) || weight <= 0)
             {
-                NominalRatesStatusMessage = $"Poids invalide : \"{row.WeightText}\" (nombre de grammes attendu).";
+                NominalRatesStatusMessage = $"Poids invalide{where} : \"{row.WeightText}\" (nombre de grammes attendu).";
                 return null;
             }
             if (!NominalRateRowViewModel.TryParse(row.RateText, out var rate))
             {
-                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g : \"{row.RateText}\".";
+                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g{where} : \"{row.RateText}\".";
                 return null;
             }
-            if (entries.Any(e => e.WeightGrams == weight))
+            if (!NominalRateRowViewModel.TryParse(row.TareText, out var tare) || tare >= weight)
             {
-                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparait deux fois.";
+                NominalRatesStatusMessage = $"Poids du sachet vide invalide pour {row.WeightText} g{where} : \"{row.TareText}\".";
                 return null;
             }
-            entries.Add(new NominalRateEntry { WeightGrams = weight, RatePerMinute = rate });
+            if (entries.Any(e => e.MachineId == machine && e.WeightGrams == weight))
+            {
+                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparait deux fois pour {(machine.Length == 0 ? "Toutes" : machine)}.";
+                return null;
+            }
+            entries.Add(new NominalRateEntry { MachineId = machine, WeightGrams = weight, RatePerMinute = rate, TareGrams = tare });
         }
         NominalRatesStatusMessage = "";
-        return entries.OrderBy(e => e.WeightGrams).ToList();
+        return entries.OrderBy(e => e.MachineId).ThenBy(e => e.WeightGrams).ToList();
     }
 
-    public bool ValidateNominalRates() => ParseNominalRates() != null;
+    // TRS cible per machine; blank = default. Null (message shown) on a bad cell.
+    private Dictionary<string, double>? ParseTrsTargets()
+    {
+        var targets = new Dictionary<string, double>();
+        foreach (var machine in Machines)
+        {
+            if (!NominalRateRowViewModel.TryParse(machine.TrsTargetText, out var target) || target > 100)
+            {
+                MachinesStatusMessage = $"TRS cible invalide pour {machine.MachineId} : \"{machine.TrsTargetText}\" (0 a 100 %).";
+                return null;
+            }
+            if (target > 0)
+                targets[machine.MachineId] = target;
+        }
+        return targets;
+    }
+
+    public bool ValidateNominalRates() => ParseNominalRates() != null && ParseTrsTargets() != null;
 
     private async Task LoadMachinesAsync()
     {
@@ -218,7 +263,12 @@ public partial class SettingsViewModel : ObservableObject
                     OriginalMachineName = machine.MachineName,
                     MachineName = machine.MachineName,
                     IsVisible = !_settings.HiddenMachineIds.Contains(machine.MachineId),
+                    TrsTargetText = _settings.MachineTrsTargets.TryGetValue(machine.MachineId, out var target)
+                        ? NominalRateRowViewModel.Format(target)
+                        : "",
                 });
+                if (MachineChoices.All(c => c.Id != machine.MachineId))
+                    MachineChoices.Add(new MachineChoice(machine.MachineId, machine.MachineId));
             }
             MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvee." : "";
         }
@@ -304,6 +354,9 @@ public partial class SettingsViewModel : ObservableObject
 
         _settings.PdfDocumentPath = PdfDocumentPath;
         _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
+        // Machine list not loaded (DB down): keep the targets already saved.
+        if (Machines.Count > 0)
+            _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;
 
         _settingsService.Save(_settings);
         _activeFactory.SwitchTo(BuildFactoryFromFields());

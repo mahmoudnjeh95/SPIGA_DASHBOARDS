@@ -9,4 +9,7 @@ public partial class MachineVisibilityOption : ObservableObject
 
     [ObservableProperty] private string machineName = "";
     [ObservableProperty] private bool isVisible;
+
+    // TRS cible (%), as typed; validated on save.
+    [ObservableProperty] private string trsTargetText = "";
 }

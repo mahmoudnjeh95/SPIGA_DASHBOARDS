@@ -1,0 +1,177 @@
+<UserControl x:Class="SpigaDashboards.App.Views.MachinePeriodPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:views="clr-namespace:SpigaDashboards.App.Views"
+             mc:Ignorable="d"
+             d:DesignWidth="1570" d:DesignHeight="700" Background="Transparent">
+
+    <!-- Period view of ONE machine (MachinePeriodSlideViewModel): period totals
+         on top; team comparison and production per weight on the left; trends
+         (TRS vs target, speed, production per weight, weight deviation) on the right. -->
+    <UserControl.Resources>
+        <Style x:Key="ColHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style x:Key="ColValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <DataTemplate x:Key="TeamRowTemplate">
+            <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,5">
+                <UniformGrid Rows="1" Columns="7">
+                    <TextBlock Text="{Binding TeamName}" Style="{StaticResource ColValue}"/>
+                    <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource ColValue}"
+                               Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding AvgWeightText}" Style="{StaticResource ColValue}"/>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource ColValue}"
+                               Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
+                    <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Style="{StaticResource ColValue}"/>
+                    <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource ColValue}"/>
+                    <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource ColValue}"
+                               Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
+                </UniformGrid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <views:MachineHeader Grid.Row="0"/>
+
+        <!-- Period totals -->
+        <UniformGrid Grid.Row="1" Rows="1" Columns="5">
+            <Border Style="{StaticResource KpiTile}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource KpiLabel}">
+                        <Run Text="TRS"/>
+                        <Run Text="{Binding TrsTarget, StringFormat=(cible {0:0} %), Mode=OneWay, ConverterCulture=fr-FR}" FontSize="15" Foreground="{DynamicResource SubtleTextBrush}"/>
+                    </TextBlock>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
+                                   Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                    </Viewbox>
+                    <TextBlock Style="{StaticResource KpiSubtext}">
+                        <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                        <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                        <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource KpiTile}">
+                <StackPanel>
+                    <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabel}"/>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Style="{StaticResource KpiValue}"/>
+                    </Viewbox>
+                    <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtext}"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource KpiTile}">
+                <StackPanel>
+                    <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabel}"/>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding AvgWeightText}" Style="{StaticResource KpiValue}"/>
+                    </Viewbox>
+                    <TextBlock Text="{Binding TargetWeightsText}" Style="{StaticResource KpiSubtext}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource KpiTile}">
+                <StackPanel>
+                    <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource KpiValue}"
+                                   Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
+                    </Viewbox>
+                    <TextBlock Style="{StaticResource KpiSubtext}">
+                        <Run Text="Sous tol."/> <Run Text="{Binding Kpis.BagsUnderTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                        <Run Text=" · Sur tol."/> <Run Text="{Binding Kpis.BagsOverTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource KpiTile}">
+                <StackPanel>
+                    <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabel}"/>
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
+                                   Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
+                    </Viewbox>
+                    <TextBlock Style="{StaticResource KpiSubtext}">
+                        <Run Text="{Binding Kpis.WeightDeviationPercent, StringFormat={}{0:+0.00;-0.00;0.00} %, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                        <Run Text=" · surpoids"/> <Run Text="{Binding Kpis.GiveawayKg, StringFormat={}{0:+#,##0.0;-#,##0.0;0.0} kg, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="1.15*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Team comparison, best TRS first -->
+                <Border Grid.Row="0" Style="{StaticResource ChartTile}" Padding="14,8">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Comparaison des equipes" Style="{StaticResource ChartTitle}"/>
+                        <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="7" Margin="0,2,0,2">
+                            <TextBlock Text="Equipe" Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="TRS" Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="Poids moyen" Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="Conformite" Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="Vit. moy." Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="Vit. max" Style="{StaticResource ColHeader}"/>
+                            <TextBlock Text="Ecart poids" Style="{StaticResource ColHeader}"/>
+                        </UniformGrid>
+                        <ItemsControl ItemsSource="{Binding Teams}" ItemTemplate="{StaticResource TeamRowTemplate}"/>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource ChartTile}" Padding="14,8">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Production par poids" Style="{StaticResource ChartTitle}"/>
+                        <views:WeightTable Weights="{Binding Kpis.Weights}" ValueFontSize="18" HeaderFontSize="13"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- Trends -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <views:ChartCard Grid.Row="0" Grid.Column="0" Chart="{Binding TrsChart}" ShowLegend="True"
+                                 Title="{Binding GrainLabel, StringFormat=TRS {0}}"/>
+                <views:ChartCard Grid.Row="0" Grid.Column="1" Chart="{Binding SpeedChart}" ShowLegend="True"
+                                 Title="{Binding GrainLabel, StringFormat=Vitesse moy. / max {0}}"/>
+                <views:ChartCard Grid.Row="1" Grid.Column="0" Chart="{Binding ProductionChart}" ShowLegend="True"
+                                 Title="{Binding GrainLabel, StringFormat=Production (net) {0}}"/>
+                <views:ChartCard Grid.Row="1" Grid.Column="1" Chart="{Binding DeviationChart}"
+                                 Title="{Binding GrainLabel, StringFormat=Ecart de poids {0}}"/>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

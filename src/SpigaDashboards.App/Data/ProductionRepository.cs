@@ -58,6 +58,10 @@ public class ProductionRepository
     // dropped. No line here comes anywhere near 300 bags/min.
     private const int MaxBagsPerMinute = 300;
 
+    // Shortest snapshot interval used for the max speed: under 20 s, one bag
+    // more or less on the counter swings the rate too much to mean anything.
+    private const int MinSpeedIntervalSeconds = 20;
+
     // Latest snapshots read for the line status: enough to reach the current
     // production's previous snapshot past duplicates and stray rows.
     private const int StatusRows = 60;
@@ -188,7 +192,7 @@ public class ProductionRepository
             IsConnected = connected,
             BeltRunning = connected && producing,
             AlarmActive = false,
-            CurrentProduction = ToProductionInfo(latest),
+            CurrentProduction = ToProductionInfo(latest, _settings.FindTare(machineId, latest.TargetNetWeight ?? 0)),
         };
     }
 
@@ -202,7 +206,8 @@ public class ProductionRepository
         => row.TotalBags == 0
            && rows.Any(o => o.ProductionId == row.ProductionId ? o.TotalBags > 0 : o.Start > row.Start);
 
-    private static ProductionInfo ToProductionInfo(SnapshotRow row)
+    // tare = empty bag weight (Parametres), deducted from the recorded average.
+    private static ProductionInfo ToProductionInfo(SnapshotRow row, double tare)
     {
         // ID_produzione = line + article + start: fallback for blank columns.
         var parts = ProductionIdParts.Parse(row.ProductionId);
@@ -221,7 +226,7 @@ public class ProductionRepository
             BagsOverTolerance = row.BagsOverTolerance,
             TargetNetWeight = target,
             AvgWeight = IsPlausibleRunAverage(row.AvgWeight, target) && IsPlausibleExtremes(target, row.MinWeight, row.MaxWeight)
-                ? row.AvgWeight
+                ? row.AvgWeight - tare
                 : null,
         };
     }
@@ -243,27 +248,19 @@ public class ProductionRepository
     public Task<List<ProductionBucket>> GetLotsAsync(string machineId, DateTime from, DateTime to, bool includeWeights = true)
         => QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights);
 
-    // Daily buckets for every machine of a sector (annual synthesis slides).
-    public Task<List<ProductionBucket>> GetLotsForSectorAsync(string sector, DateTime from, DateTime to)
-        => QueryBucketsAsync(
-            "{0} IN (SELECT MachineId FROM Machines WHERE Sector = @sector)",
-            BucketSize.Day, from, to, new { sector }, includeWeights: true);
-
-    // History browser (spec S6): one row per machine per hour that produced.
-    // Poste is derived from the hour, so it's filtered here; team is filtered
-    // by the caller (HistoryViewModel) via TeamScheduleService.
-    public async Task<List<ProductionBucket>> GetLotsFilteredAsync(
-        DateTime from, DateTime to, int? shiftId, string? machineId)
+    // Buckets for a set of machines (synthesis slides, history, exports). Day
+    // buckets are lighter for long ranges but carry no poste (ShiftId 0):
+    // callers filtering by poste / team need hour buckets.
+    public Task<List<ProductionBucket>> GetLotsForMachinesAsync(
+        IReadOnlyCollection<string> machineIds, DateTime from, DateTime to, BucketSize size = BucketSize.Hour)
     {
-        var buckets = string.IsNullOrEmpty(machineId)
-            ? await QueryBucketsAsync("{0} IN (SELECT MachineId FROM Machines)", BucketSize.Hour, from, to, new { }, includeWeights: true)
-            : await QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights: true);
-
-        return buckets
-            .Where(b => b.IsProducing && (!shiftId.HasValue || b.ShiftId == shiftId.Value))
-            .OrderByDescending(b => b.StartTime)
-            .ThenBy(b => b.MachineId)
-            .ToList();
+        if (machineIds.Count == 0)
+            return Task.FromResult(new List<ProductionBucket>());
+        // Compared through Machines (small table), so the produzione side
+        // still seeks its index instead of converting numero_linea.
+        return QueryBucketsAsync(
+            "{0} IN (SELECT MachineId FROM Machines WHERE MachineId IN @machineIds)",
+            size, from, to, new { machineIds = machineIds.ToList() }, includeWeights: true);
     }
 
     // One production's share of one bucket, as aggregated by the server.
@@ -284,6 +281,7 @@ public class ProductionRepository
         public long MetalRejects { get; set; }
         public double ObservedMinutes { get; set; }
         public double RunMinutes { get; set; }
+        public double MaxSpeed { get; set; }
         public long MediaBags { get; set; }
         public double MediaWeightSum { get; set; }
     }
@@ -399,18 +397,24 @@ x AS (
     -- Attributed to the bucket containing the midpoint of the interval.
     SELECT sc.numero_linea, sc.ID_produzione, sc.codice_articolo, sc.target, sc.media, sc.dur,
            {d.MinusSeconds("sc.tempo_fine", "sc.dur / 2")} AS mid_t,
+           -- Interval speed (bags/min), for the max speed of the bucket.
+           CASE WHEN sc.sane = 1 AND sc.dur >= {MinSpeedIntervalSeconds}
+                THEN CAST(sc.d_tot AS {d.Float}) * 60 / sc.dur ELSE 0 END AS spd,
 {saneDeltas}
     FROM sc
 )
 SELECT a.*, pr.ProductName, CAST(COALESCE(pr.NominalRatePerMinute, 0) AS {d.Float}) AS ArticleRate
 FROM (
-    -- One row per line, bucket AND production: rate and weight figures must
-    -- use each production's own target, never a MAX across two articles.
+    -- One row per line, bucket, production AND target weight: rate and
+    -- weight figures must use each bag's own target. The target can change
+    -- inside a production (operator sets 400 g instead of 500 g without
+    -- opening a new one, counters keep running): each interval goes to the
+    -- target of the snapshot that ends it.
     SELECT x.numero_linea                       AS MachineId,
            {bucket}                             AS StartTime,
            RTRIM(x.ID_produzione)               AS ProductionId,
            RTRIM(MAX(x.codice_articolo))        AS ProductCode,
-           CAST(MAX(x.target) AS {d.Float})     AS TargetNetWeight,
+           CAST(COALESCE(MAX(x.target), 0) AS {d.Float}) AS TargetNetWeight,
            CAST(SUM(x.d_tot)   AS BIGINT)       AS TotalBags,
            CAST(SUM(x.d_sotto) AS BIGINT)       AS BagsUnderTolerance,
            CAST(SUM(x.d_ok)    AS BIGINT)       AS BagsInTolerance,
@@ -419,6 +423,7 @@ FROM (
            CAST(SUM(x.d_metal) AS BIGINT)       AS MetalRejects,
            CAST(SUM(x.dur) AS {d.Float}) / 60   AS ObservedMinutes,
            CAST(SUM(CASE WHEN x.d_tot > 0 THEN x.dur ELSE 0 END) AS {d.Float}) / 60 AS RunMinutes,
+           CAST(MAX(x.spd) AS {d.Float})        AS MaxSpeed,
            -- Fallback weight data (used only when the line has no lot): bags
            -- whose running average is within 15 % of the target.
            CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.85 * x.target AND x.media <= 1.15 * x.target
@@ -427,7 +432,7 @@ FROM (
                          THEN x.media * x.d_tot ELSE 0 END) AS {d.Float}) AS MediaWeightSum
     FROM x
     WHERE x.mid_t >= @from AND x.mid_t < @to
-    GROUP BY x.numero_linea, {bucket}, x.ID_produzione
+    GROUP BY x.numero_linea, {bucket}, x.ID_produzione, x.target
 ) a
 LEFT JOIN Products pr ON pr.Code = a.ProductCode";
 
@@ -448,54 +453,64 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
             : new List<(string MachineId, DateTime StartTime, WeightPart Part)>();
 
         var length = size == BucketSize.Hour ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
-        var partsByKey = parts.ToLookup(p => (p.MachineId, p.StartTime));
-        var weightsByKey = weights.ToLookup(w => (w.MachineId, w.StartTime), w => w.Part);
-        var keys = partsByKey.Select(g => g.Key)
+        var partsByKey = parts.ToDictionary(p => (p.MachineId, p.StartTime, p.ProductionId, TargetNetWeight: p.TargetNetWeight));
+        var weightsByKey = weights.ToLookup(w => (w.MachineId, w.StartTime, w.Part.ProductionId, TargetNetWeight: w.Part.Target), w => w.Part);
+        var keys = partsByKey.Keys
             .Union(weightsByKey.Select(g => g.Key))
             .OrderBy(k => k.StartTime)
-            .ThenBy(k => k.MachineId);
+            .ThenBy(k => k.MachineId)
+            .ThenBy(k => k.ProductionId)
+            .ThenBy(k => k.TargetNetWeight);
 
         var buckets = new List<ProductionBucket>();
         foreach (var key in keys)
         {
-            var group = partsByKey[key].ToList();
-            // Display only: the production that made the most bags in the bucket.
-            var main = group.OrderByDescending(p => p.TotalBags).ThenByDescending(p => p.RunMinutes).FirstOrDefault();
-            var b = new ProductionBucket
+            var weightParts = weightsByKey[key].ToList();
+            // A lot can close in a bucket where its production's counters
+            // didn't move: weights only, no counters.
+            var p = partsByKey.GetValueOrDefault(key) ?? new BucketPartRow
             {
                 MachineId = key.MachineId,
                 StartTime = key.StartTime,
+                ProductionId = key.ProductionId,
+                ProductCode = ProductionIdParts.Parse(key.ProductionId).ArticleCode,
+                TargetNetWeight = key.TargetNetWeight,
+            };
+            var b = new ProductionBucket
+            {
+                MachineId = key.MachineId,
+                ProductionId = key.ProductionId,
+                StartTime = key.StartTime,
                 EndTime = key.StartTime + length,
-                ShiftId = KpiCalculator.CurrentShiftId(key.StartTime),
-                ProductCode = main?.ProductCode ?? "",
+                // Day buckets span all three postes: no poste.
+                ShiftId = size == BucketSize.Hour ? KpiCalculator.CurrentShiftId(key.StartTime) : 0,
+                ProductCode = p.ProductCode,
                 // Products row missing or unnamed: show the article code without
                 // its zero padding (00000000NOUVELLEPROD -> NOUVELLEPROD).
-                ProductName = main == null ? null
-                    : string.IsNullOrWhiteSpace(main.ProductName) ? ProductionIdParts.DisplayArticle(main.ProductCode) : main.ProductName,
-                TargetNetWeight = main?.TargetNetWeight ?? 0,
-                TotalBags = group.Sum(p => p.TotalBags),
-                BagsUnderTolerance = group.Sum(p => p.BagsUnderTolerance),
-                BagsInTolerance = group.Sum(p => p.BagsInTolerance),
-                BagsOverTolerance = group.Sum(p => p.BagsOverTolerance),
-                BagsIndeterminate = group.Sum(p => p.BagsIndeterminate),
-                MetalRejects = group.Sum(p => p.MetalRejects),
-                ObservedMinutes = group.Sum(p => p.ObservedMinutes),
-                RunMinutes = group.Sum(p => p.RunMinutes),
+                ProductName = string.IsNullOrWhiteSpace(p.ProductName) ? ProductionIdParts.DisplayArticle(p.ProductCode) : p.ProductName,
+                TargetNetWeight = p.TargetNetWeight,
+                TotalBags = p.TotalBags,
+                BagsUnderTolerance = p.BagsUnderTolerance,
+                BagsInTolerance = p.BagsInTolerance,
+                BagsOverTolerance = p.BagsOverTolerance,
+                BagsIndeterminate = p.BagsIndeterminate,
+                MetalRejects = p.MetalRejects,
+                ObservedMinutes = p.ObservedMinutes,
+                RunMinutes = p.RunMinutes,
+                MaxSpeedBagsPerMinute = p.MaxSpeed,
             };
 
-            // Performance inputs, each production at its own nominal rate: a
-            // per-article rate in Products wins, otherwise the per-weight table
-            // from Parametres. Unknown rate (0) = left out of both sides.
-            foreach (var p in group.Where(p => p.TotalBags > 0))
+            // Performance inputs at the production's own nominal rate: a
+            // per-article rate in Products wins, otherwise the machine/weight
+            // table from Parametres. Unknown rate (0) = left out of both sides.
+            var rate = p.ArticleRate > 0 ? p.ArticleRate : _settings.FindNominalRate(p.MachineId, p.TargetNetWeight);
+            if (p.TotalBags > 0 && rate > 0)
             {
-                var rate = p.ArticleRate > 0 ? p.ArticleRate : _settings.FindNominalRate(p.TargetNetWeight);
-                if (rate <= 0)
-                    continue;
-                b.IdealMinutes += p.TotalBags / rate;
-                b.RatedRunMinutes += p.RunMinutes;
+                b.IdealMinutes = p.TotalBags / rate;
+                b.RatedRunMinutes = p.RunMinutes;
             }
 
-            b.WeightParts.AddRange(weightsByKey[key]);
+            b.WeightParts.AddRange(weightParts);
             buckets.Add(b);
         }
         return buckets;
@@ -506,6 +521,7 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
         public string MachineId { get; set; } = "";
         public string ProductionId { get; set; } = "";
         public DateTime StartTime { get; set; }
+        public double? Target { get; set; }
         public long Bags { get; set; }
         public double WeightSum { get; set; }
     }
@@ -523,9 +539,13 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
     //    lot time), for every line that has lots in the range;
     //  - otherwise media_totale, only where it is within 15 % of the target
     //    (MediaBags) and the production's lifetime extremes look sane.
-    // A lot's target is its production's peso_netto_impostato; lots of a
-    // production with no snapshot in the read range are left out. Line =
-    // first 4 characters of ID_produzione (odd codes like "PL 3" match no machine).
+    // A lot's target is the peso_netto_impostato of its production's first
+    // snapshot at or after the lot (the target can change inside a
+    // production); lots of a production with no snapshot in the read range
+    // are left out. Line = first 4 characters of ID_produzione (odd codes
+    // like "PL 3" match no machine).
+    // The empty bag weight set in Parametres for the line and target is
+    // deducted from every average (Stiavelli weighs the full bag).
     private async Task<List<(string MachineId, DateTime StartTime, WeightPart Part)>> LoadWeightPartsAsync(
         IDbConnection connection, Dialect d, string lineFilter, BucketSize size, DynamicParameters parameters, List<BucketPartRow> parts)
     {
@@ -539,23 +559,35 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
         {
             const string lineOfLot = "SUBSTRING(l.ID_produzione, 1, 4)";
             var bucket = size == BucketSize.Hour ? d.Hour("l.ora_fine") : d.Day("l.ora_fine");
+            // Target subquery seeks IX_produzione_linea_fine (line + time).
             var lots = await connection.QueryAsync<LotRow>($@"
-SELECT {lineOfLot} AS MachineId, RTRIM(l.ID_produzione) AS ProductionId, {bucket} AS StartTime,
-       CAST(SUM(l.dimensione) AS BIGINT) AS Bags,
-       CAST(SUM(CAST(l.media_effettiva AS {d.Float}) * l.dimensione) AS {d.Float}) AS WeightSum
-FROM lotto l
-WHERE l.ora_fine >= @from AND l.ora_fine < @to
-  AND l.dimensione > 0 AND l.media_effettiva > 0
-  AND {string.Format(lineFilter, lineOfLot)}
-GROUP BY {lineOfLot}, RTRIM(l.ID_produzione), {bucket}", parameters);
+SELECT t.MachineId, t.ProductionId, t.StartTime, t.Target,
+       CAST(SUM(t.dimensione) AS BIGINT) AS Bags,
+       CAST(SUM(t.media * t.dimensione) AS {d.Float}) AS WeightSum
+FROM (
+    SELECT {lineOfLot} AS MachineId, RTRIM(l.ID_produzione) AS ProductionId, {bucket} AS StartTime,
+           l.dimensione, CAST(l.media_effettiva AS {d.Float}) AS media,
+           (SELECT {d.Top(1)} CAST(p.peso_netto_impostato AS {d.Float}) FROM produzione p
+            WHERE p.numero_linea = {lineOfLot} AND p.ID_produzione = l.ID_produzione
+              AND p.tempo_fine >= l.ora_fine AND p.tempo_fine < @readTo
+            ORDER BY p.tempo_fine {d.Limit(1)}) AS Target
+    FROM lotto l
+    WHERE l.ora_fine >= @from AND l.ora_fine < @to
+      AND l.dimensione > 0 AND l.media_effettiva > 0
+      AND {string.Format(lineFilter, lineOfLot)}
+) t
+GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
 
             foreach (var lot in lots)
             {
                 var machineId = lot.MachineId.TrimEnd();
-                if (!targets.TryGetValue(lot.ProductionId, out var target))
+                // No later snapshot read: the production's own target.
+                if (!targets.TryGetValue(lot.ProductionId, out var productionTarget))
                     continue;
+                var target = lot.Target is > 0 ? lot.Target.Value : productionTarget;
                 linesWithLots.Add(machineId);
-                result.Add((machineId, lot.StartTime, new WeightPart(lot.ProductionId, target, lot.Bags, lot.WeightSum)));
+                var tare = _settings.FindTare(machineId, target);
+                result.Add((machineId, lot.StartTime, new WeightPart(lot.ProductionId, target, lot.Bags, lot.WeightSum - tare * lot.Bags)));
             }
         }
 
@@ -581,7 +613,11 @@ GROUP BY p.ID_produzione", parameters))
         foreach (var p in fallback)
         {
             if (extremes.TryGetValue(p.ProductionId, out var e) && IsPlausibleExtremes(p.TargetNetWeight, e.MinWeight, e.MaxWeight))
-                result.Add((p.MachineId, p.StartTime, new WeightPart(p.ProductionId, p.TargetNetWeight, p.MediaBags, p.MediaWeightSum)));
+            {
+                var tare = _settings.FindTare(p.MachineId, p.TargetNetWeight);
+                result.Add((p.MachineId, p.StartTime,
+                    new WeightPart(p.ProductionId, p.TargetNetWeight, p.MediaBags, p.MediaWeightSum - tare * p.MediaBags)));
+            }
         }
         return result;
     }

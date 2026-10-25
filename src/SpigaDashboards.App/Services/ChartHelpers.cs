@@ -4,14 +4,37 @@ using SkiaSharp;
 
 namespace SpigaDashboards.App.Services;
 
-// Shared LiveChartsCore building blocks, used by both the per-machine slide
-// charts (MachineDashboardViewModel) and the annual synthesis charts
-// (AnnualSummarySlideViewModel) so the two don't drift in style.
+// Shared LiveChartsCore building blocks, used by the slide charts and the
+// export images (DashboardCharts) so they don't drift in style.
 public static class ChartHelpers
 {
     // Sized for the 60" kiosk TV read from a few metres away (1920x1080 layout).
     public const double AxisTextSize = 16;
     public const double DataLabelTextSize = 16;
+
+    // Series colours, in order, for charts with one series per line / weight.
+    public static readonly SKColor[] Palette =
+    {
+        new(0x3B, 0x82, 0xF6), new(0x2E, 0xCC, 0x71), new(0xF3, 0x9C, 0x12),
+        new(0xE7, 0x4C, 0x3C), new(0x9B, 0x59, 0xB6), new(0x1A, 0xBC, 0x9C),
+    };
+
+    // Export images are drawn on white paper whatever the screen theme:
+    // ExportService sets this while it builds its charts.
+    [ThreadStatic] private static bool _printColors;
+
+    public static SKColor TextColor => _printColors ? new SKColor(0x1B, 0x1F, 0x26) : ThemeService.ChartTextColor;
+
+    public static IDisposable PrintScope()
+    {
+        _printColors = true;
+        return new Scope();
+    }
+
+    private sealed class Scope : IDisposable
+    {
+        public void Dispose() => _printColors = false;
+    }
 
     // Short counts for axes and bar labels: 9639, 15 k, 1.2 M.
     public static string Compact(double value) => Math.Abs(value) switch
@@ -24,7 +47,7 @@ public static class ChartHelpers
     public static Axis BuildXAxis(IEnumerable<string> labels) => new()
     {
         Labels = labels.ToArray(),
-        LabelsPaint = new SolidColorPaint(ThemeService.ChartTextColor),
+        LabelsPaint = new SolidColorPaint(TextColor),
         TextSize = AxisTextSize,
     };
 
@@ -35,7 +58,7 @@ public static class ChartHelpers
     {
         var axis = new Axis
         {
-            LabelsPaint = new SolidColorPaint(ThemeService.ChartTextColor),
+            LabelsPaint = new SolidColorPaint(TextColor),
             TextSize = AxisTextSize,
             MinLimit = minLimit,
             MaxLimit = maxLimit,

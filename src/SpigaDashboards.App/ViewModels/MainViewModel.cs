@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -11,10 +13,11 @@ namespace SpigaDashboards.App.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     // Sector display order. CC = couscous, PC = pate courte, PL = pate longue.
-    // Machines within a sector are auto-paired (2 per slide, odd one gets its own).
+    // One slide per machine, in machine-id order within its sector.
     private static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue" };
 
     private static readonly TimeSpan NoteRefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan HealthCheckInterval = TimeSpan.FromMinutes(30);
 
     private readonly ProductionRepository _repository;
     private readonly AppSettings _settings;
@@ -23,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _noteTimer;
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _reconnectTimer;
+    private readonly DispatcherTimer _healthCheckTimer;
 
     private List<SlideDescriptor> _slides = new();
     private Dictionary<string, Machine> _machinesById = new();
@@ -46,11 +50,49 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool isReconnecting;
     [ObservableProperty] private string reconnectStatus = "";
 
+    // The consignes PDF gets the screen to itself: no team/poste badge over it.
+    [ObservableProperty] private bool isPdfSlideShown;
+
+    // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
+    [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
+
+    // Filtres panel. Edits only take effect on "Appliquer" (one deck rebuild,
+    // not one per click); _filter is what the slides currently use.
+    public const string AllOption = "Tous";
+    private DashboardFilter _filter = DashboardFilter.None;
+
+    [ObservableProperty] private bool isFilterPanelOpen;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilter))]
+    private string activeFilterLabel = "";
+
+    public bool HasActiveFilter => ActiveFilterLabel.Length > 0;
+    [ObservableProperty] private DateTime? customFrom = DateTime.Now.Date.AddDays(-7);
+    [ObservableProperty] private DateTime? customTo = DateTime.Now.Date;
+    [ObservableProperty] private string filterSector = AllOption;
+    [ObservableProperty] private string filterShift = AllOption;
+    [ObservableProperty] private string filterTeam = AllOption;
+    [ObservableProperty] private string filterWeight = AllOption;
+
+    public List<string> SectorOptions { get; } = new[] { AllOption }.Concat(SectorOrder).ToList();
+    public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Soir", "Nuit" };
+    public ObservableCollection<string> TeamOptions { get; } = new();
+    public ObservableCollection<string> WeightOptions { get; } = new();
+    public ObservableCollection<MachineFilterOption> MachineOptions { get; } = new();
+
+    public DashboardFilter CurrentFilter => _filter;
+
+    public (DateTime From, DateTime To) CurrentRange
+        => SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift
+            ? PeriodRanges.Get(DashboardPeriod.Day, DateTime.Now)
+            : PeriodRanges.Get(SelectedPeriod, DateTime.Now, CustomFrom, CustomTo);
+
     public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule)
     {
         _repository = repository;
         _settings = settings;
         _teamSchedule = teamSchedule;
+        RefreshFilterOptions();
 
         // Timer handlers are async void: RunGuardedAsync makes sure no
         // exception can escape them and crash the kiosk.
@@ -72,6 +114,39 @@ public partial class MainViewModel : ObservableObject
         // Only runs while the DB is unreachable (see SetConnectionState).
         _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
         _reconnectTimer.Tick += async (_, _) => await RunGuardedAsync(ReconnectAsync);
+
+        // Independent of slide rotation / pause: always probes the DB, so a
+        // dropped connection is noticed even on a paused or static slide.
+        _healthCheckTimer = new DispatcherTimer { Interval = HealthCheckInterval };
+        _healthCheckTimer.Tick += async (_, _) => await RunGuardedAsync(CheckConnectionAsync);
+        _healthCheckTimer.Start();
+    }
+
+    private async Task CheckConnectionAsync()
+    {
+        // While suspended / reconnecting, the reconnect timer already owns recovery.
+        if (_suspended || IsReconnecting)
+            return;
+
+        AppLogger.Log("Verification periodique de la connexion a la base de donnees...");
+        try
+        {
+            await _repository.GetMachinesAsync();
+            SetConnectionState(healthy: true);
+        }
+        catch (Exception ex)
+        {
+            Suspend(ex.Message);
+        }
+    }
+
+    private void Suspend(string errorMessage)
+    {
+        _suspended = true;
+        _rotationTimer.Stop();
+        _noteTimer.Stop();
+        _refreshTimer.Stop();
+        SetConnectionState(healthy: false, errorMessage);
     }
 
     // An exception escaping an async void timer handler (DB dropped) would
@@ -105,8 +180,11 @@ public partial class MainViewModel : ObservableObject
         // A resync should always resume playback, even if the rotation was paused before.
         IsRotationPaused = false;
 
-        // Settings may now point at another server/database.
-        AnnualSummarySlideViewModel.ClearCache();
+        // Settings may now point at another server/database, or have new
+        // cadences / empty bag weights / team names.
+        SynthesisSlideViewModel.ClearCache();
+        MachinePeriodSlideViewModel.ClearCache();
+        RefreshFilterOptions();
 
         try
         {
@@ -181,7 +259,78 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedPeriodChanged(DashboardPeriod value)
     {
+        // Dates are chosen in the Filtres panel.
+        if (value == DashboardPeriod.Custom)
+            IsFilterPanelOpen = true;
         _ = ShowSlideAsync(_currentIndex);
+    }
+
+    [RelayCommand]
+    private void ToggleFilterPanel() => IsFilterPanelOpen = !IsFilterPanelOpen;
+
+    [RelayCommand]
+    private async Task ApplyFiltersAsync()
+    {
+        var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineId).ToList();
+        _filter = new DashboardFilter
+        {
+            Sector = FilterSector == AllOption ? null : FilterSector,
+            // Every machine ticked = no machine filter.
+            MachineIds = selected.Count == MachineOptions.Count ? Array.Empty<string>() : selected,
+            ShiftId = FilterShift switch { "Matin" => 1, "Soir" => 2, "Nuit" => 3, _ => null },
+            Team = FilterTeam == AllOption ? null : FilterTeam,
+            TargetWeight = FilterWeight == AllOption ? null : double.Parse(FilterWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
+        };
+        ActiveFilterLabel = _filter.Describe();
+        IsFilterPanelOpen = false;
+        AppLogger.Log($"Filtres appliques : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
+
+        // The deck's shape depends on the sector / machine filters.
+        await RunGuardedAsync(async () =>
+        {
+            await BuildSlidesAsync();
+            _currentIndex = 0;
+            if (_slides.Count == 0)
+                CurrentSlide = null;
+            else
+                await ShowSlideAsync(0);
+            RestartRotationTimer();
+        });
+    }
+
+    [RelayCommand]
+    private async Task ResetFiltersAsync()
+    {
+        FilterSector = FilterShift = FilterTeam = FilterWeight = AllOption;
+        foreach (var machine in MachineOptions)
+            machine.IsSelected = true;
+        await ApplyFiltersAsync();
+    }
+
+    [RelayCommand]
+    private async Task SetSynthesisPeriodAsync(string period)
+    {
+        SynthesisPeriod = Enum.Parse<SynthesisPeriod>(period);
+        await ShowSlideAsync(_currentIndex);
+        RestartRotationTimer();
+    }
+
+    // Team names / weights come from Parametres: re-read after a save.
+    private void RefreshFilterOptions()
+    {
+        TeamOptions.Clear();
+        TeamOptions.Add(AllOption);
+        foreach (var team in _teamSchedule.TeamNames)
+            TeamOptions.Add(team);
+        if (!TeamOptions.Contains(FilterTeam))
+            FilterTeam = AllOption;
+
+        WeightOptions.Clear();
+        WeightOptions.Add(AllOption);
+        foreach (var weight in _settings.NominalRates.Where(r => r.WeightGrams > 0).Select(r => r.WeightGrams).Distinct().Order())
+            WeightOptions.Add(weight.ToString("0.##", CultureInfo.InvariantCulture) + " g");
+        if (!WeightOptions.Contains(FilterWeight))
+            FilterWeight = AllOption;
     }
 
     // Manual pause/play: doesn't touch the note/data-refresh timers, only the
@@ -281,9 +430,11 @@ public partial class MainViewModel : ObservableObject
         var allMachines = await _repository.GetMachinesAsync();
         _machinesById = allMachines.ToDictionary(m => m.MachineId);
 
-        var visible = allMachines
+        var shown = allMachines
             .Where(m => m.IsActive && !_settings.HiddenMachineIds.Contains(m.MachineId))
             .ToList();
+        RefreshMachineOptions(shown);
+        var visible = shown.Where(_filter.IncludesMachine).ToList();
 
         // Every machine ticked in Parametres stays in the rotation, connected or
         // not: a line with no recent snapshot is shown greyed out with a
@@ -298,11 +449,8 @@ public partial class MainViewModel : ObservableObject
                 .OrderBy(m => m.MachineId)
                 .ToList();
 
-            for (var i = 0; i < sectorMachines.Count; i += 2)
-            {
-                var pairIds = sectorMachines.Skip(i).Take(2).Select(m => m.MachineId).ToList();
-                slides.Add(new MachinePairSlideDescriptor(sector, pairIds));
-            }
+            foreach (var machine in sectorMachines)
+                slides.Add(new MachineSlideDescriptor(sector, machine.MachineId));
         }
 
         // Slide 8 per the spec's table: admin-selected external document. Skipped
@@ -310,11 +458,31 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(_settings.PdfDocumentPath))
             slides.Add(new PdfSlideDescriptor(_settings.PdfDocumentPath));
 
-        // Slides 9-13: annual synthesis, one per sector, same order as above.
+        // Synthesis, one per sector still shown by the filters, same order as above.
         foreach (var sector in SectorOrder)
-            slides.Add(new AnnualSummarySlideDescriptor(sector));
+        {
+            var ids = visible.Where(m => m.Sector == sector).OrderBy(m => m.MachineId).Select(m => m.MachineId).ToList();
+            if (ids.Count > 0)
+                slides.Add(new SynthesisSlideDescriptor(sector, ids));
+        }
 
         _slides = slides;
+    }
+
+    // Machine checkboxes of the Filtres panel: the machines shown in the
+    // rotation (Parametres), selection kept across refreshes.
+    private void RefreshMachineOptions(List<Machine> machines)
+    {
+        var ids = machines.OrderBy(m => Array.IndexOf(SectorOrder, m.Sector)).ThenBy(m => m.MachineId).Select(m => m.MachineId).ToList();
+        if (ids.SequenceEqual(MachineOptions.Select(o => o.MachineId)))
+            return;
+        MachineOptions.Clear();
+        foreach (var id in ids)
+            MachineOptions.Add(new MachineFilterOption
+            {
+                MachineId = id,
+                IsSelected = _filter.MachineIds.Count == 0 || _filter.MachineIds.Contains(id),
+            });
     }
 
     // Returns false when the slide couldn't load: the deck is then stopped
@@ -329,12 +497,16 @@ public partial class MainViewModel : ObservableObject
             var slide = _slides[index];
             CurrentSlide = slide switch
             {
-                MachinePairSlideDescriptor mp => await MachinePairSlideViewModel.LoadAsync(
-                    _repository, _teamSchedule, mp.Sector, mp.MachineIds.Select(id => _machinesById[id]).ToList(), SelectedPeriod),
+                MachineSlideDescriptor ms when SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift
+                    => await MachineDaySlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, ms.Sector,
+                        _machinesById[ms.MachineId], _filter, previousShift: SelectedPeriod == DashboardPeriod.PreviousShift),
+                MachineSlideDescriptor ms => await LoadPeriodSlideAsync(ms),
                 PdfSlideDescriptor pdf => await PdfSlideViewModel.LoadAsync(pdf.PdfPath),
-                AnnualSummarySlideDescriptor summary => await AnnualSummarySlideViewModel.LoadAsync(_repository, summary.Sector),
+                SynthesisSlideDescriptor synthesis => await SynthesisSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings,
+                    synthesis.Sector, synthesis.MachineIds.Select(id => _machinesById[id]).ToList(), SynthesisPeriod, _filter),
                 _ => null,
             };
+            IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;
             // While suspended, recovery is InitializeAsync's job (it restarts the timers).
             if (!_suspended)
                 SetConnectionState(healthy: true);
@@ -342,13 +514,16 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _suspended = true;
-            _rotationTimer.Stop();
-            _noteTimer.Stop();
-            _refreshTimer.Stop();
-            SetConnectionState(healthy: false, ex.Message);
+            Suspend(ex.Message);
             return false;
         }
+    }
+
+    private Task<MachinePeriodSlideViewModel> LoadPeriodSlideAsync(MachineSlideDescriptor slide)
+    {
+        var (from, to) = PeriodRanges.Get(SelectedPeriod, DateTime.Now, CustomFrom, CustomTo);
+        return MachinePeriodSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Sector,
+            _machinesById[slide.MachineId], from, to, PeriodRanges.Label(SelectedPeriod, from, to), _filter);
     }
 
     private void SetConnectionState(bool healthy, string errorMessage = "")

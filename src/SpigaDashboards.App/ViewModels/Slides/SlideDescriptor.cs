@@ -6,8 +6,9 @@ namespace SpigaDashboards.App.ViewModels.Slides;
 // ShowSlideAsync materializes the matching content view-model on demand.
 public abstract record SlideDescriptor;
 
-public sealed record MachinePairSlideDescriptor(string Sector, IReadOnlyList<string> MachineIds) : SlideDescriptor;
+public sealed record MachineSlideDescriptor(string Sector, string MachineId) : SlideDescriptor;
 
 public sealed record PdfSlideDescriptor(string PdfPath) : SlideDescriptor;
 
-public sealed record AnnualSummarySlideDescriptor(string Sector) : SlideDescriptor;
+// Machines = the sector's machines kept by the filters, in display order.
+public sealed record SynthesisSlideDescriptor(string Sector, IReadOnlyList<string> MachineIds) : SlideDescriptor;

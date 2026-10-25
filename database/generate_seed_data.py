@@ -19,7 +19,7 @@ interval of up to 2 h into N linearly interpolated snapshots (e.g. 60 ->
 one every 30 s) to exercise the app at that rate.
 
 Run (from the repo root or this folder):
-    python database/generate_seed_data.py [--csv mahmoud_db.csv] [--no-shift] [--densify N]
+    python database/generate_seed_data.py [--csv mahmoud_db.csv] [--no-shift] [--densify N] [--fill-month]
 """
 import argparse
 import csv
@@ -182,7 +182,44 @@ def densify(rows, factor):
     return out
 
 
-def build(csv_path, shift_to_now, densify_factor):
+def fill_current_month(conn):
+    """The export only holds a few distinct days, so the current month is mostly
+    empty after the shift. Clone the newest block of days (whole productions,
+    with fresh ID_produzione) backwards in block-sized steps until the 1st of
+    the month is covered."""
+    block_days = 3
+    now = datetime.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    block_start = (now - timedelta(days=block_days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(produzione)")]
+    src = conn.execute(
+        f"SELECT {','.join(cols)} FROM produzione WHERE tempo_fine >= ? ORDER BY progressivo",
+        (block_start.strftime(TS_FORMAT),),
+    ).fetchall()
+    next_id = conn.execute("SELECT MAX(progressivo) FROM produzione").fetchone()[0] + 1
+    idx = {c: i for i, c in enumerate(cols)}
+
+    step = 1
+    while block_start - timedelta(days=block_days * (step - 1)) > month_start:
+        delta = timedelta(days=block_days * step)
+        batch = []
+        for row in src:
+            row = list(row)
+            for c in ("tempo_inizio", "tempo_fine"):
+                if row[idx[c]]:
+                    shifted = datetime.strptime(row[idx[c]], TS_FORMAT) - delta
+                    row[idx[c]] = shifted.strftime(TS_FORMAT)
+            if row[idx["tempo_fine"]] < month_start.strftime(TS_FORMAT):
+                continue
+            row[idx["ID_produzione"]] = f"{row[idx['ID_produzione']]}-d{step}"
+            row[idx["progressivo"]] = next_id
+            next_id += 1
+            batch.append(row)
+        conn.executemany(f"INSERT INTO produzione VALUES ({','.join('?' * len(cols))})", batch)
+        step += 1
+
+
+def build(csv_path, shift_to_now, densify_factor, fill_month=False):
     with open(csv_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f, delimiter=";"))
     if not rows:
@@ -246,6 +283,9 @@ def build(csv_path, shift_to_now, densify_factor):
          datetime.now().strftime(TS_FORMAT)),
     )
 
+    if fill_month:
+        fill_current_month(conn)
+
     conn.commit()
 
     count = conn.execute("SELECT COUNT(*) FROM produzione").fetchone()[0]
@@ -265,5 +305,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-shift", action="store_true", help="keep the original timestamps")
     parser.add_argument("--densify", type=int, default=1, metavar="N",
                         help="interpolate N snapshots per original interval (simulates a faster cadence)")
+    parser.add_argument("--fill-month", action="store_true",
+                        help="clone the newest days back to the 1st of the current month")
     args = parser.parse_args()
-    build(os.path.abspath(args.csv), shift_to_now=not args.no_shift, densify_factor=args.densify)
+    build(os.path.abspath(args.csv), shift_to_now=not args.no_shift, densify_factor=args.densify,
+          fill_month=args.fill_month)

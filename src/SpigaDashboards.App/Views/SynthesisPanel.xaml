@@ -1,0 +1,69 @@
+<UserControl x:Class="SpigaDashboards.App.Views.SynthesisPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:views="clr-namespace:SpigaDashboards.App.Views"
+             xmlns:slides="clr-namespace:SpigaDashboards.App.ViewModels.Slides"
+             mc:Ignorable="d"
+             d:DesignWidth="1560" d:DesignHeight="760" Background="Transparent">
+
+    <!-- Synthesis of one sector (SynthesisSlideViewModel): on top, one card per
+         production line with its TRS, production and deviation, then the
+         weights it ran; below, the TRS and deviation trends, one curve per line. -->
+    <Grid Margin="6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="1.45*"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <ItemsControl Grid.Row="0" ItemsSource="{Binding Lines}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Columns="{Binding DataContext.LineColumns, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type slides:SynthesisLineRow}">
+                    <Border Style="{StaticResource ChartTile}" Padding="14,8">
+                        <DockPanel>
+                            <!-- Line totals -->
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                <TextBlock Text="{Binding MachineName}" FontSize="24" FontWeight="Bold"
+                                           Foreground="{DynamicResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                <StackPanel Orientation="Horizontal" TextElement.FontSize="18">
+                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center">
+                                        <Run Text="TRS "/><Run Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                                                               FontWeight="Bold" FontSize="24" Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                                        <Run Text="{Binding TrsTarget, StringFormat=(cible {0:0} %), Mode=OneWay, ConverterCulture=fr-FR}" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="22,0,0,0">
+                                        <Run Text="Production "/><Run Text="{Binding ProductionText, Mode=OneWay}" FontWeight="Bold" FontSize="24" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="22,0,0,0">
+                                        <Run Text="Ecart "/><Run Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                                                                 FontWeight="Bold" FontSize="24" Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
+                                        <Run Text="{Binding GiveawayText, StringFormat=({0}), Mode=OneWay, ConverterCulture=fr-FR}" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </StackPanel>
+                            <!-- Weights run on the line -->
+                            <views:WeightTable Weights="{Binding Kpis.Weights}" ValueFontSize="17" HeaderFontSize="13"/>
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <views:ChartCard Grid.Column="0" Chart="{Binding TrsChart}" ShowLegend="True"
+                             Title="{Binding GrainLabel, StringFormat=TRS par ligne {0}}"/>
+            <views:ChartCard Grid.Column="1" Chart="{Binding DeviationChart}" ShowLegend="True"
+                             Title="{Binding GrainLabel, StringFormat=Ecart de poids (% de la cible) {0}}"/>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -13,6 +13,20 @@ public static class KpiCalculator
 
     public static string ShiftName(int shiftId) => ShiftNames.GetValueOrDefault(shiftId, $"Shift {shiftId}");
 
+    public static int ShiftStartHour(int shiftId) => shiftId switch
+    {
+        1 => 6,
+        2 => 14,
+        _ => 22,
+    };
+
+    public static string ShiftTimeRange(int shiftId) => shiftId switch
+    {
+        1 => "06h - 14h",
+        2 => "14h - 22h",
+        _ => "22h - 06h",
+    };
+
     // Postes per client spec: Matin 06-14, Soir 14-22, Nuit 22-06 (wraps midnight).
     public static int CurrentShiftId(DateTime now) => now.Hour switch
     {
@@ -34,7 +48,90 @@ public static class KpiCalculator
     //    (and TRS null) rather than a misleading 0 %. Not clamped: > 100 %
     //    means the nominal rate is set too low (flagged orange on screen).
     //  - Qualite: bags in tolerance / total bags.
-    public static KpiSummary Summarize(IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent)
+    // Also breaks the buckets down per target weight (Weights), with each
+    // weight's TRS banded against trsTarget, and totals the net weight made.
+    public static KpiSummary Summarize(
+        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, double trsTarget = AppSettings.DefaultTrsTarget)
+    {
+        var summary = SummarizeCore(lots, availabilityPercent);
+        summary.Weights = ByWeight(lots, trsTarget);
+        summary.ProductionKg = Math.Round(summary.Weights.Sum(w => w.ProductionKg), 1);
+        var weighed = summary.Weights.Where(w => w.GiveawayKg.HasValue).ToList();
+        summary.GiveawayKg = weighed.Count > 0 ? Math.Round(weighed.Sum(w => w.GiveawayKg!.Value), 1) : null;
+        return summary;
+    }
+
+    // One entry per target weight (rounded to the gram), biggest production
+    // first. Production = bags x net average weight, or x target when that
+    // weight has no trustworthy weight data; giveaway = bags x deviation.
+    public static List<WeightKpi> ByWeight(IReadOnlyCollection<ProductionBucket> lots, double trsTarget = AppSettings.DefaultTrsTarget)
+    {
+        return lots
+            .Where(l => l.TargetNetWeight > 0)
+            .GroupBy(l => Math.Round(l.TargetNetWeight))
+            .Select(g =>
+            {
+                var group = g.ToList();
+                var k = SummarizeCore(group, AvailabilityPercent(group));
+                var avg = WeightedAverageWeight(group);
+                var product = group.GroupBy(l => l.ProductName ?? "")
+                    .OrderByDescending(p => p.Sum(l => l.TotalBags))
+                    .Select(p => p.Key)
+                    .FirstOrDefault() ?? "";
+                return new WeightKpi
+                {
+                    TargetWeight = g.Key,
+                    ProductName = product,
+                    TotalBags = k.TotalBags,
+                    AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
+                    DeviationGrams = k.WeightDeviationGrams,
+                    DeviationPercent = k.WeightDeviationPercent,
+                    ProductionKg = Math.Round(k.TotalBags * (avg ?? g.Key) / 1000.0, 1),
+                    GiveawayKg = k.WeightDeviationGrams is { } dev ? Math.Round(k.TotalBags * dev / 1000.0, 1) : null,
+                    QualityPercent = k.QualityPercent,
+                    TrsPercent = k.TrsPercent,
+                    SpeedBagsPerMinute = k.SpeedBagsPerMinute,
+                    MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
+                    DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent),
+                    TrsSeverity = TrsSeverity(k.TrsPercent, trsTarget),
+                };
+            })
+            .Where(w => w.TotalBags > 0 || w.AvgWeight.HasValue)
+            .OrderByDescending(w => w.ProductionKg)
+            .ToList();
+    }
+
+    // Colour band of a TRS against the machine's target: reached = green,
+    // within 75 % of it = orange, below = red.
+    public static KpiSeverity TrsSeverity(double? trsPercent, double target) => trsPercent switch
+    {
+        null => KpiSeverity.Unknown,
+        { } t when t >= target => KpiSeverity.Good,
+        { } t when t >= 0.75 * target => KpiSeverity.Warning,
+        _ => KpiSeverity.Bad,
+    };
+
+    private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+
+    // "850 kg", "12,4 t" (plain spaces: the PDF font may lack U+202F).
+    public static string FormatMass(double kg, bool signed = false)
+    {
+        var sign = signed && kg > 0 ? "+" : "";
+        var text = Math.Abs(kg) >= 10_000
+            ? (kg / 1000).ToString("N1", French) + " t"
+            : kg.ToString(Math.Abs(kg) >= 100 ? "N0" : "N1", French) + " kg";
+        return sign + text.Replace(' ', ' ').Replace(' ', ' ');
+    }
+
+    // Average net weights of the weights produced, e.g. "501,2 g" or
+    // "501,2 g · 1 003,5 g"; "—" when none is known.
+    public static string FormatAverages(IEnumerable<WeightKpi> weights)
+    {
+        var known = weights.Where(w => w.AvgWeight.HasValue).Select(w => w.AvgWeight!.Value.ToString("N1", French) + " g").ToList();
+        return known.Count == 0 ? "—" : string.Join(" · ", known).Replace(' ', ' ').Replace(' ', ' ');
+    }
+
+    private static KpiSummary SummarizeCore(IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent)
     {
         // Weight comes from lots / sane running averages, which can sit in a
         // bucket with no counter delta (lot closed just after the snapshot).
@@ -61,6 +158,7 @@ public static class KpiCalculator
         double? performancePercent = ratedRunMinutes > 0 ? 100.0 * producing.Sum(l => l.IdealMinutes) / ratedRunMinutes : null;
 
         double? trsPercent = performancePercent is { } perf ? availabilityPercent * perf * qualityPercent / 10000.0 : null;
+        var maxSpeed = producing.Max(l => l.MaxSpeedBagsPerMinute);
 
         return new KpiSummary
         {
@@ -70,7 +168,8 @@ public static class KpiCalculator
             BagsOverTolerance = producing.Sum(l => (long)l.BagsOverTolerance),
             BagsIndeterminate = producing.Sum(l => (long)l.BagsIndeterminate),
             MetalRejects = producing.Sum(l => (long)l.MetalRejects),
-            SpeedBagsPerMinute = Math.Round(actualRate, 2),
+            SpeedBagsPerMinute = Math.Round(actualRate, 1),
+            MaxSpeedBagsPerMinute = maxSpeed > 0 ? Math.Round(maxSpeed, 1) : null,
             AvailabilityPercent = Math.Round(availabilityPercent, 1),
             PerformancePercent = performancePercent is { } p ? Math.Round(p, 1) : null,
             QualityPercent = Math.Round(qualityPercent, 1),
@@ -89,11 +188,11 @@ public static class KpiCalculator
         return bags > 0 ? list.Sum(l => l.WeighedWeightSum) / bags : null;
     }
 
-    // Average weight of one production's weighed bags in these buckets
-    // (header line), null when it has none.
-    public static double? ProductionAverageWeight(IEnumerable<ProductionBucket> lots, string productionId)
+    // Average weight of one production's weighed bags at its current target
+    // in these buckets (header line), null when it has none.
+    public static double? ProductionAverageWeight(IEnumerable<ProductionBucket> lots, string productionId, double target)
     {
-        var parts = lots.SelectMany(l => l.WeightParts).Where(p => p.ProductionId == productionId).ToList();
+        var parts = lots.SelectMany(l => l.WeightParts).Where(p => p.ProductionId == productionId && p.Target == target).ToList();
         var bags = parts.Sum(p => p.Bags);
         return bags > 0 ? parts.Sum(p => p.WeightSum) / bags : null;
     }

@@ -73,11 +73,16 @@ public class TeamRotationSettings
     }
 }
 
-// Ideal line speed (bags/min) for a bag weight: the Performance input for TRS.
+// Per machine and bag weight: ideal line speed (bags/min, the Performance
+// input for TRS) and weight of the empty bag (sachet vide), deducted from
+// the weights Stiavelli records. MachineId "" = every machine (fallback when
+// the machine has no row of its own for that weight).
 public class NominalRateEntry
 {
+    public string MachineId { get; set; } = "";
     public double WeightGrams { get; set; }
     public double RatePerMinute { get; set; }
+    public double TareGrams { get; set; }
 }
 
 public class AppSettings
@@ -118,9 +123,10 @@ public class AppSettings
 
     public AppTheme Theme { get; set; } = AppTheme.Dark;
 
-    // Cadence nominale per bag weight, set in Parametres. A production is
-    // matched on its target net weight (see FindNominalRate); 0 = not set yet,
-    // so Performance and TRS stay at 0 for that weight.
+    // Cadence nominale and sachet vide per machine and bag weight, set in
+    // Parametres. A production is matched on its line and target net weight
+    // (see FindNominalRate / FindTare); rate 0 = not set yet, so Performance
+    // and TRS stay unknown for that weight.
     public List<NominalRateEntry> NominalRates { get; set; } = new()
     {
         new() { WeightGrams = 200 },
@@ -130,17 +136,37 @@ public class AppSettings
         new() { WeightGrams = 1000 },
     };
 
-    // Rate of the entry closest to targetWeight, if within 5 % of it (Stiavelli
-    // targets can be a few grams off the nominal size, e.g. 1005 g for 1 kg).
-    public double FindNominalRate(double targetWeight)
+    // TRS target (%) per machine, shown next to each machine's TRS and used
+    // for its colour band. Machines not listed use DefaultTrsTarget.
+    public Dictionary<string, double> MachineTrsTargets { get; set; } = new();
+
+    public const double DefaultTrsTarget = 85;
+
+    public double TrsTarget(string machineId)
+        => MachineTrsTargets.TryGetValue(machineId, out var target) && target > 0 ? target : DefaultTrsTarget;
+
+    // Rate for this machine and weight: the machine's own row first, then the
+    // "every machine" row. A per-article rate in Products still wins (see
+    // ProductionRepository).
+    public double FindNominalRate(string machineId, double targetWeight)
+        => (FindEntry(machineId, targetWeight, r => r.RatePerMinute > 0)
+            ?? FindEntry("", targetWeight, r => r.RatePerMinute > 0))?.RatePerMinute ?? 0;
+
+    // Empty bag weight: the machine's own row for that weight if there is one
+    // (even at 0 g), otherwise the "every machine" row.
+    public double FindTare(string machineId, double targetWeight)
+        => (FindEntry(machineId, targetWeight, _ => true)
+            ?? FindEntry("", targetWeight, _ => true))?.TareGrams ?? 0;
+
+    // Entry closest to targetWeight, if within 5 % of it (Stiavelli targets
+    // can be a few grams off the nominal size, e.g. 1005 g for 1 kg).
+    private NominalRateEntry? FindEntry(string machineId, double targetWeight, Func<NominalRateEntry, bool> usable)
     {
         if (targetWeight <= 0)
-            return 0;
+            return null;
         var best = NominalRates
-            .Where(r => r.WeightGrams > 0 && r.RatePerMinute > 0)
+            .Where(r => r.WeightGrams > 0 && (r.MachineId ?? "") == machineId && usable(r))
             .MinBy(r => Math.Abs(r.WeightGrams - targetWeight));
-        return best != null && Math.Abs(best.WeightGrams - targetWeight) <= 0.05 * best.WeightGrams
-            ? best.RatePerMinute
-            : 0;
+        return best != null && Math.Abs(best.WeightGrams - targetWeight) <= 0.05 * best.WeightGrams ? best : null;
     }
 }
