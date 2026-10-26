@@ -85,6 +85,19 @@ public class NominalRateEntry
     public double TareGrams { get; set; }
 }
 
+// Where the TV window (dashboard only, for the production-floor screen) was
+// last left, so it comes back on the same screen after a restart.
+public class TvScreenSettings
+{
+    public bool IsOpen { get; set; }
+    public bool FullScreen { get; set; }
+    // null = never placed yet (opens centred on the operator's screen).
+    public double? Left { get; set; }
+    public double? Top { get; set; }
+    public double Width { get; set; } = 960;
+    public double Height { get; set; } = 540;
+}
+
 public class AppSettings
 {
     // Default to the real Stiavelli production DB (SQL Server `stats`); the
@@ -122,6 +135,8 @@ public class AppSettings
     public string PdfDocumentPath { get; set; } = "";
 
     public AppTheme Theme { get; set; } = AppTheme.Dark;
+
+    public TvScreenSettings TvScreen { get; set; } = new();
 
     // Cadence nominale and sachet vide per machine and bag weight, set in
     // Parametres. A production is matched on its line and target net weight

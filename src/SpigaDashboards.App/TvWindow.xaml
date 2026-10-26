@@ -1,0 +1,100 @@
+<Window x:Class="SpigaDashboards.App.TvWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SPIGA Dashboards - Ecran TV" Icon="/Assets/spiga-logo.png" Width="960" Height="540" MinWidth="480" MinHeight="270"
+        WindowStyle="None" ResizeMode="CanResizeWithGrip" WindowStartupLocation="Manual"
+        Language="fr-FR"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        MouseMove="Window_MouseMove"
+        KeyDown="Window_KeyDown">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Views/SlideTemplates.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- No buttons, filters or settings here: whatever the operator does on
+         the main window, the production TV only ever shows the dashboard. -->
+    <Window.ContextMenu>
+        <ContextMenu>
+            <MenuItem x:Name="FullScreenMenuItem" Header="Plein ecran" Click="FullScreenMenuItem_Click"/>
+            <Separator/>
+            <MenuItem Header="Fermer l'ecran TV" Click="CloseMenuItem_Click"/>
+        </ContextMenu>
+    </Window.ContextMenu>
+
+    <!-- Same fixed 1600x900 design canvas as MainWindow, scaled to the TV. -->
+    <Viewbox Stretch="Fill">
+    <Grid Width="1600" Height="900">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="20,16,20,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Image Source="/Assets/spiga-logo.png" Height="44" Margin="0,0,12,0" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock Text="SPIGA Dashboards" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                <Border Background="{DynamicResource HoverBackgroundBrush}" CornerRadius="12" Padding="12,4" Margin="16,0,0,0"
+                        Visibility="{Binding IsPdfSlideShown, Converter={StaticResource InverseBoolToVisibility}}">
+                    <TextBlock Text="{Binding CurrentTeamLabel}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </Border>
+                <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="12,4" Margin="12,0,0,0"
+                        Visibility="{Binding IsConnectionHealthy, Converter={StaticResource InverseBoolToVisibility}}">
+                    <TextBlock Text="Base deconnectee" FontSize="14" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
+                </Border>
+            </StackPanel>
+
+            <TextBlock x:Name="ClockText" Grid.Column="1" FontSize="26" FontWeight="Bold"
+                       Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+        </Grid>
+
+        <ContentControl Grid.Row="1" Margin="14,8,14,10" Content="{Binding CurrentSlide}"/>
+
+        <!-- Sticky note, read-only: it is written from the main window. -->
+        <Border Grid.Row="2" Background="#F1C40F" Padding="16,10">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding NoteText}" Value="">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding NoteText}" FontSize="18" FontWeight="SemiBold" Foreground="#1B1F26" TextWrapping="Wrap"/>
+        </Border>
+
+        <Border Grid.Row="1" Background="{DynamicResource DisconnectedOverlayBrush}"
+                Visibility="{Binding IsConnectionHealthy, Converter={StaticResource InverseBoolToVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="700">
+                <TextBlock Text="Connexion a la base de donnees perdue" FontSize="26" FontWeight="Bold"
+                           Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock Text="Reconnexion automatique en cours..." FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Only while windowed: how to put it on the TV. -->
+        <Border x:Name="PlacementHint" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0"
+                Background="{DynamicResource AccentBrush}" CornerRadius="10" Padding="22,12" IsHitTestVisible="False">
+            <TextBlock FontSize="22" Foreground="White" TextAlignment="Center">
+                <Run Text="Glissez cette fenetre sur l'ecran TV, puis double-cliquez pour le plein ecran." FontWeight="SemiBold"/>
+                <LineBreak/>
+                <Run Text="Double-clic ou Echap : quitter le plein ecran · Clic droit : fermer" FontSize="16"/>
+            </TextBlock>
+        </Border>
+    </Grid>
+    </Viewbox>
+</Window>

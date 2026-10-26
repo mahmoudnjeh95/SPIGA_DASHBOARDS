@@ -1,4 +1,5 @@
 using System.Windows;
+using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
 
 namespace SpigaDashboards.App;
@@ -9,6 +10,7 @@ public partial class HistoryWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        WindowSizing.FitToWorkArea(this);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

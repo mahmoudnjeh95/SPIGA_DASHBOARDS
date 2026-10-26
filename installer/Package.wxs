@@ -2,9 +2,10 @@
 
   <Package Name="SPIGA Dashboards"
            Manufacturer="L2I - Leader de l'Innovation Industrielle"
-           Version="1.2.0"
+           Version="1.3.0"
            UpgradeCode="D28AD530-83ED-4FCE-BE8D-E8AAE001E645"
            InstallerVersion="500"
+           Scope="perUser"
            Compressed="yes">
 
     <SummaryInformation Description="SPIGA Dashboards - Supervision machines de controle de poids" />
@@ -18,8 +19,13 @@
     <Icon Id="SpigaIcon" SourceFile="..\src\SpigaDashboards.App\Assets\spiga.ico" />
     <Property Id="ARPPRODUCTICON" Value="SpigaIcon" />
 
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="SPIGA Dashboards" />
+    <!-- Per-user install under %LocalAppData%\Programs: no administrator
+         password (UAC prompt) is needed to install, update or open the app
+         on the production PCs. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="SPIGA Dashboards" />
+      </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">

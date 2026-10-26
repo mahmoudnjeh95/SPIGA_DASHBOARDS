@@ -1,4 +1,5 @@
 using System.Windows;
+using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
 
 namespace SpigaDashboards.App;
@@ -12,6 +13,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        WindowSizing.FitToWorkArea(this);
     }
 
     private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)

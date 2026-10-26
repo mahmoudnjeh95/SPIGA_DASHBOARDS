@@ -14,170 +14,76 @@
         Background="{DynamicResource WindowBackgroundBrush}">
 
     <Window.Resources>
-        <Style x:Key="SegmentButton" TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="14,5"/>
-            <Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="FontSize" Value="16"/>
-        </Style>
-        <!-- Filter bar: segmented buttons, captions, separators, drop-downs. -->
-        <Style x:Key="Seg" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="0,0,4,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="9,5">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="FontWeight" Value="SemiBold"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="DropToggle" TargetType="ToggleButton">
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="11,5">
-                            <ContentPresenter VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="BarCaption" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="2,0,0,3"/>
-        </Style>
-        <Style x:Key="BarSeparator" TargetType="Rectangle">
-            <Setter Property="Width" Value="1"/>
-            <Setter Property="Margin" Value="8,4,8,0"/>
-            <Setter Property="Fill" Value="{DynamicResource AppBorderBrush}"/>
-        </Style>
-        <Style x:Key="DropPanel" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="14,10"/>
-            <Setter Property="Margin" Value="0,4,0,0"/>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Views/SlideTemplates.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- "Aujourd'hui" / "Poste precedent": one machine, one poste in full + earlier postes of the day. -->
-        <DataTemplate DataType="{x:Type slides:MachineDaySlideViewModel}">
-            <views:MachineDayPanel/>
-        </DataTemplate>
-
-        <!-- Hier / semaine / mois / 3 mois / dates choisies: one machine, period totals. -->
-        <DataTemplate DataType="{x:Type slides:MachinePeriodSlideViewModel}">
-            <views:MachinePeriodPanel/>
-        </DataTemplate>
-
-        <!-- Slide 8: admin-selected external PDF (consignes, instructions, documents qualite). -->
-        <DataTemplate DataType="{x:Type slides:PdfSlideViewModel}">
-            <Grid>
-                <Image Source="{Binding PageImage}" Stretch="Uniform"
-                       Visibility="{Binding PageImage, Converter={StaticResource NullToVisibility}}"/>
-                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="20"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="700"
-                           Visibility="{Binding PageImage, Converter={StaticResource InverseNullToVisibility}}"/>
-            </Grid>
-        </DataTemplate>
-
-        <!-- Synthesis per sector: lines and their weights over month / 3 months / year. -->
-        <DataTemplate DataType="{x:Type slides:SynthesisSlideViewModel}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Grid.Resources>
-                    <!-- Highlights the button of the period shown. -->
-                    <Style x:Key="PeriodButton" TargetType="Button" BasedOn="{StaticResource SegmentButton}">
-                        <Setter Property="Command" Value="{Binding DataContext.SetSynthesisPeriodCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
-                        <Setter Property="CommandParameter" Value="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
-                    </Style>
-                </Grid.Resources>
-
-                <Grid Grid.Row="0" Margin="16,6,16,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                        <Run Text="Synthese - "/><Run Text="{Binding SectorLabel, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
-                        <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
-                        <Run Text="  ·  TRS secteur " FontSize="18"/><Run Text="{Binding SectorKpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding SectorProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                    </TextBlock>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Ce mois" Tag="Month">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Period}" Value="Month">
-                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                            <Setter Property="Foreground" Value="White"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        <Button Content="3 derniers mois" Tag="ThreeMonths">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Period}" Value="ThreeMonths">
-                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                            <Setter Property="Foreground" Value="White"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        <Button Content="Annee" Tag="Year">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Period}" Value="Year">
-                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                            <Setter Property="Foreground" Value="White"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-
-                <views:SynthesisPanel Grid.Row="1"/>
-            </Grid>
-        </DataTemplate>
+            <!-- Filter bar: segmented buttons, captions, separators, drop-downs. -->
+            <Style x:Key="Seg" TargetType="RadioButton">
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Margin" Value="0,0,4,0"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="RadioButton">
+                            <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="9,5">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="DropToggle" TargetType="ToggleButton">
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="11,5">
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="BarCaption" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Margin" Value="2,0,0,3"/>
+            </Style>
+            <Style x:Key="BarSeparator" TargetType="Rectangle">
+                <Setter Property="Width" Value="1"/>
+                <Setter Property="Margin" Value="8,4,8,0"/>
+                <Setter Property="Fill" Value="{DynamicResource AppBorderBrush}"/>
+            </Style>
+            <Style x:Key="DropPanel" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="6"/>
+                <Setter Property="Padding" Value="14,10"/>
+                <Setter Property="Margin" Value="0,4,0,0"/>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <!-- Fixed 1600x900 design canvas, scaled to fill whatever the kiosk screen's
@@ -225,6 +131,12 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+
+            <!-- Opens the dashboard-only window to drag onto the production TV. -->
+            <Button x:Name="TvScreenButton" Grid.Column="1" Content="Ecran TV" Margin="12,0,0,0" Padding="12,6"
+                    ToolTip="Ouvrir le tableau de bord seul, a glisser sur l'ecran TV (double-clic : plein ecran)"
+                    Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"
+                    Click="TvScreenButton_Click"/>
 
             <!-- Manual slide navigation + auto-rotation play/pause -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0">

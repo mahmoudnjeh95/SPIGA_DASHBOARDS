@@ -6,6 +6,10 @@
          component must default to 64-bit too (otherwise ICE80 flags them as
          32-bit components sitting inside the 64-bit Program Files folder). -->
     <Platform>x64</Platform>
+    <!-- Per-user files under LocalAppData: harvested components keep their
+         file as key path (ICE38/ICE64/ICE91 expect HKCU key paths there).
+         Windows Installer handles this fine; the ICEs are only advisory. -->
+    <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
     <DefineConstants>PublishDir=$(MSBuildProjectDirectory)\..\publish\app;DevDbFile=$(MSBuildProjectDirectory)\..\database\spiga_dashboards.db</DefineConstants>
   </PropertyGroup>
 

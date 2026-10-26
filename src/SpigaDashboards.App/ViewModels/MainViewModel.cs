@@ -38,6 +38,9 @@ public partial class MainViewModel : ObservableObject
     // the reconnect timer while rotation stays frozen.
     private bool _suspended = true;
 
+    // Set by Stop(): a load still in flight must not restart any timer.
+    private bool _stopped;
+
     [ObservableProperty] private object? currentSlide;
     [ObservableProperty] private string noteText = "";
     [ObservableProperty] private DashboardPeriod selectedPeriod = DashboardPeriod.Day;
@@ -236,9 +239,25 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (_stopped)
+            return;
         _rotationTimer.Start();
         _noteTimer.Start();
         _refreshTimer.Start();
+    }
+
+    // For a deck whose window has closed (TV screen): DispatcherTimers keep
+    // ticking, and querying the DB, until stopped.
+    public void Stop()
+    {
+        _stopped = true;
+        _suspended = true;
+        _rotationTimer.Stop();
+        _noteTimer.Stop();
+        _refreshTimer.Stop();
+        _reconnectTimer.Stop();
+        _healthCheckTimer.Stop();
+        _filterTimer.Stop();
     }
 
     // "Reconnecter" button (top bar + disconnected overlay), the automatic
@@ -653,7 +672,7 @@ public partial class MainViewModel : ObservableObject
             _reconnectTimer.Stop();
             ReconnectStatus = "";
         }
-        else if (!_reconnectTimer.IsEnabled)
+        else if (!_stopped && !_reconnectTimer.IsEnabled)
         {
             _reconnectTimer.Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds));
             _reconnectTimer.Start();

@@ -7,7 +7,7 @@
         mc:Ignorable="d"
         Title="Parametres" Icon="/Assets/spiga-logo.png" Height="800" Width="720"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         Language="fr-FR"
         Background="{DynamicResource WindowBackgroundBrush}">
 

@@ -1,0 +1,108 @@
+<!-- Slide DataTemplates shared by the operator window (MainWindow) and the
+     TV window (TvWindow): both show exactly the same slides. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:slides="clr-namespace:SpigaDashboards.App.ViewModels.Slides"
+                    xmlns:views="clr-namespace:SpigaDashboards.App.Views">
+
+    <Style x:Key="SegmentButton" TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="14,5"/>
+        <Setter Property="Margin" Value="6,0,0,0"/>
+        <Setter Property="FontSize" Value="16"/>
+    </Style>
+
+    <!-- "Aujourd'hui" / "Poste precedent": one machine, one poste in full + earlier postes of the day. -->
+    <DataTemplate DataType="{x:Type slides:MachineDaySlideViewModel}">
+        <views:MachineDayPanel/>
+    </DataTemplate>
+
+    <!-- Hier / semaine / mois / 3 mois / dates choisies: one machine, period totals. -->
+    <DataTemplate DataType="{x:Type slides:MachinePeriodSlideViewModel}">
+        <views:MachinePeriodPanel/>
+    </DataTemplate>
+
+    <!-- Slide 8: admin-selected external PDF (consignes, instructions, documents qualite). -->
+    <DataTemplate DataType="{x:Type slides:PdfSlideViewModel}">
+        <Grid>
+            <Image Source="{Binding PageImage}" Stretch="Uniform"
+                   Visibility="{Binding PageImage, Converter={StaticResource NullToVisibility}}"/>
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="20"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center" MaxWidth="700"
+                       Visibility="{Binding PageImage, Converter={StaticResource InverseNullToVisibility}}"/>
+        </Grid>
+    </DataTemplate>
+
+    <!-- Synthesis per sector: lines and their weights over month / 3 months / year. -->
+    <DataTemplate DataType="{x:Type slides:SynthesisSlideViewModel}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid.Resources>
+                <!-- Highlights the button of the period shown. -->
+                <Style x:Key="PeriodButton" TargetType="Button" BasedOn="{StaticResource SegmentButton}">
+                    <Setter Property="Command" Value="{Binding DataContext.SetSynthesisPeriodCommand, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                    <Setter Property="CommandParameter" Value="{Binding Tag, RelativeSource={RelativeSource Self}}"/>
+                </Style>
+            </Grid.Resources>
+
+            <Grid Grid.Row="0" Margin="16,6,16,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Text="Synthese - "/><Run Text="{Binding SectorLabel, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
+                    <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
+                    <Run Text="  ·  TRS secteur " FontSize="18"/><Run Text="{Binding SectorKpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding SectorProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                </TextBlock>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Ce mois" Tag="Month">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Period}" Value="Month">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="3 derniers mois" Tag="ThreeMonths">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Period}" Value="ThreeMonths">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="Annee" Tag="Year">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Period}" Value="Year">
+                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <views:SynthesisPanel Grid.Row="1"/>
+        </Grid>
+    </DataTemplate>
+</ResourceDictionary>
