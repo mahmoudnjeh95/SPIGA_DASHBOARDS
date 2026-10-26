@@ -24,6 +24,8 @@ public class ShiftSummaryViewModel
     public string TargetWeightsText => Kpis.Weights.Count == 0
         ? "Pas de donnees de poids"
         : "Cible " + string.Join(" · ", Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"));
+    // Net weight produced by the team over the poste, all weights together.
+    public string ProductionText => KpiCalculator.FormatMass(Kpis.ProductionKg);
 
     // Main poste only: per hour of the poste, up to now.
     public ChartParts OnOffChart { get; init; } = ChartParts.Empty();

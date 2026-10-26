@@ -31,7 +31,7 @@
                         <Run Text=" - Poste "/><Run Text="{Binding ShiftName, Mode=OneWay}"/>
                         <Run Text=" ("/><Run Text="{Binding TimeRange, Mode=OneWay}"/><Run Text=")"/>
                     </TextBlock>
-                    <UniformGrid Rows="1" Columns="6">
+                    <UniformGrid Rows="1" Columns="7">
                         <StackPanel>
                             <TextBlock Text="TRS" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
@@ -40,6 +40,10 @@
                         <StackPanel>
                             <TextBlock Text="Poids moyen" Style="{StaticResource CardLabel}"/>
                             <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="26" SmallFontSize="16" ShowTargetWhenSingle="False"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Production" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="{Binding ProductionText}" Style="{StaticResource CardValue}"/>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="Conformite" Style="{StaticResource CardLabel}"/>
