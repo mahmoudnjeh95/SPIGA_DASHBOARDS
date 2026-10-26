@@ -52,7 +52,7 @@ powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action screensh
 powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action click -Name Historique
 powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action screenshot -OutFile C:\tmp\shots\history.png
 powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action click -Name Fermer
-powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action select -Name "Cette semaine"
+powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action select -Name "Semaine"
 powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action gettext -Name NoteTextBox
 ```
 
@@ -64,7 +64,7 @@ powershell -File .claude\skills\run-spiga-dashboards\driver.ps1 -Action gettext 
 | `screenshot -OutFile <path>` | Restores+foregrounds the main window, saves a PNG crop of it |
 | `listelements` | Dumps every named UI Automation element (Name + ControlType) - use this first when you don't know a control's exact name |
 | `click -Name <text>` | Invokes a Button by its displayed text (e.g. `Historique`, `Parametres`, `Fermer`, `Annuler`, `Mode clair`/`Mode sombre`) |
-| `select -Name <period>` | Sets the top-bar period ComboBox to `Aujourd'hui` / `Poste precedent` / `Hier` / `Cette semaine` / `Ce mois` / `3 derniers mois` / `Dates choisies` (keyboard-driven - see Gotchas) |
+| `select -Name <button>` | Selects a filter-bar button: period (`Aujourd'hui` / `Poste prec.` / `Hier` / `Semaine` / `Mois` / `3 mois` / `Dates...`), sector (`Couscous`...) or poste (`Matin`...) |
 | `settext -Name <name> -Text <value>` | Sets a text control's value (e.g. `NoteTextBox`) |
 | `gettext -Name <name>` | Reads a text control's current value |
 | `close` | `WindowPattern.Close()` on the main window (graceful) |
@@ -102,14 +102,11 @@ other than not being scriptable.
   only supported `InvokePattern`, not `WindowPattern`. Always scope
   searches under the app's own window element first (`Get-AppWindowElement`
   in the driver does this) rather than searching from the root.
-- **The period ComboBox's items support no `SelectionItemPattern` and no
-  `InvokePattern`** (only `SynchronizedInputPattern`) in this WPF build -
-  calling `.Select()` or `.Invoke()` on a `ComboBoxItem` throws
-  `"Unsupported Pattern"`. The working approach is keyboard-driven:
-  focus the ComboBox, send `{HOME}` (jumps to index 0), send `{DOWN}`
-  N times, send `{ENTER}`. `driver.ps1 -Action select` implements this;
-  it hardcodes the 7-item order (`Aujourd'hui` ... `Dates choisies`)
-  from `MainWindow.xaml` - update that list if items are added/reordered.
+- **The period, sector and poste filters are RadioButtons** in the filter bar
+  under the top bar (no ComboBox any more): `select` uses their
+  `SelectionItemPattern`. The machine list and the "Dates..." pickers are
+  WPF Popups, i.e. separate windows: a window capture (PrintWindow) doesn't
+  show them, and their checkboxes aren't under the main window element.
 - **Two buttons are both literally named "Enregistrer"**: the sticky-note
   save button in `MainWindow.xaml` and the Parametres dialog's save
   button in `SettingsWindow.xaml`. Neither has an `x:Name`/`AutomationId`

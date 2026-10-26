@@ -299,6 +299,164 @@ def build(csv_path, shift_to_now, densify_factor, fill_month=False):
     conn.close()
 
 
+# --- Synthetic data (--synthetic DAYS) -------------------------------------
+# The CSV export only covers a few lines and its weights fail the app's
+# sanity checks. This mode generates every machine instead: realistic
+# productions per line (two articles / weights each), stops, changeovers, a
+# target weight changed mid-production now and then (Stiavelli does that
+# without opening a new ID_produzione), sane running averages and a lotto
+# table with real lot averages.
+
+# Per line: articles (code, name, target g) and actual speed / nominal cadence.
+# The weight is the target, not part of the name: an article runs in several weights.
+SYNTH_LINES = {
+    "CC01": ([("COUSCOUSFIN", "Couscous fin", 1000), ("COUSCOUSFIN", "Couscous fin", 500)], 0.90),
+    "CC02": ([("COUSCOUSMOYEN", "Couscous moyen", 1000), ("COUSCOUSMOYEN", "Couscous moyen", 500)], 0.88),
+    "CC03": ([("COUSCOUSGROS", "Couscous gros", 1000), ("COUSCOUSFIN", "Couscous fin", 500)], 0.84),
+    "CC04": ([("COUSCOUSMOYEN", "Couscous moyen", 500), ("COUSCOUSFIN", "Couscous fin", 1000)], 0.78),
+    "PC01": ([("PENNE", "Penne", 500), ("COQUILLETTES", "Coquillettes", 400)], 0.86),
+    "PC02": ([("FUSILLI", "Fusilli", 500), ("PENNE", "Penne", 400)], 0.90),
+    "PC03": ([("MACARONI", "Macaroni", 500), ("FUSILLI", "Fusilli", 400)], 0.82),
+    "PL01": ([("SPAGHETTI", "Spaghetti", 500), ("SPAGHETTI", "Spaghetti", 1000)], 0.88),
+    "PL02": ([("TAGLIATELLE", "Tagliatelle", 500), ("SPAGHETTI", "Spaghetti", 1000)], 0.85),
+    "PL03": ([("LINGUINE", "Linguine", 500), ("SPAGHETTI", "Spaghetti", 500)], 0.75),
+}
+
+# Same defaults as the app's Parametres cadence table (bags/min per weight).
+SYNTH_NOMINAL = {400: 50, 500: 45, 1000: 20}
+
+
+def synth_code(code):
+    # Stiavelli article codes are CHAR(20), zero-padded on the left.
+    return code.rjust(20, "0")[:20]
+
+
+def build_synthetic(days, cadence_minutes, seed):
+    import random
+    rnd = random.Random(seed)
+
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.executescript(DDL)
+    conn.executescript("""
+CREATE TABLE lotto (
+    ID_produzione   TEXT,
+    ora_fine        TEXT,
+    dimensione      INTEGER,
+    media_effettiva REAL
+);
+CREATE INDEX IX_lotto_ora_fine ON lotto(ora_fine);
+""")
+    conn.executemany("INSERT INTO Machines VALUES (?,?,?,?,?,1)", MACHINES)
+    conn.executemany("INSERT INTO Shifts VALUES (?,?,?,?)", SHIFTS)
+
+    products = {}
+    for articles, _ in SYNTH_LINES.values():
+        for code, name, weight in articles:
+            products[synth_code(code)] = (name, weight)
+    conn.executemany(
+        "INSERT INTO Products (Code, ProductName, TargetWeightGrams) VALUES (?,?,?)",
+        [(code, name, weight) for code, (name, weight) in products.items()],
+    )
+
+    step = timedelta(minutes=cadence_minutes)
+    now = datetime.now().replace(second=0, microsecond=0)
+    now -= timedelta(minutes=now.minute % cadence_minutes)
+    start = (now - timedelta(days=days)).replace(hour=0, minute=0)
+
+    snapshots, lots = [], []
+    for line, (articles, efficiency) in SYNTH_LINES.items():
+        bias = rnd.uniform(-1.5, 6.0)          # line's habitual over/under weight (g)
+        t = start + timedelta(seconds=rnd.randint(0, 59))
+        article_index = 0
+        while t < now:
+            # One production = one article run of 1 to 3 days.
+            code, _, target = articles[article_index % len(articles)]
+            article_index += 1
+            prod_start = t
+            prod_end = min(now, t + timedelta(hours=rnd.randint(20, 72)))
+            prod_id = f"{line}{synth_code(code)}{prod_start:%d.%m.%Y-%H:%M:%S}"
+            # Now and then the operator changes the set weight mid-run.
+            change_at = prod_start + (prod_end - prod_start) * rnd.uniform(0.4, 0.8) if rnd.random() < 0.25 else None
+            other_weight = next((w for _, _, w in articles if w != target), target)
+            counters = dict(tot=0, sotto=0, ok=0, sopra=0, indet=0, metal=0)
+            weight_sum, lot_bags, lot_sum, lot_target = 0.0, 0, 0.0, target
+            running, stop_left = True, 0
+            pmin, pmax = None, None
+            while t < prod_end:
+                t += step
+                current = other_weight if change_at and t >= change_at else target
+                nominal = SYNTH_NOMINAL.get(current, 30)
+                # Stops: short micro-stops, longer breakdowns, quieter nights.
+                if stop_left > 0:
+                    stop_left -= 1
+                    running = stop_left == 0
+                elif rnd.random() < (0.05 if 6 <= t.hour < 22 else 0.08):
+                    stop_left = rnd.choice([1, 1, 2, 3, 6, 12])
+                    running = False
+                # Stiavelli closes the running lot when the set weight changes.
+                if lot_bags and current != lot_target:
+                    lots.append((prod_id, t.strftime(TS_FORMAT), lot_bags, round(lot_sum / lot_bags, 2)))
+                    lot_bags, lot_sum = 0, 0.0
+                lot_target = current
+                bags = 0
+                if running:
+                    bags = max(0, int(nominal * efficiency * rnd.uniform(0.85, 1.08) * cadence_minutes))
+                if bags:
+                    under = int(bags * rnd.uniform(0.002, 0.012))
+                    over = int(bags * rnd.uniform(0.002, 0.010))
+                    indet = int(bags * rnd.uniform(0, 0.001))
+                    counters["sotto"] += under
+                    counters["sopra"] += over
+                    counters["indet"] += indet
+                    counters["ok"] += bags - under - over - indet
+                    counters["tot"] += bags
+                    counters["metal"] += 1 if rnd.random() < 0.01 else 0
+                    avg = current + bias + rnd.gauss(0, 0.8)
+                    weight_sum += avg * bags
+                    lot_bags += bags
+                    lot_sum += avg * bags
+                    pmin = min(pmin or current, current * rnd.uniform(0.965, 0.985))
+                    pmax = max(pmax or current, current * rnd.uniform(1.02, 1.04))
+                # A lot is closed every ~15 min of production.
+                if lot_bags and (lot_bags >= nominal * 15 or not running):
+                    lots.append((prod_id, t.strftime(TS_FORMAT), lot_bags, round(lot_sum / lot_bags, 2)))
+                    lot_bags, lot_sum = 0, 0.0
+                media = round(weight_sum / counters["tot"], 1) if counters["tot"] else 0
+                snapshots.append((
+                    prod_id, line, prod_start.strftime(TS_FORMAT), t.strftime(TS_FORMAT),
+                    1 if t >= prod_end and prod_end < now else 0, synth_code(code), "", 0, line,
+                    current, pmax, pmin, counters["tot"], counters["sotto"], counters["ok"],
+                    counters["sopra"], counters["indet"], media, round(rnd.uniform(1.5, 3.5), 2), counters["metal"],
+                ))
+            # Changeover: 20 to 60 min without snapshot growth.
+            t += timedelta(minutes=rnd.randint(20, 60))
+
+    snapshots.sort(key=lambda r: (r[3], r[1]))
+    conn.executemany(
+        "INSERT INTO produzione (ID_produzione, numero_linea, tempo_inizio, tempo_fine, terminata, codice_articolo,"
+        " operatore, turno, linea_produzione, peso_netto_impostato, peso_max_registrato, peso_min_registrato,"
+        " totale_confezioni, confezioni_sotto_toll, confezioni_ok, confezioni_sopra_toll, confezioni_indeterminate,"
+        " media_totale, deviazione_std, espulsi_metal) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        snapshots,
+    )
+    conn.executemany("INSERT INTO lotto VALUES (?,?,?,?)", lots)
+    conn.execute(
+        "INSERT INTO Notes (Content, CreatedByEmployeeId, CreatedAt, IsActive) VALUES (?,?,?,1)",
+        ("Base de dev : donnees synthetiques pour toutes les machines.", 1, datetime.now().strftime(TS_FORMAT)),
+    )
+    conn.commit()
+
+    span = conn.execute("SELECT MIN(tempo_fine), MAX(tempo_fine) FROM produzione").fetchone()
+    print(f"{DB_PATH}: {len(snapshots)} snapshots, {len(lots)} lots, {span[0]} -> {span[1]}")
+    for machine_id, count, weights in conn.execute(
+        "SELECT numero_linea, COUNT(*), GROUP_CONCAT(DISTINCT peso_netto_impostato) FROM produzione GROUP BY 1 ORDER BY 1"
+    ):
+        print(f"  {machine_id}: {count} snapshots, weights {weights}")
+    conn.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--csv", default=DEFAULT_CSV, help="produzione export (';'-separated)")
@@ -307,6 +465,14 @@ if __name__ == "__main__":
                         help="interpolate N snapshots per original interval (simulates a faster cadence)")
     parser.add_argument("--fill-month", action="store_true",
                         help="clone the newest days back to the 1st of the current month")
+    parser.add_argument("--synthetic", type=int, default=0, metavar="DAYS",
+                        help="generate DAYS of synthetic data for every machine instead of reading the CSV")
+    parser.add_argument("--cadence", type=int, default=5, metavar="MIN",
+                        help="snapshot interval of --synthetic, in minutes (default 5)")
+    parser.add_argument("--seed", type=int, default=42, help="random seed of --synthetic")
     args = parser.parse_args()
+    if args.synthetic > 0:
+        build_synthetic(args.synthetic, args.cadence, args.seed)
+        raise SystemExit
     build(os.path.abspath(args.csv), shift_to_now=not args.no_shift, densify_factor=args.densify,
           fill_month=args.fill_month)

@@ -127,13 +127,13 @@
             <StackPanel>
                 <TextBlock Text="Vitesse moy. / max" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Style="{StaticResource SummaryValue}">
-                    <Run Text="{Binding Summary.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    <Run Text="{Binding Summary.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                     <Run Text="{Binding Summary.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ &#x2014;', Mode=OneWay, ConverterCulture=fr-FR}"/>
                 </TextBlock>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Taux conformite" Style="{StaticResource SummaryLabel}"/>
-                <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource SummaryValue}"/>
+                <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
                 <TextBlock Text="Sous / sur tolerance" Style="{StaticResource SummaryLabel}"/>

@@ -16,10 +16,8 @@
   click       - invoke a Button (or any element supporting InvokePattern) by -Name.
   settext     - set a text control's value by -Name to -Text (falls back to click+SendKeys).
   gettext     - print the Name.Value / text content of the element named -Name.
-  select      - select an item in the top-bar period ComboBox by -Name (one of
-                "Aujourd'hui", "Poste precedent", "Hier", "Cette semaine", "Ce mois", "3 derniers mois", "Dates choisies" - see Gotchas: its
-                ComboBoxItems expose no SelectionItemPattern, so this drives it
-                by keyboard (Home + Down x N + Enter), not by clicking the item).
+  select      - select a filter-bar button by -Name: a period ("Aujourd'hui", "Poste prec.",
+                "Hier", "Semaine", "Mois", "3 mois", "Dates..."), a sector or a poste.
   close       - gracefully close the app (WindowPattern.Close on the main window).
   kill        - Stop-Process the app (last resort).
 
@@ -230,37 +228,20 @@ public class Win32Driver {
 
     'select' {
         if (-not $Name) { throw "-Name is required for select." }
-        # The period ComboBoxItems (MainWindow.xaml) support only SynchronizedInputPattern in
-        # this WPF build - no SelectionItemPattern, no InvokePattern - so Select()/Invoke() on
-        # the item throws "Unsupported Pattern". Driving it by keyboard (Home resets to index 0,
-        # then Down N times) is the verified-working path. Extend $order if new items are added.
-        $order = @("Aujourd'hui", "Poste precedent", "Hier", "Cette semaine", "Ce mois", "3 derniers mois", "Dates choisies")
-        $targetIndex = [array]::IndexOf($order, $Name)
-        if ($targetIndex -lt 0) { throw "Unknown period '$Name'. Expected one of: $($order -join ', ')" }
-
+        # Filter bar segments (MainWindow.xaml) are RadioButtons: select one by
+        # its text - a period ("Aujourd'hui", "Poste prec.", "Hier", "Semaine",
+        # "Mois", "3 mois", "Dates..."), a sector ("Tous", "Couscous",
+        # "Pate courte", "Pate longue") or a poste ("Matin", "Soir", "Nuit").
+        # "Tous" exists in both the sector and the poste groups: the first one
+        # (sector) is selected.
         $win = Get-AppWindowElement
         Add-UiaAssemblies
-        Add-Type -AssemblyName System.Windows.Forms
-        $comboCond = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-            [System.Windows.Automation.ControlType]::ComboBox)
-        $combo = $win.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $comboCond)
-        if (-not $combo) { throw "No ComboBox found in window." }
-
-        Set-Foreground -WinElement $win
-        $combo.SetFocus()
-        [System.Windows.Forms.SendKeys]::SendWait('{HOME}')
-        Start-Sleep -Milliseconds 200
-        for ($i = 0; $i -lt $targetIndex; $i++) {
-            [System.Windows.Forms.SendKeys]::SendWait('{DOWN}')
-            Start-Sleep -Milliseconds 150
-        }
-        [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
-        Start-Sleep -Milliseconds 200
-
-        $sel = $combo.GetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern)
-        $current = ($sel.Current.GetSelection() | Select-Object -First 1).Current.Name
-        if ($current -ne $Name) { throw "Selection ended on '$current', expected '$Name'." }
+        $cond = New-Object System.Windows.Automation.AndCondition(
+            (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::RadioButton)),
+            (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)))
+        $radio = $win.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+        if (-not $radio) { throw "No filter-bar button named '$Name'." }
+        $radio.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
         Write-Output "Selected '$Name'"
     }
 

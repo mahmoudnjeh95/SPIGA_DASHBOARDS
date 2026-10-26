@@ -88,13 +88,16 @@ public class MachineDaySlideViewModel
         if (production == null)
             return "Aucune donnee recue de StatsViewer depuis 6 h";
 
-        var state = production.IsTerminated ? "Production terminee" : "Production en cours";
+        var state = production.IsTerminated ? "Terminee" : "En cours";
         // Lots of this production in the loaded period first (real lot
         // averages); otherwise Stiavelli's running average, if it looks sane.
         var avgWeight = KpiCalculator.ProductionAverageWeight(lots, production.ProductionId, production.TargetNetWeight) ?? production.AvgWeight;
-        var weight = avgWeight is { } avg ? string.Create(French, $" - moyen {avg:0.0} g / cible {production.TargetNetWeight:0} g") : "";
+        var weight = avgWeight is { } avg ? string.Create(French, $"  ·  moyen {avg:0.0} g") : "";
         var quality = production.TotalBags > 0 ? string.Create(French, $"{production.QualityPercent:0.0} %") : "— %";
-        return string.Create(French, $"{state} : {production.ProductName} depuis le {production.StartTime:dd/MM/yyyy HH:mm} - ") +
-               string.Create(French, $"{production.TotalBags:N0} sacs, {quality} conformes{weight}");
+        var since = production.StartTime.Date == DateTime.Now.Date
+            ? $"depuis {production.StartTime:HH:mm}"
+            : $"depuis le {production.StartTime:dd/MM HH:mm}";
+        return string.Create(French, $"{state} : {production.ProductName} {production.TargetNetWeight:0} g  ·  {since}  ·  ") +
+               string.Create(French, $"{production.TotalBags:N0} sacs  ·  {quality} conformes{weight}").Replace(' ', ' ');
     }
 }

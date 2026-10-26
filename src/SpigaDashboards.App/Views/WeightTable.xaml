@@ -6,7 +6,8 @@
 
     <!-- "Production par poids": one row per target weight the line ran
          (WeightKpi): bags, net weight produced, net average weight, deviation,
-         weight given away, TRS. Text size follows ValueFontSize. -->
+         weight given away, TRS. Two-line cells (value + detail) so nothing is
+         cut off in the narrow layouts. Text size follows ValueFontSize. -->
     <UserControl.Resources>
         <Style x:Key="Head" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
@@ -16,42 +17,67 @@
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="FontSize" Value="{Binding ValueFontSize, ElementName=Root}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </Style>
+        <!-- Compact (synthesis cards): one line per weight, details hidden. -->
+        <Style x:Key="Detail" TargetType="TextBlock">
+            <Setter Property="Visibility" Value="{Binding DetailVisibility, ElementName=Root}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="{Binding HeaderFontSize, ElementName=Root}"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
     </UserControl.Resources>
 
     <StackPanel>
-        <UniformGrid Rows="1" Columns="7" Margin="0,0,0,2">
-            <TextBlock Text="Poids cible" Style="{StaticResource Head}"/>
-            <TextBlock Text="Sacs" Style="{StaticResource Head}"/>
-            <TextBlock Text="Production" Style="{StaticResource Head}"/>
-            <TextBlock Text="Poids moyen" Style="{StaticResource Head}"/>
-            <TextBlock Text="Ecart" Style="{StaticResource Head}"/>
-            <TextBlock Text="Surpoids" Style="{StaticResource Head}"/>
-            <TextBlock Text="TRS" Style="{StaticResource Head}"/>
-        </UniformGrid>
+        <Grid Margin="0,0,0,2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.5*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="1.1*"/>
+                <ColumnDefinition Width="1.1*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="0.8*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Poids / produit" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="1" Text="Sacs" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="2" Text="Production" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="3" Text="Poids moyen" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="4" Text="Ecart" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="5" Text="Surpoids" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="6" Text="TRS" Style="{StaticResource Head}"/>
+        </Grid>
         <ItemsControl ItemsSource="{Binding Weights, ElementName=Root}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type models:WeightKpi}">
                     <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="0,3">
-                        <UniformGrid Rows="1" Columns="7">
-                            <TextBlock Style="{StaticResource Cell}" ToolTip="{Binding ProductName}">
-                                <Run Text="{Binding TargetWeight, StringFormat={}{0:0} g, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                                <Run Text="{Binding ProductName, Mode=OneWay}" FontWeight="Normal" FontSize="13" Foreground="{DynamicResource SubtleTextBrush}"/>
-                            </TextBlock>
-                            <TextBlock Text="{Binding TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource Cell}"/>
-                            <TextBlock Text="{Binding ProductionText}" Style="{StaticResource Cell}"/>
-                            <TextBlock Text="{Binding AvgWeight, StringFormat={}{0:N1} g, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"/>
-                            <TextBlock Style="{StaticResource Cell}" Foreground="{Binding DeviationSeverity, Converter={StaticResource SeverityBrush}}">
-                                <Run Text="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                                <Run Text="{Binding DeviationPercent, StringFormat=({0:+0.00;-0.00;0.00} %), TargetNullValue='', Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Normal" FontSize="13"/>
-                            </TextBlock>
-                            <TextBlock Text="{Binding GiveawayText}" Style="{StaticResource Cell}"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.5*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1.1*"/>
+                                <ColumnDefinition Width="1.1*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="0.8*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" ToolTip="{Binding ProductName}">
+                                <TextBlock Text="{Binding TargetWeight, StringFormat={}{0:0} g}" Style="{StaticResource Cell}"/>
+                                <TextBlock Text="{Binding ProductName}" Style="{StaticResource Detail}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource Cell}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding ProductionText}" Style="{StaticResource Cell}"/>
+                            <TextBlock Grid.Column="3" Text="{Binding AvgWeight, StringFormat={}{0:N1} g, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"/>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"
+                                           Foreground="{Binding DeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
+                                <TextBlock Text="{Binding DeviationPercent, StringFormat={}{0:+0.00;-0.00;0.00} %, TargetNullValue=''}" Style="{StaticResource Detail}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="5" Text="{Binding GiveawayText}" Style="{StaticResource Cell}"
                                        Foreground="{Binding DeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
-                            <TextBlock Text="{Binding TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"
+                            <TextBlock Grid.Column="6" Text="{Binding TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource Cell}"
                                        Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
-                        </UniformGrid>
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

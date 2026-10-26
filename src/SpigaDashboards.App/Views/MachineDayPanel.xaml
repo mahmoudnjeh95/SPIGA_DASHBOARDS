@@ -39,19 +39,17 @@
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="Poids moyen" Style="{StaticResource CardLabel}"/>
-                            <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                                <TextBlock Text="{Binding AvgWeightText}" Style="{StaticResource CardValue}"/>
-                            </Viewbox>
+                            <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="26" SmallFontSize="16" ShowTargetWhenSingle="False"/>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="Conformite" Style="{StaticResource CardLabel}"/>
-                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource CardValue}"
+                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="Vit. moy / max" Style="{StaticResource CardLabel}"/>
                             <TextBlock Style="{StaticResource CardValue}">
-                                <Run Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                                <Run Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                                 <Run Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ —', Mode=OneWay, ConverterCulture=fr-FR}" FontSize="18" Foreground="{DynamicResource SecondaryTextBrush}"/>
                             </TextBlock>
                         </StackPanel>
@@ -79,6 +77,29 @@
         </Grid.RowDefinitions>
 
         <views:MachineHeader Grid.Row="0"/>
+        <!-- Main poste / team, on the header's second line -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,0,10,6" DataContext="{Binding Main}"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <Border CornerRadius="10" Padding="12,2" VerticalAlignment="Center">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding StateLabel}" FontSize="15" FontWeight="Bold" Foreground="White"/>
+            </Border>
+            <TextBlock Margin="12,0,0,0" FontSize="22" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}">
+                <Run Text="{Binding TeamName, Mode=OneWay}"/>
+                <Run Text=" - Poste " Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/><Run Text="{Binding ShiftName, Mode=OneWay}" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
+                <Run Text=" (" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/><Run Text="{Binding TimeRange, Mode=OneWay}" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/><Run Text=")" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/>
+            </TextBlock>
+        </StackPanel>
+
 
         <!-- Main poste / team -->
         <Grid Grid.Row="1" DataContext="{Binding Main}">
@@ -98,27 +119,6 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,0,10,0">
-                <Border CornerRadius="10" Padding="12,2" VerticalAlignment="Center">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                    <TextBlock Text="{Binding StateLabel}" FontSize="15" FontWeight="Bold" Foreground="White"/>
-                </Border>
-                <TextBlock Margin="12,0,0,0" FontSize="26" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}">
-                    <Run Text="{Binding TeamName, Mode=OneWay}"/>
-                    <Run Text=" - Poste " Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/><Run Text="{Binding ShiftName, Mode=OneWay}" Foreground="{DynamicResource SecondaryTextBrush}" FontWeight="SemiBold"/>
-                    <Run Text=" (" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/><Run Text="{Binding TimeRange, Mode=OneWay}" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/><Run Text=")" Foreground="{DynamicResource SubtleTextBrush}" FontWeight="Normal"/>
-                </TextBlock>
-            </StackPanel>
-
             <UniformGrid Grid.Row="1" Rows="1" Columns="5">
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
@@ -133,7 +133,7 @@
                         <TextBlock Style="{StaticResource KpiSubtext}">
                             <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
                             <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
@@ -141,7 +141,7 @@
                     <StackPanel>
                         <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Style="{StaticResource KpiValue}"/>
+                            <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"/>
                         </Viewbox>
                         <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtext}"/>
                     </StackPanel>
@@ -149,17 +149,14 @@
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabel}"/>
-                        <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding AvgWeightText}" Style="{StaticResource KpiValue}"/>
-                        </Viewbox>
-                        <TextBlock Text="{Binding TargetWeightsText}" Style="{StaticResource KpiSubtext}" TextTrimming="CharacterEllipsis"/>
+                        <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="44" SmallFontSize="26"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTile}">
                     <StackPanel>
                         <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%}" Style="{StaticResource KpiValue}"
+                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </Viewbox>
                         <TextBlock Style="{StaticResource KpiSubtext}">

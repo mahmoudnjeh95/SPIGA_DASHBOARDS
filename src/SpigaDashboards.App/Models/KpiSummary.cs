@@ -9,7 +9,7 @@ public class KpiSummary
     public long BagsInTolerance { get; set; }
     public long BagsOverTolerance { get; set; }
     public long BagsIndeterminate { get; set; }
-    public double SpeedBagsPerMinute { get; set; }
+    public double? SpeedBagsPerMinute { get; set; }
     public long MetalRejects { get; set; }
 
     // Fastest snapshot interval of the period (bags/min), null = none measured.
@@ -20,7 +20,7 @@ public class KpiSummary
     // was produced (shown as "—", never as a made-up 0 %).
     public double AvailabilityPercent { get; set; }
     public double? PerformancePercent { get; set; }
-    public double QualityPercent { get; set; }
+    public double? QualityPercent { get; set; }
     public double? TrsPercent { get; set; }
 
     // Bags-weighted (net AvgWeight - TargetNetWeight), grams and % of the
@@ -51,9 +51,9 @@ public class WeightKpi
     public double? DeviationPercent { get; set; }
     public double ProductionKg { get; set; }
     public double? GiveawayKg { get; set; }
-    public double QualityPercent { get; set; }
+    public double? QualityPercent { get; set; }
     public double? TrsPercent { get; set; }
-    public double SpeedBagsPerMinute { get; set; }
+    public double? SpeedBagsPerMinute { get; set; }
     public double? MaxSpeedBagsPerMinute { get; set; }
     public KpiSeverity DeviationSeverity { get; set; }
     public KpiSeverity TrsSeverity { get; set; }

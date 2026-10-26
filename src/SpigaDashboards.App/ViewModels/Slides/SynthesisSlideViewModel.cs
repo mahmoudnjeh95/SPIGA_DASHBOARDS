@@ -28,7 +28,6 @@ public class SynthesisSlideViewModel
     public SynthesisPeriod Period { get; init; }
     public string PeriodLabel { get; init; } = "";
     public string FilterLabel { get; init; } = "";
-    public string FilterSuffix => FilterLabel.Length == 0 ? "" : "  ·  Filtre : " + FilterLabel;
     public KpiSummary SectorKpis { get; init; } = new();
     public string SectorProductionText => KpiCalculator.FormatMass(SectorKpis.ProductionKg);
     public IReadOnlyList<SynthesisLineRow> Lines { get; init; } = Array.Empty<SynthesisLineRow>();
@@ -60,6 +59,12 @@ public class SynthesisSlideViewModel
     {
         var now = DateTime.Now;
         var (from, to, label) = PeriodRanges.Synthesis(period, now);
+        // Nothing before DataStartDate is read: start the charts there, and say so.
+        if (from < settings.DataStartDate && to > settings.DataStartDate)
+        {
+            from = settings.DataStartDate.Date;
+            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+        }
 
         // Day buckets are enough unless postes / teams are filtered.
         var size = filter.FiltersByPosteOrTeam ? BucketSize.Hour : BucketSize.Day;

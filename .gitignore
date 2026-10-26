@@ -15,3 +15,6 @@ installer/obj/
 
 # NuGet
 *.nupkg
+
+# Office lock files
+~$*

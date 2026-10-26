@@ -5,6 +5,8 @@
              xmlns:conv="clr-namespace:SpigaDashboards.App.Converters">
     <Application.Resources>
         <conv:EnumToBoolConverter x:Key="EnumToBool"/>
+        <conv:ValueToBoolConverter x:Key="ValueToBool"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <conv:InverseBoolConverter x:Key="InverseBool"/>
         <conv:TestResultBrushConverter x:Key="TestResultBrush"/>
         <conv:SqlLoginVisibilityConverter x:Key="SqlLoginVisibility"/>

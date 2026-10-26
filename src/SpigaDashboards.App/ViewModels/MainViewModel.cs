@@ -56,28 +56,44 @@ public partial class MainViewModel : ObservableObject
     // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
     [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
 
-    // Filtres panel. Edits only take effect on "Appliquer" (one deck rebuild,
-    // not one per click); _filter is what the slides currently use.
+    // Filter bar. Every change applies on its own (no "Appliquer"); a short
+    // debounce turns a burst of clicks into one deck rebuild. _filter is what
+    // the slides currently use.
     public const string AllOption = "Tous";
     private DashboardFilter _filter = DashboardFilter.None;
+    private readonly DispatcherTimer _filterTimer;
 
-    [ObservableProperty] private bool isFilterPanelOpen;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilter))]
     private string activeFilterLabel = "";
 
     public bool HasActiveFilter => ActiveFilterLabel.Length > 0;
-    [ObservableProperty] private DateTime? customFrom = DateTime.Now.Date.AddDays(-7);
-    [ObservableProperty] private DateTime? customTo = DateTime.Now.Date;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CustomRangeLabel))]
+    private DateTime? customFrom = DateTime.Now.Date.AddDays(-7);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CustomRangeLabel))]
+    private DateTime? customTo = DateTime.Now.Date;
+
     [ObservableProperty] private string filterSector = AllOption;
     [ObservableProperty] private string filterShift = AllOption;
     [ObservableProperty] private string filterTeam = AllOption;
     [ObservableProperty] private string filterWeight = AllOption;
+    [ObservableProperty] private bool isDatePickerOpen;
+    [ObservableProperty] private string machineFilterLabel = "Toutes";
 
-    public List<string> SectorOptions { get; } = new[] { AllOption }.Concat(SectorOrder).ToList();
-    public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Soir", "Nuit" };
+    // "Dates..." button: shows the chosen range once that period is selected.
+    public string CustomRangeLabel => SelectedPeriod == DashboardPeriod.Custom
+        ? $"{CustomFrom:dd/MM} - {CustomTo:dd/MM}"
+        : "Dates...";
+
     public ObservableCollection<string> TeamOptions { get; } = new();
     public ObservableCollection<string> WeightOptions { get; } = new();
+
+    // Every machine of the rotation; the picker only lists the chosen sector's.
+    private readonly List<MachineFilterOption> _allMachineOptions = new();
     public ObservableCollection<MachineFilterOption> MachineOptions { get; } = new();
 
     public DashboardFilter CurrentFilter => _filter;
@@ -92,6 +108,13 @@ public partial class MainViewModel : ObservableObject
         _repository = repository;
         _settings = settings;
         _teamSchedule = teamSchedule;
+
+        _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _filterTimer.Tick += async (_, _) =>
+        {
+            _filterTimer.Stop();
+            await ApplyFiltersAsync();
+        };
         RefreshFilterOptions();
 
         // Timer handlers are async void: RunGuardedAsync makes sure no
@@ -259,31 +282,60 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedPeriodChanged(DashboardPeriod value)
     {
-        // Dates are chosen in the Filtres panel.
+        OnPropertyChanged(nameof(CustomRangeLabel));
+        // "Dates..." opens the date pickers right away.
         if (value == DashboardPeriod.Custom)
-            IsFilterPanelOpen = true;
+            IsDatePickerOpen = true;
         _ = ShowSlideAsync(_currentIndex);
     }
 
-    [RelayCommand]
-    private void ToggleFilterPanel() => IsFilterPanelOpen = !IsFilterPanelOpen;
+    partial void OnCustomFromChanged(DateTime? value) => OnCustomDatesChanged();
+    partial void OnCustomToChanged(DateTime? value) => OnCustomDatesChanged();
 
-    [RelayCommand]
+    private void OnCustomDatesChanged()
+    {
+        if (SelectedPeriod == DashboardPeriod.Custom)
+            QueueFilterApply();
+    }
+
+    // A new sector lists its own machines, all selected.
+    partial void OnFilterSectorChanged(string value)
+    {
+        ShowSectorMachines();
+        QueueFilterApply();
+    }
+
+    partial void OnFilterShiftChanged(string value) => QueueFilterApply();
+    partial void OnFilterTeamChanged(string value) => QueueFilterApply();
+    partial void OnFilterWeightChanged(string value) => QueueFilterApply();
+
+    private void QueueFilterApply()
+    {
+        // Called from property initializers / RefreshFilterOptions before the timer exists.
+        if (_filterTimer == null)
+            return;
+        _filterTimer.Stop();
+        _filterTimer.Start();
+    }
+
     private async Task ApplyFiltersAsync()
     {
         var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineId).ToList();
         _filter = new DashboardFilter
         {
             Sector = FilterSector == AllOption ? null : FilterSector,
-            // Every machine ticked = no machine filter.
+            // Every machine of the sector ticked = no machine filter.
             MachineIds = selected.Count == MachineOptions.Count ? Array.Empty<string>() : selected,
             ShiftId = FilterShift switch { "Matin" => 1, "Soir" => 2, "Nuit" => 3, _ => null },
             Team = FilterTeam == AllOption ? null : FilterTeam,
             TargetWeight = FilterWeight == AllOption ? null : double.Parse(FilterWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
         };
         ActiveFilterLabel = _filter.Describe();
-        IsFilterPanelOpen = false;
         AppLogger.Log($"Filtres appliques : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
+
+        // Before the first load (or while disconnected) the deck is built later.
+        if (_suspended)
+            return;
 
         // The deck's shape depends on the sector / machine filters.
         await RunGuardedAsync(async () =>
@@ -299,12 +351,57 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ResetFiltersAsync()
+    private void ResetFilters()
     {
-        FilterSector = FilterShift = FilterTeam = FilterWeight = AllOption;
+        FilterShift = FilterTeam = FilterWeight = AllOption;
+        if (FilterSector == AllOption)
+            SelectAllMachines();
+        FilterSector = AllOption;
+        SelectedPeriod = DashboardPeriod.Day;
+        QueueFilterApply();
+    }
+
+    // "Dates..." button: reopens the pickers even when that period is already selected.
+    [RelayCommand]
+    private void OpenDatePicker() => IsDatePickerOpen = true;
+
+    [RelayCommand]
+    private void CloseDatePicker() => IsDatePickerOpen = false;
+
+    [RelayCommand]
+    private void SelectAllMachines()
+    {
         foreach (var machine in MachineOptions)
             machine.IsSelected = true;
-        await ApplyFiltersAsync();
+    }
+
+    // Lists the chosen sector's machines in the picker, all selected.
+    private void ShowSectorMachines()
+    {
+        MachineOptions.Clear();
+        foreach (var machine in _allMachineOptions.Where(m => FilterSector == AllOption || m.Sector == FilterSector))
+        {
+            machine.IsSelected = true;
+            MachineOptions.Add(machine);
+        }
+        UpdateMachineFilterLabel();
+    }
+
+    private void OnMachineOptionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MachineFilterOption.IsSelected) || !MachineOptions.Contains(sender))
+            return;
+        UpdateMachineFilterLabel();
+        QueueFilterApply();
+    }
+
+    private void UpdateMachineFilterLabel()
+    {
+        var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineId).ToList();
+        MachineFilterLabel = selected.Count == MachineOptions.Count ? "Toutes"
+            : selected.Count == 0 ? "Aucune"
+            : selected.Count <= 3 ? string.Join(", ", selected)
+            : $"{selected.Count} machines";
     }
 
     [RelayCommand]
@@ -469,20 +566,30 @@ public partial class MainViewModel : ObservableObject
         _slides = slides;
     }
 
-    // Machine checkboxes of the Filtres panel: the machines shown in the
+    // Machine checkboxes of the filter bar: the machines shown in the
     // rotation (Parametres), selection kept across refreshes.
     private void RefreshMachineOptions(List<Machine> machines)
     {
-        var ids = machines.OrderBy(m => Array.IndexOf(SectorOrder, m.Sector)).ThenBy(m => m.MachineId).Select(m => m.MachineId).ToList();
-        if (ids.SequenceEqual(MachineOptions.Select(o => o.MachineId)))
+        var ordered = machines.OrderBy(m => Array.IndexOf(SectorOrder, m.Sector)).ThenBy(m => m.MachineId).ToList();
+        if (ordered.Select(m => m.MachineId).SequenceEqual(_allMachineOptions.Select(o => o.MachineId)))
             return;
+        foreach (var option in _allMachineOptions)
+            option.PropertyChanged -= OnMachineOptionChanged;
+        _allMachineOptions.Clear();
+        foreach (var machine in ordered)
+        {
+            var option = new MachineFilterOption { MachineId = machine.MachineId, MachineName = machine.MachineName, Sector = machine.Sector };
+            option.PropertyChanged += OnMachineOptionChanged;
+            _allMachineOptions.Add(option);
+        }
+
         MachineOptions.Clear();
-        foreach (var id in ids)
-            MachineOptions.Add(new MachineFilterOption
-            {
-                MachineId = id,
-                IsSelected = _filter.MachineIds.Count == 0 || _filter.MachineIds.Contains(id),
-            });
+        foreach (var option in _allMachineOptions.Where(m => FilterSector == AllOption || m.Sector == FilterSector))
+        {
+            option.IsSelected = _filter.MachineIds.Count == 0 || _filter.MachineIds.Contains(option.MachineId);
+            MachineOptions.Add(option);
+        }
+        UpdateMachineFilterLabel();
     }
 
     // Returns false when the slide couldn't load: the deck is then stopped
@@ -522,8 +629,15 @@ public partial class MainViewModel : ObservableObject
     private Task<MachinePeriodSlideViewModel> LoadPeriodSlideAsync(MachineSlideDescriptor slide)
     {
         var (from, to) = PeriodRanges.Get(SelectedPeriod, DateTime.Now, CustomFrom, CustomTo);
+        var label = PeriodRanges.Label(SelectedPeriod, from, to);
+        // Nothing before DataStartDate is read: start the charts there, and say so.
+        if (from < _settings.DataStartDate && to > _settings.DataStartDate)
+        {
+            from = _settings.DataStartDate.Date;
+            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+        }
         return MachinePeriodSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Sector,
-            _machinesById[slide.MachineId], from, to, PeriodRanges.Label(SelectedPeriod, from, to), _filter);
+            _machinesById[slide.MachineId], from, to, label, _filter);
     }
 
     private void SetConnectionState(bool healthy, string errorMessage = "")

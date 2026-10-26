@@ -48,7 +48,7 @@
                                 </StackPanel>
                             </StackPanel>
                             <!-- Weights run on the line -->
-                            <views:WeightTable Weights="{Binding Kpis.Weights}" ValueFontSize="17" HeaderFontSize="13"/>
+                            <views:WeightTable Weights="{Binding Kpis.Weights}" ValueFontSize="17" HeaderFontSize="13" Compact="True"/>
                         </DockPanel>
                     </Border>
                 </DataTemplate>

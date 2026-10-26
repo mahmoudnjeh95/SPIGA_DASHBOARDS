@@ -15,6 +15,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Column="0" Orientation="Horizontal">
+            <TextBlock Text="{Binding SectorLabel}" FontSize="20" FontWeight="SemiBold" Margin="0,0,12,0"
+                       Foreground="{DynamicResource SubtleTextBrush}" VerticalAlignment="Center"/>
             <TextBlock Text="{Binding MachineName}"
                        FontSize="30" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
             <TextBlock Text="{Binding PeriodLabel}" FontSize="22" FontWeight="SemiBold" Margin="16,0,0,0"
@@ -32,21 +34,6 @@
                     </Style>
                 </Border.Style>
                 <TextBlock Text="PAS DE DONNEES" FontSize="18" FontWeight="Bold" Foreground="White"/>
-            </Border>
-            <!-- Active filters (Filtres panel) -->
-            <Border Background="{DynamicResource HoverBackgroundBrush}" CornerRadius="12" Padding="12,3" Margin="16,0,0,0" VerticalAlignment="Center">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding FilterLabel}" Value="">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <TextBlock FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}">
-                    <Run Text="Filtre : "/><Run Text="{Binding FilterLabel, Mode=OneWay}" FontWeight="SemiBold"/>
-                </TextBlock>
             </Border>
         </StackPanel>
 

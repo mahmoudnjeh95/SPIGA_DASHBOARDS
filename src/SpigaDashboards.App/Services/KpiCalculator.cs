@@ -208,14 +208,18 @@ public static class KpiCalculator
         return (Math.Round(deviationSum / bags, 2), Math.Round(100.0 * deviationSum / targetSum, 2));
     }
 
-    // Colour band of the weight deviation, relative to the target: within
-    // 0.5 % green, within 1.5 % orange, beyond red (1 g means nothing on a
-    // 5 kg bag but is a lot on a 200 g one).
+    // Colour band of the weight deviation, relative to the target (1 g means
+    // nothing on a 5 kg bag but is a lot on a 200 g one). Running heavy only
+    // gives product away: within 0.5 % green, within 1.5 % orange, beyond
+    // red. Running light is a compliance risk (sous-dosage): orange as soon
+    // as the average is 0.1 % under the target, red from 0.5 % under.
     public static KpiSeverity WeightDeviationSeverity(double? deviationPercent) => deviationPercent switch
     {
         null => KpiSeverity.Unknown,
-        { } d when Math.Abs(d) <= 0.5 => KpiSeverity.Good,
-        { } d when Math.Abs(d) <= 1.5 => KpiSeverity.Warning,
+        < -0.5 => KpiSeverity.Bad,
+        < -0.1 => KpiSeverity.Warning,
+        <= 0.5 => KpiSeverity.Good,
+        <= 1.5 => KpiSeverity.Warning,
         _ => KpiSeverity.Bad,
     };
 

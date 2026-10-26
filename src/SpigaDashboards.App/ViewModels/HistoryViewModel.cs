@@ -161,7 +161,7 @@ public partial class HistoryViewModel : ObservableObject
                     BagsInTolerance = l.BagsInTolerance,
                     BagsOverTolerance = l.BagsOverTolerance,
                     BagsUnderTolerance = l.BagsUnderTolerance,
-                    SpeedBagsPerMinute = k.SpeedBagsPerMinute,
+                    SpeedBagsPerMinute = k.SpeedBagsPerMinute ?? 0,
                     MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
                     AvailabilityPercent = k.AvailabilityPercent,
                     TrsPercent = k.TrsPercent,

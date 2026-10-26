@@ -22,40 +22,79 @@
             <Setter Property="Margin" Value="6,0,0,0"/>
             <Setter Property="FontSize" Value="16"/>
         </Style>
-        <Style x:Key="FilterLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+        <!-- Filter bar: segmented buttons, captions, separators, drop-downs. -->
+        <Style x:Key="Seg" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="0,8,0,3"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="9,5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DropToggle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="6" Padding="11,5">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="BarCaption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="2,0,0,3"/>
+        </Style>
+        <Style x:Key="BarSeparator" TargetType="Rectangle">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Margin" Value="8,4,8,0"/>
+            <Setter Property="Fill" Value="{DynamicResource AppBorderBrush}"/>
+        </Style>
+        <Style x:Key="DropPanel" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
         </Style>
 
         <!-- "Aujourd'hui" / "Poste precedent": one machine, one poste in full + earlier postes of the day. -->
         <DataTemplate DataType="{x:Type slides:MachineDaySlideViewModel}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <TextBlock Grid.Row="0" Text="{Binding SectorLabel}" FontSize="22" FontWeight="SemiBold"
-                           Foreground="{DynamicResource SecondaryTextBrush}" Margin="16,4,16,0"/>
-
-                <views:MachineDayPanel Grid.Row="1"/>
-            </Grid>
+            <views:MachineDayPanel/>
         </DataTemplate>
 
         <!-- Hier / semaine / mois / 3 mois / dates choisies: one machine, period totals. -->
         <DataTemplate DataType="{x:Type slides:MachinePeriodSlideViewModel}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <TextBlock Grid.Row="0" Text="{Binding SectorLabel}" FontSize="22" FontWeight="SemiBold"
-                           Foreground="{DynamicResource SecondaryTextBrush}" Margin="16,4,16,0"/>
-
-                <views:MachinePeriodPanel Grid.Row="1"/>
-            </Grid>
+            <views:MachinePeriodPanel/>
         </DataTemplate>
 
         <!-- Slide 8: admin-selected external PDF (consignes, instructions, documents qualite). -->
@@ -95,7 +134,6 @@
                         <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
                         <Run Text="  ·  TRS secteur " FontSize="18"/><Run Text="{Binding SectorKpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                         <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding SectorProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <Run Text="{Binding FilterSuffix, Mode=OneWay}" FontSize="16"/>
                     </TextBlock>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Content="Ce mois" Tag="Month">
@@ -149,11 +187,12 @@
     <Grid Width="1600" Height="900">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Top bar: current team/poste, period selector, theme toggle, history, settings -->
+        <!-- Top bar: current team/poste, slide navigation, theme toggle, history, settings -->
         <Grid Grid.Row="0" Margin="20,16,20,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
@@ -185,36 +224,6 @@
                                 IsEnabled="{Binding IsReconnecting, Converter={StaticResource InverseBool}}"/>
                     </StackPanel>
                 </Border>
-            </StackPanel>
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <ComboBox Width="160" SelectedValue="{Binding SelectedPeriod}" SelectedValuePath="Tag" VerticalContentAlignment="Center">
-                    <ComboBoxItem Content="Aujourd'hui" Tag="{x:Static vm:DashboardPeriod.Day}"/>
-                    <ComboBoxItem Content="Poste precedent" Tag="{x:Static vm:DashboardPeriod.PreviousShift}"/>
-                    <ComboBoxItem Content="Hier" Tag="{x:Static vm:DashboardPeriod.Yesterday}"/>
-                    <ComboBoxItem Content="Cette semaine" Tag="{x:Static vm:DashboardPeriod.Week}"/>
-                    <ComboBoxItem Content="Ce mois" Tag="{x:Static vm:DashboardPeriod.Month}"/>
-                    <ComboBoxItem Content="3 derniers mois" Tag="{x:Static vm:DashboardPeriod.ThreeMonths}"/>
-                    <ComboBoxItem Content="Dates choisies" Tag="{x:Static vm:DashboardPeriod.Custom}"/>
-                </ComboBox>
-                <!-- Filtres: accent colour while a filter is active -->
-                <Button x:Name="FilterButton" Padding="12,6" Margin="8,0,0,0" BorderThickness="0" Command="{Binding ToggleFilterPanelCommand}"
-                        ToolTip="{Binding ActiveFilterLabel}">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Content" Value="Filtres"/>
-                            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasActiveFilter}" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                    <Setter Property="Foreground" Value="White"/>
-                                    <Setter Property="Content" Value="Filtres (actifs)"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
             </StackPanel>
 
             <!-- Manual slide navigation + auto-rotation play/pause -->
@@ -251,12 +260,139 @@
                     Click="SettingsButton_Click"/>
         </Grid>
 
+        <!-- Filter bar: always visible, so the screen says what it shows. Every
+             click applies on its own; "Effacer" puts everything back. -->
+        <Border Grid.Row="1" Margin="20,0,20,0" Padding="12,6" CornerRadius="8" Background="{DynamicResource TileBackgroundBrush}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="&#x2715; Effacer" Padding="10,5" Margin="8,0,0,0" VerticalAlignment="Bottom" BorderThickness="0"
+                        ToolTip="Revenir a Aujourd'hui, toutes machines, sans filtre"
+                        Background="{DynamicResource DangerBrush}" Foreground="White"
+                        Command="{Binding ResetFiltersCommand}"
+                        Visibility="{Binding HasActiveFilter, Converter={StaticResource BoolToVisibility}}"/>
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel>
+                        <TextBlock Text="PERIODE" Style="{StaticResource BarCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton GroupName="Period" Content="Aujourd'hui" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Day}"/>
+                            <RadioButton GroupName="Period" Content="Poste prec." Style="{StaticResource Seg}" ToolTip="Poste precedent"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=PreviousShift}"/>
+                            <RadioButton GroupName="Period" Content="Hier" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Yesterday}"/>
+                            <RadioButton GroupName="Period" Content="Semaine" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Week}"/>
+                            <RadioButton GroupName="Period" Content="Mois" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Month}"/>
+                            <RadioButton GroupName="Period" Content="3 mois" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=ThreeMonths}"/>
+                            <RadioButton x:Name="CustomPeriodButton" GroupName="Period" Content="{Binding CustomRangeLabel}" Style="{StaticResource Seg}"
+                                         Command="{Binding OpenDatePickerCommand}"
+                                         IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Custom}"/>
+                        </StackPanel>
+                        <!-- StaysOpen: the DatePicker calendars are popups of their own. -->
+                        <Popup IsOpen="{Binding IsDatePickerOpen}" PlacementTarget="{Binding ElementName=CustomPeriodButton}"
+                               Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
+                            <Border Style="{StaticResource DropPanel}">
+                                <StackPanel>
+                                    <TextBlock Text="Choisir la periode" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Du" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <DatePicker Width="150" SelectedDate="{Binding CustomFrom}"/>
+                                        <TextBlock Text="au" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                                        <DatePicker Width="150" SelectedDate="{Binding CustomTo}"/>
+                                    </StackPanel>
+                                    <Button Content="OK" HorizontalAlignment="Right" Padding="18,5" Margin="0,10,0,0" BorderThickness="0"
+                                            Background="{DynamicResource AccentBrush}" Foreground="White" Command="{Binding CloseDatePickerCommand}"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource BarSeparator}"/>
+                    <StackPanel>
+                        <TextBlock Text="SECTEUR" Style="{StaticResource BarCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton GroupName="Sector" Content="Tous" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter=Tous}"/>
+                            <RadioButton GroupName="Sector" Content="Couscous" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter=Couscous}"/>
+                            <RadioButton GroupName="Sector" Content="Pate courte" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate courte'}"/>
+                            <RadioButton GroupName="Sector" Content="Pate longue" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate longue'}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource BarSeparator}"/>
+                    <StackPanel>
+                        <TextBlock Text="MACHINES" Style="{StaticResource BarCaption}"/>
+                        <ToggleButton x:Name="MachinePickerToggle" Style="{StaticResource DropToggle}" MinWidth="120"
+                                      IsHitTestVisible="{Binding IsOpen, ElementName=MachinePickerPopup, Converter={StaticResource InverseBool}}">
+                            <TextBlock>
+                                <Run Text="{Binding MachineFilterLabel, Mode=OneWay}"/><Run Text="  &#x25BE;"/>
+                            </TextBlock>
+                        </ToggleButton>
+                        <Popup x:Name="MachinePickerPopup" IsOpen="{Binding IsChecked, ElementName=MachinePickerToggle}"
+                               PlacementTarget="{Binding ElementName=MachinePickerToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                            <Border Style="{StaticResource DropPanel}" MinWidth="240">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding MachineOptions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:MachineFilterOption}">
+                                                <CheckBox IsChecked="{Binding IsSelected}" Margin="0,3" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}">
+                                                    <TextBlock>
+                                                        <Run Text="{Binding MachineId, Mode=OneWay}" FontWeight="SemiBold"/>
+                                                        <Run Text="{Binding MachineName, Mode=OneWay}" Foreground="{DynamicResource SubtleTextBrush}"/>
+                                                    </TextBlock>
+                                                </CheckBox>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Content="Toutes les machines" HorizontalAlignment="Left" Padding="10,4" Margin="0,8,0,0" BorderThickness="0"
+                                            Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
+                                            Command="{Binding SelectAllMachinesCommand}"/>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource BarSeparator}"/>
+                    <StackPanel>
+                        <TextBlock Text="POSTE" Style="{StaticResource BarCaption}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton GroupName="Shift" Content="Tous" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Tous}"/>
+                            <RadioButton GroupName="Shift" Content="Matin" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Matin}"/>
+                            <RadioButton GroupName="Shift" Content="Soir" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Soir}"/>
+                            <RadioButton GroupName="Shift" Content="Nuit" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Nuit}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource BarSeparator}"/>
+                    <StackPanel>
+                        <TextBlock Text="EQUIPE" Style="{StaticResource BarCaption}"/>
+                        <ComboBox Style="{StaticResource DarkComboBox}" Width="110" Padding="8,4" FontSize="14"
+                                  ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding FilterTeam}"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="8,0,0,0">
+                        <TextBlock Text="POIDS" Style="{StaticResource BarCaption}"/>
+                        <ComboBox Style="{StaticResource DarkComboBox}" Width="95" Padding="8,4" FontSize="14"
+                                  ItemsSource="{Binding WeightOptions}" SelectedItem="{Binding FilterWeight}"/>
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
         <!-- Slide content: swaps DataTemplate based on the current slide's view-model type -->
-        <ContentControl Grid.Row="1" Margin="14" Content="{Binding CurrentSlide}"/>
+        <ContentControl Grid.Row="2" Margin="14,8,14,10" Content="{Binding CurrentSlide}"/>
 
         <!-- Persistent sticky note bar (never rotates away). Editable in place by whoever's at the kiosk.
              Deliberately a fixed yellow "sticky note" look in both themes, not a themed neutral surface. -->
-        <Border Grid.Row="2" Background="#F1C40F" Padding="16,10">
+        <Border Grid.Row="3" Background="#F1C40F" Padding="16,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -281,7 +417,7 @@
         </Border>
 
         <!-- Disconnected overlay: covers the content area (not the note bar) while the DB is unreachable -->
-        <Border Grid.Row="1" Background="{DynamicResource DisconnectedOverlayBrush}"
+        <Border Grid.Row="2" Background="{DynamicResource DisconnectedOverlayBrush}"
                 Visibility="{Binding IsConnectionHealthy, Converter={StaticResource InverseBoolToVisibility}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="700">
                 <TextBlock Text="Connexion a la base de donnees perdue" FontSize="26" FontWeight="Bold"
@@ -302,81 +438,6 @@
             </StackPanel>
         </Border>
 
-        <!-- Filtres panel (top-bar button): applies to every slide and is taken over by Historique. -->
-        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Top" Width="620" Margin="0,0,20,0"
-                Background="{DynamicResource TileBackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"
-                CornerRadius="8" Padding="18,12">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsFilterPanelOpen}" Value="True">
-                            <Setter Property="Visibility" Value="Visible"/>
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.4"/>
-            </Border.Effect>
-            <StackPanel>
-                <TextBlock Text="Filtres" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-
-                <TextBlock Text="Dates (periode &quot;Dates choisies&quot;)" Style="{StaticResource FilterLabel}"/>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Du" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <DatePicker Width="170" SelectedDate="{Binding CustomFrom}"/>
-                    <TextBlock Text="au" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="12,0,6,0"/>
-                    <DatePicker Width="170" SelectedDate="{Binding CustomTo}"/>
-                </StackPanel>
-
-                <UniformGrid Columns="2" Margin="0,4,0,0">
-                    <StackPanel Margin="0,0,8,0">
-                        <TextBlock Text="Secteur" Style="{StaticResource FilterLabel}"/>
-                        <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding SectorOptions}" SelectedItem="{Binding FilterSector}"/>
-                    </StackPanel>
-                    <StackPanel>
-                        <TextBlock Text="Poids / produit" Style="{StaticResource FilterLabel}"/>
-                        <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding WeightOptions}" SelectedItem="{Binding FilterWeight}"/>
-                    </StackPanel>
-                    <StackPanel Margin="0,0,8,0">
-                        <TextBlock Text="Poste" Style="{StaticResource FilterLabel}"/>
-                        <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding ShiftOptions}" SelectedItem="{Binding FilterShift}"/>
-                    </StackPanel>
-                    <StackPanel>
-                        <TextBlock Text="Equipe" Style="{StaticResource FilterLabel}"/>
-                        <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding FilterTeam}"/>
-                    </StackPanel>
-                </UniformGrid>
-
-                <TextBlock Text="Machines (decocher pour les retirer de la rotation)" Style="{StaticResource FilterLabel}"/>
-                <ItemsControl ItemsSource="{Binding MachineOptions}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:MachineFilterOption}">
-                            <CheckBox Content="{Binding MachineId}" IsChecked="{Binding IsSelected}" Width="96" Margin="0,3"
-                                      Foreground="{DynamicResource PrimaryTextBrush}" FontSize="15"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-                    <Button Content="Reinitialiser" Padding="14,6" Margin="0,0,8,0" BorderThickness="0"
-                            Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                            Command="{Binding ResetFiltersCommand}"/>
-                    <Button Content="Fermer" Padding="14,6" Margin="0,0,8,0" BorderThickness="0"
-                            Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}"
-                            Command="{Binding ToggleFilterPanelCommand}"/>
-                    <Button Content="Appliquer" Padding="14,6" BorderThickness="0"
-                            Background="{DynamicResource AccentBrush}" Foreground="White"
-                            Command="{Binding ApplyFiltersCommand}"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
     </Grid>
     </Viewbox>
 </Window>
