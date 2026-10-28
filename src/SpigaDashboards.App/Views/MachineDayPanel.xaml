@@ -124,60 +124,60 @@
             </Grid.RowDefinitions>
 
             <UniformGrid Grid.Row="1" Rows="1" Columns="5">
-                <Border Style="{StaticResource KpiTile}">
+                <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource KpiLabel}">
+                        <TextBlock Style="{StaticResource KpiLabelCompact}">
                             <Run Text="TRS"/>
                             <Run Text="{Binding TrsTarget, StringFormat=(cible {0:0} %), Mode=OneWay, ConverterCulture=fr-FR}" FontSize="15" Foreground="{DynamicResource SubtleTextBrush}"/>
                         </TextBlock>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
+                            <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
                                        Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </Viewbox>
-                        <TextBlock Style="{StaticResource KpiSubtext}">
+                        <TextBlock Style="{StaticResource KpiSubtextCompact}">
                             <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
                             <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
                             <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
-                <Border Style="{StaticResource KpiTile}">
+                <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"/>
+                            <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"/>
                         </Viewbox>
-                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtext}"/>
+                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
                     </StackPanel>
                 </Border>
-                <Border Style="{StaticResource KpiTile}">
+                <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabel}"/>
-                        <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="44" SmallFontSize="26"/>
+                        <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabelCompact}"/>
+                        <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="34" SmallFontSize="20"/>
                     </StackPanel>
                 </Border>
-                <Border Style="{StaticResource KpiTile}">
+                <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
+                            <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </Viewbox>
-                        <TextBlock Style="{StaticResource KpiSubtext}">
+                        <TextBlock Style="{StaticResource KpiSubtextCompact}">
                             <Run Text="Sous tol."/> <Run Text="{Binding Kpis.BagsUnderTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
                             <Run Text=" · Sur tol."/> <Run Text="{Binding Kpis.BagsOverTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
-                <Border Style="{StaticResource KpiTile}">
+                <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabel}"/>
+                        <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <!-- No weight data = "—" in grey, never a green 0.0 g. -->
-                            <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValue}"
+                            <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
                                        Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </Viewbox>
-                        <TextBlock Style="{StaticResource KpiSubtext}">
+                        <TextBlock Style="{StaticResource KpiSubtextCompact}">
                             <Run Text="{Binding Kpis.WeightDeviationPercent, StringFormat={}{0:+0.00;-0.00;0.00} %, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
                             <Run Text=" · surpoids"/> <Run Text="{Binding Kpis.GiveawayKg, StringFormat={}{0:+#,##0.0;-#,##0.0;0.0} kg, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
                         </TextBlock>

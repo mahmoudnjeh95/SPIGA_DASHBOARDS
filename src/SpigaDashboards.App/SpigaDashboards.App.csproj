@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <Resource Include="Assets\spiga-logo.png" />
+    <Resource Include="Assets\machine-running.png" />
+    <Resource Include="Assets\machine-stopped.png" />
   </ItemGroup>
 
 </Project>

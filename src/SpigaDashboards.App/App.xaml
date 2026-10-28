@@ -50,6 +50,22 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Margin" Value="0,2,0,0"/>
         </Style>
+        <!-- Compact headline row of the machine slides: the run-state photo made
+             the header taller, so this row gives the height back to the charts. -->
+        <Style x:Key="KpiTileCompact" TargetType="Border" BasedOn="{StaticResource KpiTile}">
+            <Setter Property="Padding" Value="14,5"/>
+            <Setter Property="Margin" Value="6,3"/>
+        </Style>
+        <Style x:Key="KpiLabelCompact" TargetType="TextBlock" BasedOn="{StaticResource KpiLabel}">
+            <Setter Property="FontSize" Value="16"/>
+        </Style>
+        <Style x:Key="KpiValueCompact" TargetType="TextBlock" BasedOn="{StaticResource KpiValue}">
+            <Setter Property="FontSize" Value="34"/>
+        </Style>
+        <Style x:Key="KpiSubtextCompact" TargetType="TextBlock" BasedOn="{StaticResource KpiSubtext}">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
         <Style x:Key="StatusDot" TargetType="Ellipse">
             <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="20"/>
