@@ -108,6 +108,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -176,6 +177,11 @@
             <Button Grid.Column="6" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
                     Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
                     Click="SettingsButton_Click"/>
+
+            <Button Grid.Column="7" Content="À propos" Margin="12,0,0,0" Padding="12,6"
+                    ToolTip="Version de l'application et informations"
+                    Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
+                    Click="AboutButton_Click"/>
         </Grid>
 
         <!-- Filter bar: always visible, so the screen says what it shows. Every

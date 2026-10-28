@@ -10,6 +10,8 @@ public class SettingsService
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "SpigaDashboards", "settings.json");
 
+    public static string SettingsFolder => Path.GetDirectoryName(SettingsPath)!;
+
     public AppSettings Load()
     {
         if (!File.Exists(SettingsPath))

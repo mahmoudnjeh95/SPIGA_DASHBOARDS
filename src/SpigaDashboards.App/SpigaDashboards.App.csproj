@@ -7,6 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\spiga.ico</ApplicationIcon>
+    <!-- Shown in "A propos"; keep in step with installer\Package.wxs and installer-bundle\Bundle.wxs. -->
+    <Version>1.3.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
