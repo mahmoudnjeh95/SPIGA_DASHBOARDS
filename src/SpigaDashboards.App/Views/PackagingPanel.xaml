@@ -144,7 +144,7 @@
 
             <!-- Cumul production slide, in place of the bars (the table's totals
                  have them): every machine's run-state photo (RunStateImage) in one
-                 row, as big as the width allows, captioned with its id only. -->
+                 row, as big as the width allows, captioned with its name only. -->
             <Border Grid.ColumnSpan="2" Style="{StaticResource ChartTile}"
                     Visibility="{Binding ShowRunTiles, Converter={StaticResource BoolToVisibility}}">
                 <ItemsControl ItemsSource="{Binding RunTiles}" VerticalAlignment="Center">
@@ -156,10 +156,10 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type slides:MachineRunTile}">
                             <Viewbox Margin="6,0">
-                                <StackPanel Width="150" Margin="0,8,0,0">
+                                <StackPanel Width="170" Margin="0,8,0,0">
                                     <views:RunStateImage HorizontalAlignment="Center"/>
-                                    <TextBlock Text="{Binding MachineId}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                    <TextBlock Text="{Binding MachineName}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Viewbox>
                         </DataTemplate>
