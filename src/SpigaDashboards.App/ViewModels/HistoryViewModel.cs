@@ -15,6 +15,7 @@ namespace SpigaDashboards.App.ViewModels;
 public partial class HistoryViewModel : ObservableObject
 {
     private const string AllOption = "Toutes";
+    private static readonly MachinePick AllMachines = new(AllOption, Array.Empty<string>());
 
     private readonly ProductionRepository _repository;
     private readonly TeamScheduleService _teamSchedule;
@@ -29,15 +30,15 @@ public partial class HistoryViewModel : ObservableObject
     [ObservableProperty] private string selectedSector = AllOption;
     [ObservableProperty] private string selectedShift = AllOption;
     [ObservableProperty] private string selectedTeam = AllOption;
-    [ObservableProperty] private string selectedMachine = AllOption;
+    [ObservableProperty] private MachinePick selectedMachine = AllMachines;
     [ObservableProperty] private string selectedWeight = AllOption;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private KpiSummary summary = new();
 
     public List<string> SectorOptions { get; } = new() { AllOption, "Couscous", "Pate courte", "Pate longue" };
-    public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Soir", "Nuit" };
+    public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Après-midi", "Nuit" };
     public ObservableCollection<string> TeamOptions { get; } = new();
-    public ObservableCollection<string> MachineOptions { get; } = new();
+    public ObservableCollection<MachinePick> MachineOptions { get; } = new();
     public ObservableCollection<string> WeightOptions { get; } = new();
     public ObservableCollection<HistoryRow> Results { get; } = new();
 
@@ -56,7 +57,7 @@ public partial class HistoryViewModel : ObservableObject
         foreach (var weight in settings.NominalRates.Where(r => r.WeightGrams > 0).Select(r => r.WeightGrams).Distinct().Order())
             WeightOptions.Add(weight.ToString("0.##", CultureInfo.InvariantCulture) + " g");
 
-        MachineOptions.Add(AllOption);
+        MachineOptions.Add(AllMachines);
 
         if (initialRange is { } range)
         {
@@ -70,9 +71,9 @@ public partial class HistoryViewModel : ObservableObject
             SelectedTeam = filter.Team is { } t && TeamOptions.Contains(t) ? t : AllOption;
             var weightText = filter.TargetWeight?.ToString("0.##", CultureInfo.InvariantCulture) + " g";
             SelectedWeight = WeightOptions.Contains(weightText) ? weightText : AllOption;
-            // The dashboard's machine selection, as one entry ("PC01, PC02").
+            // The dashboard's machine selection, as one entry ("Peseuse PC01, Peseuse PC02").
             if (filter.MachineIds.Count > 0)
-                MachineOptions.Add(SelectedMachine = string.Join(", ", filter.MachineIds));
+                MachineOptions.Add(SelectedMachine = new MachinePick(filter.MachinesLabel, filter.MachineIds));
         }
 
         _ = LoadMachinesAsync();
@@ -83,8 +84,8 @@ public partial class HistoryViewModel : ObservableObject
         try
         {
             _machines = await _repository.GetMachinesAsync();
-            foreach (var machine in _machines.Where(m => !MachineOptions.Contains(m.MachineId)))
-                MachineOptions.Add(machine.MachineId);
+            foreach (var machine in _machines.Where(m => !MachineOptions.Any(o => o.MachineIds.SequenceEqual(new[] { m.MachineId }))))
+                MachineOptions.Add(new MachinePick(machine.MachineName, new[] { machine.MachineId }));
         }
         catch (Exception ex)
         {
@@ -110,13 +111,15 @@ public partial class HistoryViewModel : ObservableObject
     private DashboardFilter BuildFilter() => new()
     {
         Sector = SelectedSector == AllOption ? null : SelectedSector,
-        MachineIds = SelectedMachine == AllOption
-            ? Array.Empty<string>()
-            : SelectedMachine.Split(", ", StringSplitOptions.RemoveEmptyEntries),
-        ShiftId = SelectedShift switch { "Matin" => 1, "Soir" => 2, "Nuit" => 3, _ => null },
+        MachineIds = SelectedMachine.MachineIds,
+        MachineNames = SelectedMachine.MachineIds.Select(MachineName).ToList(),
+        ShiftId = SelectedShift switch { "Matin" => 1, "Après-midi" => 2, "Nuit" => 3, _ => null },
         Team = SelectedTeam == AllOption ? null : SelectedTeam,
         TargetWeight = SelectedWeight == AllOption ? null : double.Parse(SelectedWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
     };
+
+    private string MachineName(string machineId)
+        => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;
 
     private async Task RunSearchAsync()
     {
@@ -148,6 +151,7 @@ public partial class HistoryViewModel : ObservableObject
                 {
                     StartTime = l.StartTime,
                     MachineId = l.MachineId,
+                    MachineName = MachineName(l.MachineId),
                     Sector = sectors.GetValueOrDefault(l.MachineId, ""),
                     ShiftName = KpiCalculator.ShiftName(l.ShiftId),
                     Team = _teamSchedule.TeamOf(l),

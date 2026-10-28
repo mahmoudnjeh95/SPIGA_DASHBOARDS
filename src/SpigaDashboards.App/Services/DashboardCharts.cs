@@ -27,6 +27,7 @@ public static class DashboardCharts
     private static readonly SKColor Orange = ChartHelpers.Palette[2];
     private static readonly SKColor Red = ChartHelpers.Palette[3];
     private static readonly SKColor Grey = new(0x9A, 0xA4, 0xB2);
+    private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
 
     public sealed record Step(string Label, IReadOnlyCollection<ProductionBucket> Lots);
 
@@ -293,5 +294,41 @@ public static class DashboardCharts
             },
             new[] { ChartHelpers.BuildXAxis(labels) },
             new[] { axis });
+    }
+
+    // One TRS bar per label (no bar when unknown), with the target as a
+    // green line when there's a single one.
+    public static ChartParts TrsBars(IReadOnlyList<string> labels, IReadOnlyList<double?> values, double? target)
+    {
+        var top = Math.Max(100, Math.Ceiling(Math.Max(values.Max(v => v ?? 0), target ?? 0) * 1.25));
+        var axis = ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: top);
+        axis.IsVisible = false;
+        var series = new List<ISeries>
+        {
+            new ColumnSeries<double?>
+            {
+                Values = values.ToArray(),
+                Name = "TRS",
+                Fill = new SolidColorPaint(Blue),
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = ChartHelpers.DataLabelTextSize,
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French) + " %",
+                MaxBarWidth = 60,
+            },
+        };
+        if (target is { } t)
+        {
+            series.Add(new LineSeries<double>
+            {
+                Values = labels.Select(_ => t).ToArray(),
+                Name = $"Cible {t:0} %",
+                Stroke = new SolidColorPaint(Green, 2),
+                Fill = null,
+                GeometrySize = 0,
+                DataLabelsPaint = null,
+            });
+        }
+        return new ChartParts(series.ToArray(), new[] { ChartHelpers.BuildXAxis(labels) }, new[] { axis });
     }
 }

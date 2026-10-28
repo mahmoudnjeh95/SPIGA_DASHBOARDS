@@ -251,7 +251,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (!NominalRateRowViewModel.TryParse(machine.TrsTargetText, out var target) || target > 100)
             {
-                MachinesStatusMessage = $"TRS cible invalide pour {machine.MachineId} : \"{machine.TrsTargetText}\" (0 a 100 %).";
+                MachinesStatusMessage = $"TRS cible invalide pour {ChoiceLabel(machine)} :\"{machine.TrsTargetText}\" (0 a 100 %).";
                 return null;
             }
             if (target > 0)
@@ -445,7 +445,7 @@ public partial class SettingsViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    MachinesStatusMessage = $"Impossible de renommer {machine.MachineId} : {ex.Message}";
+                    MachinesStatusMessage = $"Impossible de renommer {machine.OriginalMachineName} : {ex.Message}";
                 }
             }
         }

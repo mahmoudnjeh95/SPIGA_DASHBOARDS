@@ -5,7 +5,7 @@ namespace SpigaDashboards.App.Services;
 
 public sealed record MachineReportRow(string MachineId, string MachineName, string Sector, double TrsTarget, KpiSummary Kpis);
 
-public sealed record WeightReportRow(string MachineId, WeightKpi Weight, double TareGrams, double NominalRate);
+public sealed record WeightReportRow(string MachineId, string MachineName, WeightKpi Weight, double TareGrams, double NominalRate);
 
 public sealed record GroupReportRow(string Label, KpiSummary Kpis);
 
@@ -55,7 +55,7 @@ public sealed class ProductionReport
             .ToList();
 
         var weightRows = machineRows
-            .SelectMany(m => m.Kpis.Weights.Select(w => new WeightReportRow(m.MachineId, w,
+            .SelectMany(m => m.Kpis.Weights.Select(w => new WeightReportRow(m.MachineId, m.MachineName, w,
                 settings.FindTare(m.MachineId, w.TargetWeight), settings.FindNominalRate(m.MachineId, w.TargetWeight))))
             .ToList();
 

@@ -343,13 +343,15 @@ public partial class MainViewModel : ObservableObject
 
     private async Task ApplyFiltersAsync()
     {
-        var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineId).ToList();
+        var selected = MachineOptions.Where(m => m.IsSelected).ToList();
+        // Every machine of the sector ticked = no machine filter.
+        var allTicked = selected.Count == MachineOptions.Count;
         _filter = new DashboardFilter
         {
             Sector = FilterSector == AllOption ? null : FilterSector,
-            // Every machine of the sector ticked = no machine filter.
-            MachineIds = selected.Count == MachineOptions.Count ? Array.Empty<string>() : selected,
-            ShiftId = FilterShift switch { "Matin" => 1, "Soir" => 2, "Nuit" => 3, _ => null },
+            MachineIds = allTicked ? Array.Empty<string>() : selected.Select(m => m.MachineId).ToList(),
+            MachineNames = allTicked ? Array.Empty<string>() : selected.Select(m => m.MachineName).ToList(),
+            ShiftId = FilterShift switch { "Matin" => 1, "Après-midi" => 2, "Nuit" => 3, _ => null },
             Team = FilterTeam == AllOption ? null : FilterTeam,
             TargetWeight = FilterWeight == AllOption ? null : double.Parse(FilterWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
         };
@@ -420,7 +422,7 @@ public partial class MainViewModel : ObservableObject
 
     private void UpdateMachineFilterLabel()
     {
-        var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineId).ToList();
+        var selected = MachineOptions.Where(m => m.IsSelected).Select(m => m.MachineName).ToList();
         MachineFilterLabel = selected.Count == MachineOptions.Count ? "Toutes"
             : selected.Count == 0 ? "Aucune"
             : selected.Count <= 3 ? string.Join(", ", selected)
@@ -586,7 +588,8 @@ public partial class MainViewModel : ObservableObject
                 slides.Add(new SynthesisSlideDescriptor(sector, ids));
         }
 
-        // Conditionnement 1 / 2, each skipped when the filters leave it no machine.
+        // Conditionnement 1 / 2, each followed by its TRS slide, skipped when
+        // the filters leave it no machine.
         var packagingIds = visible
             .OrderBy(m => Array.IndexOf(SectorOrder, m.Sector))
             .ThenBy(m => m.MachineId)
@@ -594,20 +597,33 @@ public partial class MainViewModel : ObservableObject
             .ToList();
         var packaging1 = packagingIds.Where(id => Packaging1MachineIds.Contains(id)).ToList();
         var packaging2 = packagingIds.Except(packaging1).ToList();
-        if (packaging1.Count > 0)
-            slides.Add(new PackagingSlideDescriptor("Conditionnement 1", packaging1));
-        if (packaging2.Count > 0)
-            slides.Add(new PackagingSlideDescriptor("Conditionnement 2", packaging2));
+        foreach (var (title, ids) in new[] { ("Conditionnement 1", packaging1), ("Conditionnement 2", packaging2) })
+        {
+            if (ids.Count == 0)
+                continue;
+            slides.Add(new PackagingSlideDescriptor(title, ids));
+            slides.Add(new PackagingSlideDescriptor(title, ids, Trs: true));
+        }
+
+        // Cumul of both groups, then its TRS slide: only when both have
+        // machines (otherwise it would repeat the one shown).
+        if (packaging1.Count > 0 && packaging2.Count > 0)
+        {
+            var all = packaging1.Concat(packaging2).ToList();
+            slides.Add(new PackagingSlideDescriptor("Cumul", all, Cumul: true));
+            slides.Add(new PackagingSlideDescriptor("Cumul", all, Trs: true, Cumul: true));
+        }
 
         _slides = slides;
     }
 
     // Machine checkboxes of the filter bar: the machines shown in the
-    // rotation (Parametres), selection kept across refreshes.
+    // rotation (Parametres), selection kept across refreshes. Rebuilt when a
+    // machine is renamed too, and the active filter then shows the new name.
     private void RefreshMachineOptions(List<Machine> machines)
     {
         var ordered = machines.OrderBy(m => Array.IndexOf(SectorOrder, m.Sector)).ThenBy(m => m.MachineId).ToList();
-        if (ordered.Select(m => m.MachineId).SequenceEqual(_allMachineOptions.Select(o => o.MachineId)))
+        if (ordered.Select(m => (m.MachineId, m.MachineName)).SequenceEqual(_allMachineOptions.Select(o => (o.MachineId, o.MachineName))))
             return;
         foreach (var option in _allMachineOptions)
             option.PropertyChanged -= OnMachineOptionChanged;
@@ -626,6 +642,10 @@ public partial class MainViewModel : ObservableObject
             MachineOptions.Add(option);
         }
         UpdateMachineFilterLabel();
+
+        var names = _allMachineOptions.ToDictionary(o => o.MachineId, o => o.MachineName);
+        _filter = _filter with { MachineNames = _filter.MachineIds.Select(id => names.GetValueOrDefault(id, id)).ToList() };
+        ActiveFilterLabel = _filter.Describe();
     }
 
     // Returns false when the slide couldn't load: the deck is then stopped
@@ -677,18 +697,28 @@ public partial class MainViewModel : ObservableObject
             _machinesById[slide.MachineId], from, to, label, _filter);
     }
 
-    // Top-bar period; "Aujourd'hui" and "Poste precedent" both show the whole day.
+    // Top-bar period; "Aujourd'hui" and "Poste precedent" both show the whole
+    // day. Cumul is always the current month, named ("octobre 2026").
     private Task<PackagingSlideViewModel> LoadPackagingSlideAsync(PackagingSlideDescriptor slide)
     {
-        var (from, to) = CurrentRange;
-        var label = PeriodRanges.Label(SelectedPeriod == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : SelectedPeriod, from, to);
+        DateTime from, to;
+        string label;
+        if (slide.Cumul)
+        {
+            (from, to, label) = PeriodRanges.Synthesis(SynthesisPeriod.Month, DateTime.Now);
+        }
+        else
+        {
+            (from, to) = CurrentRange;
+            label = PeriodRanges.Label(SelectedPeriod == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : SelectedPeriod, from, to);
+        }
         // Nothing before DataStartDate is read: start there, and say so.
         if (from < _settings.DataStartDate && to > _settings.DataStartDate)
         {
             from = _settings.DataStartDate.Date;
             label += $" - donnees depuis le {from:dd/MM/yyyy}";
         }
-        return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, slide.Title,
+        return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Title, slide.Trs, slide.Cumul,
             slide.MachineIds.Select(id => _machinesById[id]).ToList(), from, to, label, _filter);
     }
 

@@ -52,7 +52,7 @@ public static class ExportService
             new($"Vitesse moyenne / max {by} (sacs/min)", Render(DashboardCharts.Speed(steps))),
             new($"Ecart de poids {by} (% de la cible)", Render(DashboardCharts.Deviation(steps))),
             new("Production nette par machine (kg)", Render(DashboardCharts.Bars(
-                report.Machines.Select(m => m.MachineId).ToList(),
+                report.Machines.Select(m => m.MachineName).ToList(),
                 report.Machines.Select(m => m.Kpis.ProductionKg).ToList(), "Production", v => ChartHelpers.Compact(v)))),
             new("TRS par equipe (%)", Render(DashboardCharts.Bars(
                 report.Teams.Select(t => t.Label).ToList(),
@@ -91,12 +91,12 @@ public static class ExportService
         WriteDashboardSheet(workbook.Worksheets.Add("Tableau de bord"), report, charts);
 
         WriteTable(workbook.Worksheets.Add("Par machine"),
-            new[] { "Machine", "Nom", "Secteur", "TRS cible %", "TRS %", "Disponibilite %", "Performance %", "Qualite %",
+            new[] { "Machine", "Secteur", "TRS cible %", "TRS %", "Disponibilite %", "Performance %", "Qualite %",
                     "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Ecart (g)", "Ecart (%)",
                     "Surpoids (kg)", "Conformes", "Sous tol.", "Sur tol.", "Rejets metal" },
             report.Machines.Select(m => new object?[]
             {
-                m.MachineId, m.MachineName, m.Sector, m.TrsTarget, m.Kpis.TrsPercent, m.Kpis.AvailabilityPercent, m.Kpis.PerformancePercent,
+                m.MachineName, m.Sector, m.TrsTarget, m.Kpis.TrsPercent, m.Kpis.AvailabilityPercent, m.Kpis.PerformancePercent,
                 m.Kpis.QualityPercent, m.Kpis.SpeedBagsPerMinute, m.Kpis.MaxSpeedBagsPerMinute, m.Kpis.TotalBags, m.Kpis.ProductionKg,
                 m.Kpis.WeightDeviationGrams, m.Kpis.WeightDeviationPercent, m.Kpis.GiveawayKg, m.Kpis.BagsInTolerance,
                 m.Kpis.BagsUnderTolerance, m.Kpis.BagsOverTolerance, m.Kpis.MetalRejects,
@@ -108,7 +108,7 @@ public static class ExportService
                     "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)" },
             report.Weights.Select(w => new object?[]
             {
-                w.MachineId, w.Weight.TargetWeight, w.Weight.ProductName, w.TareGrams, w.NominalRate > 0 ? w.NominalRate : null,
+                w.MachineName, w.Weight.TargetWeight, w.Weight.ProductName, w.TareGrams, w.NominalRate > 0 ? w.NominalRate : null,
                 w.Weight.TrsPercent, w.Weight.TotalBags, w.Weight.ProductionKg, w.Weight.AvgWeight, w.Weight.DeviationGrams,
                 w.Weight.DeviationPercent, w.Weight.GiveawayKg, w.Weight.QualityPercent, w.Weight.SpeedBagsPerMinute,
                 w.Weight.MaxSpeedBagsPerMinute,
@@ -129,7 +129,7 @@ public static class ExportService
                     "Vitesse moy.", "Vitesse max", "Disponibilite %", "TRS %", "Conforme" },
             report.Detail.Select(r => new object?[]
             {
-                r.StartTime, r.MachineId, r.Sector, r.ShiftName, r.Team, r.ProductName, r.TargetNetWeight, r.TareGrams,
+                r.StartTime, r.MachineName, r.Sector, r.ShiftName, r.Team, r.ProductName, r.TargetNetWeight, r.TareGrams,
                 r.AvgWeight, r.DeviationGrams, r.TotalBags, r.ProductionKg, r.BagsInTolerance, r.BagsOverTolerance,
                 r.BagsUnderTolerance, r.SpeedBagsPerMinute, r.MaxSpeedBagsPerMinute, r.AvailabilityPercent, r.TrsPercent,
                 r.IsConform ? "Oui" : "Non",
@@ -306,20 +306,20 @@ public static class ExportService
         pdf.ChartGrid(charts.Skip(4).ToList(), columns: 2, height: 165);
         pdf.Table("Par machine",
             new[] { "Machine", "Secteur", "TRS", "Cible", "Dispo.", "Perf.", "Qualite", "Vit. moy", "Vit. max", "Sacs", "Production", "Ecart", "Surpoids" },
-            new double[] { 70, 70, 50, 40, 50, 50, 50, 50, 50, 65, 70, 55, 60 },
+            new double[] { 85, 55, 50, 40, 50, 50, 50, 50, 50, 65, 70, 55, 60 },
             report.Machines.Select(m => new[]
             {
-                m.MachineId, m.Sector, Pct(m.Kpis.TrsPercent), m.TrsTarget.ToString("0", Numbers) + " %", Pct(m.Kpis.AvailabilityPercent),
+                m.MachineName, m.Sector, Pct(m.Kpis.TrsPercent), m.TrsTarget.ToString("0", Numbers) + " %", Pct(m.Kpis.AvailabilityPercent),
                 Pct(m.Kpis.PerformancePercent), Pct(m.Kpis.QualityPercent), Speed(m.Kpis.SpeedBagsPerMinute),
                 Speed(m.Kpis.MaxSpeedBagsPerMinute), N0(m.Kpis.TotalBags), KpiCalculator.FormatMass(m.Kpis.ProductionKg),
                 Grams(m.Kpis.WeightDeviationGrams), m.Kpis.GiveawayKg is { } kg ? KpiCalculator.FormatMass(kg, signed: true) : "—",
             }));
         pdf.Table("Par poids (sachet vide deduit)",
             new[] { "Machine", "Poids", "Produit", "Sachet", "Cadence", "TRS", "Sacs", "Production", "Poids moyen", "Ecart", "Ecart %", "Surpoids", "Conformite" },
-            new double[] { 55, 45, 95, 45, 50, 50, 60, 65, 60, 50, 50, 60, 55 },
+            new double[] { 75, 45, 75, 45, 50, 50, 60, 65, 60, 50, 50, 60, 55 },
             report.Weights.Select(w => new[]
             {
-                w.MachineId, w.Weight.TargetWeight.ToString("0", Numbers) + " g", w.Weight.ProductName,
+                w.MachineName, w.Weight.TargetWeight.ToString("0", Numbers) + " g", w.Weight.ProductName,
                 w.TareGrams.ToString("0.#", Numbers) + " g", w.NominalRate > 0 ? w.NominalRate.ToString("0.#", Numbers) : "—",
                 Pct(w.Weight.TrsPercent), N0(w.Weight.TotalBags), w.Weight.ProductionText,
                 w.Weight.AvgWeight is { } a ? N1(a) + " g" : "—", Grams(w.Weight.DeviationGrams),
@@ -337,10 +337,10 @@ public static class ExportService
         pdf.Table($"Detail horaire ({N0(report.Detail.Count)} lignes : une par machine, heure et production)",
             new[] { "Date/Heure", "Machine", "Poste", "Equipe", "Produit", "Cible", "Moyen net", "Ecart", "Sacs", "Prod. kg",
                     "Vit. moy", "Vit. max", "Dispo.", "TRS", "Conf.", "Elev.", "Faib." },
-            new double[] { 62, 38, 34, 50, 74, 34, 44, 38, 42, 46, 38, 38, 36, 38, 42, 36, 36 },
+            new double[] { 62, 60, 34, 42, 60, 34, 44, 38, 42, 46, 38, 38, 36, 38, 42, 36, 36 },
             report.Detail.Select(r => new[]
             {
-                r.StartTime.ToString("dd/MM/yy HH:mm"), r.MachineId, r.ShiftName, r.Team, r.ProductName,
+                r.StartTime.ToString("dd/MM/yy HH:mm"), r.MachineName, r.ShiftName, r.Team, r.ProductName,
                 N0(r.TargetNetWeight), r.AvgWeight is { } a ? N1(a) : "", r.DeviationGrams is { } d ? d.ToString("+0.0;-0.0;0.0", Numbers) : "",
                 N0(r.TotalBags), N1(r.ProductionKg), Speed(r.SpeedBagsPerMinute), Speed(r.MaxSpeedBagsPerMinute),
                 r.AvailabilityPercent.ToString("0", Numbers) + "%", r.TrsPercent is { } t ? t.ToString("0", Numbers) + "%" : "—",

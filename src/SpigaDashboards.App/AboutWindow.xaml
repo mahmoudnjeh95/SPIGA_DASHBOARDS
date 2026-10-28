@@ -32,7 +32,7 @@
             </StackPanel>
         </StackPanel>
 
-        <TextBlock Text="Supervision des machines de contrôle de poids : production, disponibilité, arrêts et poids moyens par poste et par équipe."
+        <TextBlock Text="Supervision de production"
                    TextWrapping="Wrap" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,20,0,16"/>
 
         <Grid>

@@ -30,7 +30,7 @@ public class SqlServerSettings
     public string EncryptedPassword { get; set; } = "";
 }
 
-// One roster row: on cycle day CycleDay, poste ShiftId (1=Matin/2=Soir/3=Nuit)
+// One roster row: on cycle day CycleDay, poste ShiftId (1=Matin/2=Après-midi/3=Nuit)
 // is worked by TeamNames[TeamIndex]. A cycle day with no entry for a given
 // ShiftId means no team is assigned (rest) for that poste that day.
 public class TeamRosterEntry
@@ -51,7 +51,7 @@ public class TeamRotationSettings
     public List<TeamRosterEntry> Pattern { get; set; } = BuildDefaultPattern();
 
     // Placeholder 4-day cycle (no client roster yet): each team works 3
-    // consecutive days -- a different poste each day (Matin, Soir, Nuit) --
+    // consecutive days -- a different poste each day (Matin, Après-midi, Nuit) --
     // then rests on the 4th, before starting the cycle again on Matin.
     private static List<TeamRosterEntry> BuildDefaultPattern()
     {
@@ -60,7 +60,7 @@ public class TeamRotationSettings
         {
             for (var shiftId = 1; shiftId <= 3; shiftId++)
             {
-                var posteIndex = shiftId - 1; // 0=Matin, 1=Soir, 2=Nuit
+                var posteIndex = shiftId - 1; // 0=Matin, 1=Après-midi, 2=Nuit
                 entries.Add(new TeamRosterEntry
                 {
                     CycleDay = cycleDay,

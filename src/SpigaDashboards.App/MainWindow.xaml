@@ -264,10 +264,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:MachineFilterOption}">
                                                 <CheckBox IsChecked="{Binding IsSelected}" Margin="0,3" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}">
-                                                    <TextBlock>
-                                                        <Run Text="{Binding MachineId, Mode=OneWay}" FontWeight="SemiBold"/>
-                                                        <Run Text="{Binding MachineName, Mode=OneWay}" Foreground="{DynamicResource SubtleTextBrush}"/>
-                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding MachineName, Mode=OneWay}" FontWeight="SemiBold"/>
                                                 </CheckBox>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -288,8 +285,8 @@
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Tous}"/>
                             <RadioButton GroupName="Shift" Content="Matin" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Matin}"/>
-                            <RadioButton GroupName="Shift" Content="Soir" Style="{StaticResource Seg}"
-                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Soir}"/>
+                            <RadioButton GroupName="Shift" Content="Après-midi" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Après-midi}"/>
                             <RadioButton GroupName="Shift" Content="Nuit" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Nuit}"/>
                         </StackPanel>

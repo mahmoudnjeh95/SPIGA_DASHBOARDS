@@ -4,12 +4,16 @@ using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App.ViewModels.Slides;
 
-// One cell of the machine x team table: net weight produced and bags.
+// One cell of the machine x team table: net weight produced, bags and TRS
+// (with its D / P / Q), banded against the machine's (or the group's) target.
 public class PackagingCell
 {
     public double ProductionKg { get; init; }
     public long TotalBags { get; init; }
-    public string ProductionText => TotalBags > 0 || ProductionKg > 0 ? KpiCalculator.FormatMass(ProductionKg) : "—";
+    public KpiSummary Kpis { get; init; } = new();
+    public KpiSeverity TrsSeverity { get; init; }
+    public bool HasProduction => TotalBags > 0 || ProductionKg > 0;
+    public string ProductionText => HasProduction ? KpiCalculator.FormatMass(ProductionKg) : "—";
 }
 
 // One row of the table: a machine (or the Total row), one cell per team, then its total.
@@ -21,16 +25,42 @@ public class PackagingRow
     public PackagingCell Total { get; init; } = new();
 }
 
+// One photo of the Cumul slide's machine overview: the machine's state right now.
+public class MachineRunTile
+{
+    public string MachineId { get; init; } = "";
+    public string MachineName { get; init; } = "";
+    public bool IsConnected { get; init; }
+    public bool BeltRunning { get; init; }
+    public string RunStateLabel => !IsConnected ? "Pas de donnees" : BeltRunning ? "En marche" : "A l'arret";
+}
+
 // Conditionnement slides: the production of a group of lines (Conditionnement 1
-// = CC03 + CC04, Conditionnement 2 = the others) summed per machine and per
-// team over the top-bar period, with the team and machine totals as bars.
+// = CC03 + CC04, Conditionnement 2 = the others, Cumul = all of them) summed
+// per machine and per team over the top-bar period, with the team and machine
+// totals as bars. The TRS variant (IsTrs, the slide right after) shows the
+// same table led by the TRS, and the team and machine TRS as bars against the
+// target. Cumul always covers the current month; its production slide shows
+// which machines run right now in place of the bars.
 public class PackagingSlideViewModel
 {
     public string Title { get; init; } = "";
+    public bool IsTrs { get; init; }
+    public bool IsCumul { get; init; }
+
+    // Cumul production slide only (empty otherwise): one tile per machine.
+    public IReadOnlyList<MachineRunTile> RunTiles { get; init; } = Array.Empty<MachineRunTile>();
+    public bool ShowRunTiles => RunTiles.Count > 0;
+    public int RunningCount => RunTiles.Count(t => t.BeltRunning);
     public string MachinesLabel { get; init; } = "";
     public string PeriodLabel { get; init; } = "";
     public string FilterLabel { get; init; } = "";
     public string TotalProductionText { get; init; } = "";
+    public PackagingCell Overall { get; init; } = new();
+
+    // Target the group totals are banded against: the machines' own when
+    // they share one, else their average.
+    public double TrsTarget { get; init; }
 
     // Team names: the table's column headers (before "Total").
     public IReadOnlyList<string> Columns { get; init; } = Array.Empty<string>();
@@ -40,6 +70,8 @@ public class PackagingSlideViewModel
 
     public ChartParts TeamChart { get; init; } = ChartParts.Empty();
     public ChartParts MachineChart { get; init; } = ChartParts.Empty();
+    public string TeamChartTitle => IsTrs ? "TRS par equipe" : "Production par equipe";
+    public string MachineChartTitle => IsTrs ? "TRS par machine" : "Production par machine";
 
     // Ranges over a week are kept CacheDuration per group, as on the period slides.
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(10);
@@ -50,7 +82,10 @@ public class PackagingSlideViewModel
     public static async Task<PackagingSlideViewModel> LoadAsync(
         ProductionRepository repository,
         TeamScheduleService teamSchedule,
+        AppSettings settings,
         string title,
+        bool trs,
+        bool cumul,
         IReadOnlyList<Machine> machines,
         DateTime from,
         DateTime to,
@@ -83,45 +118,88 @@ public class PackagingSlideViewModel
         if (!teams.Contains(TeamScheduleService.NoTeam) && byTeam[TeamScheduleService.NoTeam].Any(l => l.TotalBags > 0))
             teams.Add(TeamScheduleService.NoTeam);
 
+        var targets = machines.Select(m => settings.TrsTarget(m.MachineId)).ToList();
+        var groupTarget = targets.Count > 0 ? targets.Average() : AppSettings.DefaultTrsTarget;
+
         var rows = machines.Select(m =>
         {
             var machineLots = lots.Where(l => l.MachineId == m.MachineId).ToList();
+            var target = settings.TrsTarget(m.MachineId);
             return new PackagingRow
             {
                 Label = m.MachineName,
-                Cells = teams.Select(t => Cell(machineLots.Where(l => teamSchedule.TeamOf(l) == t))).ToList(),
-                Total = Cell(machineLots),
+                Cells = teams.Select(t => Cell(machineLots.Where(l => teamSchedule.TeamOf(l) == t), target)).ToList(),
+                Total = Cell(machineLots, target),
             };
         }).ToList();
-        var teamTotals = teams.Select(t => Cell(byTeam[t])).ToList();
-        var total = Cell(lots);
+        var teamTotals = teams.Select(t => Cell(byTeam[t], groupTarget)).ToList();
+        var total = Cell(lots, groupTarget);
         rows.Add(new PackagingRow { Label = "Total", IsTotal = true, Cells = teamTotals, Total = total });
+        var machineTotals = rows.Where(r => !r.IsTotal).Select(r => r.Total).ToList();
+
+        // Target line only when every machine shares the same target.
+        double? targetLine = targets.Distinct().Count() == 1 ? targets[0] : null;
+
+        // Live state whatever the period: same snapshot as the machine headers.
+        var runTiles = new List<MachineRunTile>();
+        if (cumul && !trs)
+        {
+            foreach (var m in machines)
+            {
+                var status = await repository.GetLatestStatusAsync(m.MachineId);
+                runTiles.Add(new MachineRunTile
+                {
+                    MachineId = m.MachineId,
+                    MachineName = m.MachineName,
+                    IsConnected = status?.IsConnected ?? false,
+                    BeltRunning = status?.BeltRunning ?? false,
+                });
+            }
+        }
 
         return new PackagingSlideViewModel
         {
             Title = title,
-            MachinesLabel = string.Join(", ", ids),
+            IsTrs = trs,
+            IsCumul = cumul,
+            RunTiles = runTiles,
+            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", ids),
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             TotalProductionText = KpiCalculator.FormatMass(total.ProductionKg),
+            Overall = total,
+            TrsTarget = groupTarget,
             Columns = teams,
             Rows = rows,
-            TeamChart = Bars(teams, teamTotals.Select(c => c.ProductionKg).ToList()),
-            MachineChart = Bars(ids, rows.Where(r => !r.IsTotal).Select(r => r.Total.ProductionKg).ToList()),
+            TeamChart = trs
+                ? TrsBars(teams, teamTotals, targetLine)
+                : Bars(teams, teamTotals.Select(c => c.ProductionKg).ToList()),
+            MachineChart = trs
+                ? TrsBars(ids, machineTotals, targetLine)
+                : Bars(ids, machineTotals.Select(c => c.ProductionKg).ToList()),
         };
     }
 
-    // Same production figure as everywhere else: bags x net average weight
-    // (or x target when the weight is unknown), summed over the weights run.
-    private static PackagingCell Cell(IEnumerable<ProductionBucket> lots)
+    // Same figures as everywhere else: production = bags x net average weight
+    // (or x target when the weight is unknown) summed over the weights run,
+    // TRS from KpiCalculator.Summarize over the cell's buckets.
+    private static PackagingCell Cell(IEnumerable<ProductionBucket> lots, double trsTarget)
     {
         var list = lots.ToList();
+        var kpis = KpiCalculator.Summarize(list, KpiCalculator.AvailabilityPercent(list), trsTarget);
         return new PackagingCell
         {
-            ProductionKg = Math.Round(KpiCalculator.ByWeight(list).Sum(w => w.ProductionKg), 1),
+            ProductionKg = kpis.ProductionKg,
             TotalBags = list.Sum(l => l.TotalBags),
+            Kpis = kpis,
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
         };
     }
+
+    private static ChartParts TrsBars(IReadOnlyList<string> labels, IReadOnlyList<PackagingCell> cells, double? target)
+        => cells.Any(c => c.Kpis.TrsPercent.HasValue)
+            ? DashboardCharts.TrsBars(labels, cells.Select(c => c.Kpis.TrsPercent).ToList(), target)
+            : ChartParts.Empty();
 
     private static ChartParts Bars(IReadOnlyList<string> labels, IReadOnlyList<double> values)
         => values.Any(v => v > 0)

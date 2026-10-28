@@ -7,7 +7,7 @@ public static class KpiCalculator
     private static readonly Dictionary<int, string> ShiftNames = new()
     {
         { 1, "Matin" },
-        { 2, "Soir" },
+        { 2, "Après-midi" },
         { 3, "Nuit" },
     };
 
@@ -27,7 +27,7 @@ public static class KpiCalculator
         _ => "22h - 06h",
     };
 
-    // Postes per client spec: Matin 06-14, Soir 14-22, Nuit 22-06 (wraps midnight).
+    // Postes per client spec: Matin 06-14, Après-midi 14-22, Nuit 22-06 (wraps midnight).
     public static int CurrentShiftId(DateTime now) => now.Hour switch
     {
         < 6 => 3,

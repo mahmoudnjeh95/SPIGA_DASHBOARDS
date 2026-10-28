@@ -62,7 +62,8 @@
             </StackPanel>
             <StackPanel Grid.Column="2" Margin="0,0,8,0">
                 <TextBlock Text="Machine" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"
+                          DisplayMemberPath="Label"/>
             </StackPanel>
             <StackPanel Grid.Column="3" Margin="0,0,8,0">
                 <TextBlock Text="Poste" Style="{StaticResource FieldLabel}"/>
@@ -114,10 +115,9 @@
                   BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CanUserAddRows="False">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Date" Binding="{Binding ShiftDate, StringFormat={}{0:ddd dd/MM/yyyy}}" Width="120"/>
-                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="70"/>
+                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="80"/>
                 <DataGridTextColumn Header="Équipe" Binding="{Binding Team}" Width="100"/>
-                <DataGridTextColumn Header="Machine" Binding="{Binding MachineId}" Width="75"/>
-                <DataGridTextColumn Header="Nom" Binding="{Binding MachineName}" Width="150"/>
+                <DataGridTextColumn Header="Machine" Binding="{Binding MachineName}" Width="150"/>
                 <DataGridTextColumn Header="Début" Binding="{Binding Start, StringFormat={}{0:HH:mm}}" Width="65"/>
                 <DataGridTextColumn Header="Fin" Binding="{Binding End, StringFormat={}{0:HH:mm}}" Width="65"/>
                 <DataGridTextColumn Header="Durée (hors pause)" Binding="{Binding DurationText}" Width="130"/>

@@ -231,7 +231,7 @@ public class Win32Driver {
         # Filter bar segments (MainWindow.xaml) are RadioButtons: select one by
         # its text - a period ("Aujourd'hui", "Poste prec.", "Hier", "Semaine",
         # "Mois", "3 mois", "Dates..."), a sector ("Tous", "Couscous",
-        # "Pate courte", "Pate longue") or a poste ("Matin", "Soir", "Nuit").
+        # "Pate courte", "Pate longue") or a poste ("Matin", "Après-midi", "Nuit").
         # "Tous" exists in both the sector and the poste groups: the first one
         # (sector) is selected.
         $win = Get-AppWindowElement

@@ -106,7 +106,8 @@
         </Grid>
     </DataTemplate>
 
-    <!-- Conditionnement 1 (CC03 + CC04) / 2 (other lines): production per machine and team over the top-bar period. -->
+    <!-- Conditionnement 1 (CC03 + CC04) / 2 (other lines): production and TRS per machine and team over the top-bar period,
+         then the same group's TRS slide (IsTrs). -->
     <DataTemplate DataType="{x:Type slides:PackagingSlideViewModel}">
         <Grid>
             <Grid.RowDefinitions>
@@ -114,10 +115,58 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Margin="16,6,16,0" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis">
-                <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
+                <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/><Run
+                     Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold">
+                    <Run.Style>
+                        <Style TargetType="Run">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsTrs}" Value="True">
+                                    <Setter Property="Text" Value=" - TRS"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Run.Style>
+                </Run>
                 <Run Text=" · "/><Run Text="{Binding MachinesLabel, Mode=OneWay}"/>
                 <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
-                <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding TotalProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                <Run Text="  ·  TRS " FontSize="18"/><Run Text="{Binding Overall.Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                                                     FontWeight="Bold" Foreground="{Binding Overall.TrsSeverity, Converter={StaticResource SeverityBrush}}"/>                <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding TotalProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                <!-- Cumul production slide: how many machines run right now. -->
+                <Run FontSize="18">
+                    <Run.Style>
+                        <Style TargetType="Run">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
+                                    <Setter Property="Text" Value="  ·  En marche "/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Run.Style>
+                </Run><Run FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}">
+                    <Run.Style>
+                        <Style TargetType="Run">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
+                                    <Setter Property="Text" Value="{Binding RunningCount, Mode=OneWay}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Run.Style>
+                </Run><Run>
+                    <Run.Style>
+                        <Style TargetType="Run">
+                            <Setter Property="Text" Value=""/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
+                                    <Setter Property="Text" Value="{Binding RunTiles.Count, StringFormat={}/{0}, Mode=OneWay}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Run.Style>
+                </Run>
             </TextBlock>
             <views:PackagingPanel Grid.Row="1"/>
         </Grid>

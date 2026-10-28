@@ -32,6 +32,8 @@ public sealed record DashboardFilter
 {
     public string? Sector { get; init; }
     public IReadOnlyList<string> MachineIds { get; init; } = Array.Empty<string>();
+    // Display names of MachineIds, same order: shown in place of the ids.
+    public IReadOnlyList<string> MachineNames { get; init; } = Array.Empty<string>();
     public int? ShiftId { get; init; }
     public string? Team { get; init; }
     public double? TargetWeight { get; init; }
@@ -54,14 +56,17 @@ public sealed record DashboardFilter
                            && MatchesWeight(l.TargetNetWeight))
             .ToList();
 
-    // "Couscous · CC01, CC02 · Poste Matin · Equipe A · 500 g", "" when no filter.
+    // "Controle CC01, Controle CC02" ("" = every machine).
+    public string MachinesLabel => string.Join(", ", MachineNames.Count == MachineIds.Count ? MachineNames : MachineIds);
+
+    // "Couscous · Controle CC01, Controle CC02 · Poste Matin · Equipe A · 500 g", "" when no filter.
     public string Describe()
     {
         var parts = new List<string>();
         if (Sector != null)
             parts.Add(Sector);
         if (MachineIds.Count > 0)
-            parts.Add(string.Join(", ", MachineIds));
+            parts.Add(MachinesLabel);
         if (ShiftId is { } shift)
             parts.Add("Poste " + KpiCalculator.ShiftName(shift));
         if (Team != null)

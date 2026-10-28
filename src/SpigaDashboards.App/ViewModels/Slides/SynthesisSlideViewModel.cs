@@ -108,8 +108,8 @@ public class SynthesisSlideViewModel
             if (labels.Count == 0)
                 labels = groups.Select(g => g.Label).ToList();
             var perStep = groups.Select(g => KpiCalculator.Summarize(g.Lots, KpiCalculator.AvailabilityPercent(g.Lots))).ToList();
-            trsLines.Add((m.MachineId, perStep.Select(k => k.TrsPercent).ToArray()));
-            deviationLines.Add((m.MachineId, perStep.Select(k => k.WeightDeviationPercent).ToArray()));
+            trsLines.Add((m.MachineName, perStep.Select(k => k.TrsPercent).ToArray()));
+            deviationLines.Add((m.MachineName, perStep.Select(k => k.WeightDeviationPercent).ToArray()));
         }
 
         // Reference line only when every line shares the same TRS target.

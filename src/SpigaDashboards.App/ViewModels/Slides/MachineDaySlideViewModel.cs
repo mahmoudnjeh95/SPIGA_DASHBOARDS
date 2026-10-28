@@ -7,7 +7,7 @@ namespace SpigaDashboards.App.ViewModels.Slides;
 
 // "Aujourd'hui" / "Poste precedent" slide: one machine, one poste in full
 // (the poste running now, or the one before it), and under it the postes
-// already worked on the same shift day (Matin; Matin + Soir). The poste and
+// already worked on the same shift day (Matin; Matin + Après-midi). The poste and
 // team filters pick which postes are shown; the weight filter restricts the
 // buckets the figures come from.
 public class MachineDaySlideViewModel

@@ -16,6 +16,7 @@ public partial class StopsViewModel : ObservableObject
 {
     private const string AllOption = "Toutes";
     private const string AllPostes = "Tous";
+    private static readonly MachinePick AllMachines = new(AllOption, Array.Empty<string>());
 
     private readonly ProductionRepository _repository;
     private readonly TeamScheduleService _teamSchedule;
@@ -24,16 +25,16 @@ public partial class StopsViewModel : ObservableObject
 
     [ObservableProperty] private DateTime? fromDate = DateTime.Now.Date;
     [ObservableProperty] private DateTime? toDate = DateTime.Now.Date;
-    [ObservableProperty] private string selectedMachine = AllOption;
+    [ObservableProperty] private MachinePick selectedMachine = AllMachines;
     [ObservableProperty] private string selectedShift = AllPostes;
     [ObservableProperty] private string selectedTeam = AllOption;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string summaryText = "";
     [ObservableProperty] private bool isBusy;
 
-    public List<string> ShiftOptions { get; } = new() { AllPostes, "Matin", "Soir", "Nuit" };
+    public List<string> ShiftOptions { get; } = new() { AllPostes, "Matin", "Après-midi", "Nuit" };
     public ObservableCollection<string> TeamOptions { get; } = new();
-    public ObservableCollection<string> MachineOptions { get; } = new();
+    public ObservableCollection<MachinePick> MachineOptions { get; } = new();
     public ObservableCollection<ProductionStop> Results { get; } = new();
     public ObservableCollection<TeamStopTotal> TeamTotals { get; } = new();
 
@@ -52,7 +53,7 @@ public partial class StopsViewModel : ObservableObject
             TeamOptions.Add(name);
         if (!TeamOptions.Contains(TeamScheduleService.NoTeam))
             TeamOptions.Add(TeamScheduleService.NoTeam);
-        MachineOptions.Add(AllOption);
+        MachineOptions.Add(AllMachines);
 
         if (initialRange is { } range)
         {
@@ -67,8 +68,8 @@ public partial class StopsViewModel : ObservableObject
         try
         {
             _machines = await _repository.GetMachinesAsync();
-            foreach (var machine in _machines.Where(m => !MachineOptions.Contains(m.MachineId)))
-                MachineOptions.Add(machine.MachineId);
+            foreach (var machine in _machines)
+                MachineOptions.Add(new MachinePick(machine.MachineName, new[] { machine.MachineId }));
         }
         catch (Exception ex)
         {
@@ -112,14 +113,14 @@ public partial class StopsViewModel : ObservableObject
 
         if (_machines.Count == 0)
             _machines = await _repository.GetMachinesAsync();
-        var machines = SelectedMachine == AllOption
+        var machines = SelectedMachine.MachineIds.Count == 0
             ? _machines
-            : _machines.Where(m => m.MachineId == SelectedMachine).ToList();
+            : _machines.Where(m => SelectedMachine.MachineIds.Contains(m.MachineId)).ToList();
 
         StatusMessage = "Recherche en cours...";
         var segments = await _repository.GetLineSegmentsAsync(machines.Select(m => m.MachineId).ToList(), from, to);
         var names = _machines.ToDictionary(m => m.MachineId, m => m.MachineName);
-        var shiftId = ShiftOptions.IndexOf(SelectedShift); // 0 = Tous, 1 Matin, 2 Soir, 3 Nuit
+        var shiftId = ShiftOptions.IndexOf(SelectedShift); // 0 = Tous, 1 Matin, 2 Après-midi, 3 Nuit
         var stops = StopDetector.Detect(segments, from, to, _settings, _teamSchedule, names)
             .Where(s => shiftId <= 0 || s.ShiftId == shiftId)
             .Where(s => SelectedTeam == AllOption || s.Team == SelectedTeam)

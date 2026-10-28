@@ -7,6 +7,7 @@ public class HistoryRow
 {
     public DateTime StartTime { get; init; }
     public string MachineId { get; init; } = "";
+    public string MachineName { get; init; } = "";
     public string Sector { get; init; } = "";
     public string ShiftName { get; init; } = "";
     public string Team { get; init; } = "";

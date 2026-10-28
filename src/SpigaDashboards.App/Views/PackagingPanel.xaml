@@ -8,9 +8,12 @@
              mc:Ignorable="d"
              d:DesignWidth="1560" d:DesignHeight="760" Background="Transparent">
 
-    <!-- Conditionnement 1 / 2 (PackagingSlideViewModel): on top, the production
-         of each machine per team with row and column totals; below, the team
-         totals and the machine totals as bars. -->
+    <!-- Conditionnement 1 / 2 / Cumul (PackagingSlideViewModel): on top, the
+         production and TRS of each machine per team with row and column
+         totals; below, the team totals and the machine totals as bars (on the
+         Cumul production slide, the run state of every machine instead of the
+         machine bars). On the TRS slide (IsTrs) the cells lead with the TRS
+         and its D / P / Q, and the bars are the TRS. -->
     <UserControl.Resources>
         <Style x:Key="Head" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
@@ -20,23 +23,43 @@
             <Setter Property="VerticalAlignment" Value="Bottom"/>
         </Style>
 
-        <!-- Production in bold, bags beside it. -->
+        <!-- Production slide: production in bold, TRS, then bags. TRS slide:
+             TRS in bold, then D / P / Q. Nothing but "—" when nothing was made. -->
         <DataTemplate x:Key="CellTemplate" DataType="{x:Type slides:PackagingCell}">
-            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                <Run Text="{Binding ProductionText, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                <Run FontSize="14" Foreground="{DynamicResource SubtleTextBrush}">
-                    <Run.Style>
-                        <Style TargetType="Run">
-                            <Setter Property="Text" Value="{Binding TotalBags, StringFormat='{}· {0:N0} sacs', Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding TotalBags}" Value="0">
-                                    <Setter Property="Text" Value=""/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Run.Style>
-                </Run>
-            </TextBlock>
+            <Grid VerticalAlignment="Center">
+                <TextBlock x:Name="ProductionLayout" TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding ProductionText, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <Run x:Name="TrsLabel" Text=" TRS " FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/><Run
+                         x:Name="TrsValue" Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                         FontSize="18" FontWeight="Bold" Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                    <Run x:Name="Bags" Text="{Binding TotalBags, StringFormat='{}· {0:N0} sacs', Mode=OneWay, ConverterCulture=fr-FR}"
+                         FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
+                </TextBlock>
+                <TextBlock x:Name="TrsLayout" TextTrimming="CharacterEllipsis" Visibility="Collapsed">
+                    <Run Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                         FontSize="22" FontWeight="Bold" Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
+                    <Run x:Name="Dpq" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"
+                         Text="{Binding Kpis.AvailabilityPercent, StringFormat='{} D {0:0}%', Mode=OneWay, ConverterCulture=fr-FR}"/><Run
+                         x:Name="Perf" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"
+                         Text="{Binding Kpis.PerformancePercent, StringFormat='{} · P {0:0}%', TargetNullValue=' · P —', Mode=OneWay, ConverterCulture=fr-FR}"/><Run
+                         x:Name="Quality" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"
+                         Text="{Binding Kpis.QualityPercent, StringFormat='{} · Q {0:0.0}%', TargetNullValue=' · Q —', Mode=OneWay, ConverterCulture=fr-FR}"/>
+                </TextBlock>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsTrs, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                    <Setter TargetName="ProductionLayout" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="TrsLayout" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasProduction}" Value="False">
+                    <Setter TargetName="TrsLabel" Property="Text" Value=""/>
+                    <Setter TargetName="TrsValue" Property="Text" Value=""/>
+                    <Setter TargetName="Bags" Property="Text" Value=""/>
+                    <Setter TargetName="Dpq" Property="Text" Value=""/>
+                    <Setter TargetName="Perf" Property="Text" Value=""/>
+                    <Setter TargetName="Quality" Property="Text" Value=""/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </UserControl.Resources>
 
@@ -109,8 +132,36 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <views:ChartCard Grid.Column="0" Chart="{Binding TeamChart}" Title="Production par equipe"/>
-            <views:ChartCard Grid.Column="1" Chart="{Binding MachineChart}" Title="Production par machine"/>
+            <!-- The legend names the target line of the TRS bars. -->
+            <views:ChartCard Grid.Column="0" Chart="{Binding TeamChart}" Title="{Binding TeamChartTitle}" ShowLegend="{Binding IsTrs}"
+                             Visibility="{Binding ShowRunTiles, Converter={StaticResource InverseBoolToVisibility}}"/>
+            <views:ChartCard Grid.Column="1" Chart="{Binding MachineChart}" Title="{Binding MachineChartTitle}" ShowLegend="{Binding IsTrs}"
+                             Visibility="{Binding ShowRunTiles, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+            <!-- Cumul production slide, in place of the bars (the table's totals
+                 have them): every machine's run-state photo (RunStateImage) in one
+                 row, as big as the width allows, captioned with its id only. -->
+            <Border Grid.ColumnSpan="2" Style="{StaticResource ChartTile}"
+                    Visibility="{Binding ShowRunTiles, Converter={StaticResource BoolToVisibility}}">
+                <ItemsControl ItemsSource="{Binding RunTiles}" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type slides:MachineRunTile}">
+                            <Viewbox Margin="6,0">
+                                <StackPanel Width="150" Margin="0,8,0,0">
+                                    <views:RunStateImage HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{Binding MachineId}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                </StackPanel>
+                            </Viewbox>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

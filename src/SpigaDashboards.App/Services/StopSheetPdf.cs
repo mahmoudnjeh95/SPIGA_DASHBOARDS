@@ -122,7 +122,7 @@ public static class StopSheetPdf
     {
         var cells = new[]
         {
-            stop.MachineName == stop.MachineId ? stop.MachineId : $"{stop.MachineId} - {stop.MachineName}",
+            stop.MachineName,
             stop.Start.ToString("HH:mm"), stop.End.ToString("HH:mm"), stop.DurationText, stop.BreakText, stop.TypeLabel,
             "", "", "",
         };

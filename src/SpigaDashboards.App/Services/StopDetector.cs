@@ -95,7 +95,7 @@ public static class StopDetector
             yield return current;
     }
 
-    // The postes (06-14 Matin, 14-22 Soir, 22-06 Nuit) overlapping [start, end).
+    // The postes (06-14 Matin, 14-22 Après-midi, 22-06 Nuit) overlapping [start, end).
     private static IEnumerable<(DateTime Start, DateTime End, int ShiftId)> Postes(DateTime start, DateTime end)
     {
         var shiftId = KpiCalculator.CurrentShiftId(start);
