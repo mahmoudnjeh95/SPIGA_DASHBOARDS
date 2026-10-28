@@ -37,6 +37,11 @@ public class ProductionBucket
     public double ObservedMinutes { get; set; }
     public double RunMinutes { get; set; }
 
+    // Stopped minutes inside a planned break (AppSettings.PlannedBreaks):
+    // left out of the time the line was required to run.
+    public double PlannedStopMinutes { get; set; }
+    public double RequiredMinutes => ObservedMinutes - PlannedStopMinutes;
+
     // Fastest snapshot interval of the bucket (bags/min), 0 = none measured.
     public double MaxSpeedBagsPerMinute { get; set; }
 

@@ -27,5 +27,18 @@ public partial class NominalRateRowViewModel : ObservableObject
     }
 }
 
-// Machine choice of a cadence row ("" = Toutes).
-public sealed record MachineChoice(string Id, string Label);
+// Machine choice of a cadence row ("" = Toutes). Label = the machine's
+// display name, updated live as it is edited in the machine list; the row
+// still stores the Id.
+public sealed partial class MachineChoice : ObservableObject
+{
+    public MachineChoice(string id, string label)
+    {
+        Id = id;
+        this.label = label;
+    }
+
+    public string Id { get; }
+
+    [ObservableProperty] private string label;
+}

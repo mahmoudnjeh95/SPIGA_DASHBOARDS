@@ -1,0 +1,55 @@
+namespace SpigaDashboards.App.Models;
+
+public enum LineState
+{
+    Producing = 0,
+    Stopped = 1,
+    NoData = 2,
+    // Counter moved across a silence longer than MaxIntervalSeconds: bags
+    // were made at some unknown time in it. Neither a stop nor a sign the
+    // line ran in a given poste.
+    Unplaced = 3,
+}
+
+// A stretch of one line's timeline in one state (ProductionRepository.GetLineSegmentsAsync).
+public class LineSegment
+{
+    public string MachineId { get; set; } = "";
+    public LineState State { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+}
+
+// One stop of a line within one poste (a stop across a poste change is
+// listed in both postes), as detected by StopDetector.
+public class ProductionStop
+{
+    public string MachineId { get; set; } = "";
+    public string MachineName { get; set; } = "";
+    public DateTime ShiftDate { get; set; }
+    public int ShiftId { get; set; }
+    public string Team { get; set; } = "";
+    public DateTime Start { get; set; }
+    public DateTime End { get; set; }
+
+    // Part of the stop inside planned breaks (not counted), and part with no
+    // snapshot at all (StatsViewer not writing: cause unknown).
+    public double BreakMinutes { get; set; }
+    public double NoDataMinutes { get; set; }
+
+    public double TotalMinutes => (End - Start).TotalMinutes;
+    public double NetMinutes => Math.Max(0, TotalMinutes - BreakMinutes);
+    public bool IsMostlyNoData => NoDataMinutes >= NetMinutes / 2;
+
+    public string ShiftName => Services.KpiCalculator.ShiftName(ShiftId);
+    public string TypeLabel => IsMostlyNoData ? "Sans données" : "Arrêt";
+    public string DurationText => FormatDuration(NetMinutes);
+    public string BreakText => BreakMinutes >= 0.5 ? FormatDuration(BreakMinutes) : "";
+
+    // "7 min", "1 h 05"
+    public static string FormatDuration(double minutes)
+    {
+        var total = (int)Math.Round(minutes);
+        return total < 60 ? $"{total} min" : $"{total / 60} h {total % 60:00}";
+    }
+}

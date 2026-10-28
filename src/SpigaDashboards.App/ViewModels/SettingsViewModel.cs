@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -49,6 +50,10 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<MachineChoice> MachineChoices { get; } = new();
 
     [ObservableProperty] private string nominalRatesStatusMessage = "";
+
+    public ObservableCollection<PlannedBreakRowViewModel> PlannedBreaks { get; } = new();
+    [ObservableProperty] private string stopThresholdText = "";
+    [ObservableProperty] private string breaksStatusMessage = "";
 
     public event EventHandler? SettingsApplied;
 
@@ -112,6 +117,14 @@ public partial class SettingsViewModel : ObservableObject
                 TareText = entry.TareGrams > 0 ? NominalRateRowViewModel.Format(entry.TareGrams) : "",
             });
         }
+
+        foreach (var b in settings.PlannedBreaks.OrderBy(b => b.Start))
+            PlannedBreaks.Add(new PlannedBreakRowViewModel
+            {
+                StartText = PlannedBreakRowViewModel.Format(b.Start),
+                DurationText = b.DurationMinutes.ToString(CultureInfo.InvariantCulture),
+            });
+        StopThresholdText = settings.StopThresholdMinutes.ToString(CultureInfo.InvariantCulture);
 
         _ = LoadMachinesAsync();
     }
@@ -247,7 +260,47 @@ public partial class SettingsViewModel : ObservableObject
         return targets;
     }
 
-    public bool ValidateNominalRates() => ParseNominalRates() != null && ParseTrsTargets() != null;
+    [RelayCommand]
+    private void AddPlannedBreak() => PlannedBreaks.Add(new PlannedBreakRowViewModel { DurationText = "20" });
+
+    [RelayCommand]
+    private void RemovePlannedBreak(PlannedBreakRowViewModel row) => PlannedBreaks.Remove(row);
+
+    // Pauses table; null (message shown) on a bad cell. Blank rows are skipped.
+    private List<PlannedBreak>? ParsePlannedBreaks()
+    {
+        var breaks = new List<PlannedBreak>();
+        foreach (var row in PlannedBreaks)
+        {
+            if (row.StartText.Trim().Length == 0 && row.DurationText.Trim().Length == 0)
+                continue;
+            if (!PlannedBreakRowViewModel.TryParseStart(row.StartText, out var start))
+            {
+                BreaksStatusMessage = $"Heure de pause invalide : \"{row.StartText}\" (format 10:00 attendu).";
+                return null;
+            }
+            if (!int.TryParse(row.DurationText.Trim(), out var minutes) || minutes <= 0 || minutes > 480)
+            {
+                BreaksStatusMessage = $"Duree invalide pour la pause de {row.StartText} : \"{row.DurationText}\" (1 a 480 min).";
+                return null;
+            }
+            breaks.Add(new PlannedBreak { Start = start, DurationMinutes = minutes });
+        }
+        BreaksStatusMessage = "";
+        return breaks.OrderBy(b => b.Start).ToList();
+    }
+
+    private int? ParseStopThreshold()
+    {
+        if (int.TryParse(StopThresholdText.Trim(), out var minutes) && minutes >= 1 && minutes <= 240)
+            return minutes;
+        BreaksStatusMessage = $"Seuil d'arret invalide : \"{StopThresholdText}\" (1 a 240 min).";
+        return null;
+    }
+
+    // Every table cell checked before saving; false = a message says which one.
+    public bool Validate()
+        => ParseNominalRates() != null && ParseTrsTargets() != null && ParsePlannedBreaks() != null && ParseStopThreshold() != null;
 
     private async Task LoadMachinesAsync()
     {
@@ -257,7 +310,7 @@ public partial class SettingsViewModel : ObservableObject
             var machines = await _repository.GetMachinesAsync();
             foreach (var machine in machines)
             {
-                Machines.Add(new MachineVisibilityOption
+                var option = new MachineVisibilityOption
                 {
                     MachineId = machine.MachineId,
                     OriginalMachineName = machine.MachineName,
@@ -266,9 +319,22 @@ public partial class SettingsViewModel : ObservableObject
                     TrsTargetText = _settings.MachineTrsTargets.TryGetValue(machine.MachineId, out var target)
                         ? NominalRateRowViewModel.Format(target)
                         : "",
-                });
-                if (MachineChoices.All(c => c.Id != machine.MachineId))
-                    MachineChoices.Add(new MachineChoice(machine.MachineId, machine.MachineId));
+                };
+                Machines.Add(option);
+
+                // The cadence table names machines as the list above does, even while being edited.
+                var choice = MachineChoices.FirstOrDefault(c => c.Id == machine.MachineId);
+                if (choice == null)
+                {
+                    choice = new MachineChoice(machine.MachineId, "");
+                    MachineChoices.Add(choice);
+                }
+                choice.Label = ChoiceLabel(option);
+                option.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MachineVisibilityOption.MachineName))
+                        choice.Label = ChoiceLabel(option);
+                };
             }
             MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvee." : "";
         }
@@ -277,6 +343,10 @@ public partial class SettingsViewModel : ObservableObject
             MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
         }
     }
+
+    // A blank name is not saved (SaveAsync keeps the old one): show the old one meanwhile.
+    private static string ChoiceLabel(MachineVisibilityOption option)
+        => option.MachineName.Trim() is { Length: > 0 } name ? name : option.OriginalMachineName;
 
     [RelayCommand]
     private async Task RefreshMachinesAsync() => await LoadMachinesAsync();
@@ -354,6 +424,8 @@ public partial class SettingsViewModel : ObservableObject
 
         _settings.PdfDocumentPath = PdfDocumentPath;
         _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
+        _settings.PlannedBreaks = ParsePlannedBreaks() ?? _settings.PlannedBreaks;
+        _settings.StopThresholdMinutes = ParseStopThreshold() ?? _settings.StopThresholdMinutes;
         // Machine list not loaded (DB down): keep the targets already saved.
         if (Machines.Count > 0)
             _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;

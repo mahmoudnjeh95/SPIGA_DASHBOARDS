@@ -85,6 +85,15 @@ public class NominalRateEntry
     public double TareGrams { get; set; }
 }
 
+// A planned break of every day (e.g. 10:00 for 20 min). Time the line is
+// stopped inside it is left out of Disponibilite and of the stop list; a
+// line that keeps running through it still gets the credit.
+public class PlannedBreak
+{
+    public TimeSpan Start { get; set; }
+    public int DurationMinutes { get; set; }
+}
+
 // Where the TV window (dashboard only, for the production-floor screen) was
 // last left, so it comes back on the same screen after a restart.
 public class TvScreenSettings
@@ -156,6 +165,22 @@ public class AppSettings
     public Dictionary<string, double> MachineTrsTargets { get; set; } = new();
 
     public const double DefaultTrsTarget = 85;
+
+    // Daily planned breaks (pauses), set in Parametres. Defaults = the site's
+    // 6 breaks, two per poste.
+    public List<PlannedBreak> PlannedBreaks { get; set; } = new()
+    {
+        new() { Start = new TimeSpan(10, 0, 0), DurationMinutes = 20 },
+        new() { Start = new TimeSpan(13, 40, 0), DurationMinutes = 20 },
+        new() { Start = new TimeSpan(18, 0, 0), DurationMinutes = 20 },
+        new() { Start = new TimeSpan(21, 40, 0), DurationMinutes = 20 },
+        new() { Start = new TimeSpan(2, 0, 0), DurationMinutes = 20 },
+        new() { Start = new TimeSpan(5, 40, 0), DurationMinutes = 20 },
+    };
+
+    // A counter frozen (outside planned breaks) for at least this many
+    // minutes is listed as a stop (Arrets window / printed sheet).
+    public int StopThresholdMinutes { get; set; } = 5;
 
     public double TrsTarget(string machineId)
         => MachineTrsTargets.TryGetValue(machineId, out var target) && target > 0 ? target : DefaultTrsTarget;

@@ -281,6 +281,7 @@ public class ProductionRepository
         public long MetalRejects { get; set; }
         public double ObservedMinutes { get; set; }
         public double RunMinutes { get; set; }
+        public double PlannedStopMinutes { get; set; }
         public double MaxSpeed { get; set; }
         public long MediaBags { get; set; }
         public double MediaWeightSum { get; set; }
@@ -288,31 +289,11 @@ public class ProductionRepository
 
     private static readonly string[] Counters = { "tot", "sotto", "ok", "sopra", "indet", "metal" };
 
-    // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
-    private async Task<List<ProductionBucket>> QueryBucketsAsync(
-        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
-    {
-        // Nothing before DataStartDate is read, not even as the baseline of the
-        // first interval: that interval is then dropped (unknown baseline).
-        var dataStart = _settings.DataStartDate;
-        if (from < dataStart)
-            from = dataStart;
-        if (to <= from)
-            return new List<ProductionBucket>();
+    private const string ByProduction = "PARTITION BY r.numero_linea, r.ID_produzione ORDER BY r.tempo_fine, r.progressivo";
 
-        var d = Dialect.For(_connectionFactory.Provider);
-        var bucket = size == BucketSize.Hour ? d.Hour("x.mid_t") : d.Day("x.mid_t");
-        const string byProduction = "PARTITION BY r.numero_linea, r.ID_produzione ORDER BY r.tempo_fine, r.progressivo";
-
-        var previous = string.Join(",\n", Counters.Select(c =>
-            $"           LAG(r.{c}) OVER ({byProduction}) AS prev_{c}"));
-        var deltas = string.Join(",\n", Counters.Select(c =>
-            $"           g.known * CASE WHEN g.prev_tot IS NULL OR g.restart = 1 THEN g.{c}"
-            + $" WHEN g.{c} > g.prev_{c} THEN g.{c} - g.prev_{c} ELSE 0 END AS d_{c}"));
-        var saneDeltas = string.Join(",\n", Counters.Select(c => $"           sc.sane * sc.d_{c} AS d_{c}"));
-
-        var sql = $@"
-WITH src AS (
+    // CTEs src .. rz: the snapshots of the lines matching lineFilter read in
+    // [@readFrom, @readTo), cleaned of StatsViewer's glitch rows.
+    private static string CleanSnapshotsSql(string lineFilter, Dialect d) => $@"src AS (
     SELECT p.numero_linea, p.ID_produzione, p.progressivo, p.tempo_inizio, p.tempo_fine,
            -- ID_produzione = line(4) + article(20) + start: fallback for a blank article column.
            COALESCE(NULLIF(RTRIM(p.codice_articolo), ''), SUBSTRING(p.ID_produzione, 5, 20)) AS codice_articolo,
@@ -337,14 +318,129 @@ rng AS (
     WHERE CASE WHEN s.tot = 0 AND s.tempo_inizio < @readFrom AND s.tempo_inizio < s.line_last_start THEN 1 ELSE 0 END = 0
 ),
 nz AS (
-    SELECT r.*, MAX(r.tot) OVER ({byProduction} ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS seen_max
+    SELECT r.*, MAX(r.tot) OVER ({ByProduction} ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS seen_max
     FROM rng r
 ),
 rz AS (
     -- All-zero glitch rows of a production that already showed bags are
     -- dropped, so the next real snapshot is compared with the last real one.
     SELECT * FROM nz WHERE NOT (nz.tot = 0 AND nz.seen_max > 0)
+)";
+
+    // Seconds of an interval (ending at second endSecond of its day, lasting
+    // duration seconds) inside a planned break. Intervals last at most
+    // MaxIntervalSeconds, so each break is checked on the interval's own day
+    // and the day before (an interval or a break across midnight).
+    private string BreakOverlapSql(string endSecond, string duration)
+    {
+        static string Min(string a, string b) => $"CASE WHEN {a} < {b} THEN {a} ELSE {b} END";
+        static string Max(string a, string b) => $"CASE WHEN {a} > {b} THEN {a} ELSE {b} END";
+
+        var start = $"({endSecond} - {duration})";
+        var terms = BreakSchedule.DayWindows(_settings.PlannedBreaks)
+            .SelectMany(w => new[] { w, (Start: w.Start - BreakSchedule.SecondsPerDay, End: w.End - BreakSchedule.SecondsPerDay) })
+            .Select(w =>
+            {
+                var overlap = $"{Min(endSecond, w.End.ToString())} - {Max(start, w.Start.ToString())}";
+                return $"CASE WHEN {overlap} > 0 THEN {overlap} ELSE 0 END";
+            })
+            .ToList();
+        return terms.Count == 0 ? "0" : "(" + string.Join("\n             + ", terms) + ")";
+    }
+
+    // A snapshot interval longer than this with the counter frozen means
+    // StatsViewer wasn't writing (every line at once when the server PC is
+    // off): "no data" rather than a machine stop. The cadence is 1-2 min.
+    private const int NoDataSeconds = 600;
+
+    // Each line's timeline in [from, to) cut into segments of consecutive
+    // snapshot intervals in the same state: producing (counter moved),
+    // stopped (counter frozen), no data (frozen across a gap longer than
+    // NoDataSeconds) or unplaced (moved across a gap too long to place). Same cleaned snapshots as the KPIs; an interval runs
+    // from the line's previous snapshot to this one. Segments that start
+    // before from or end after to are returned whole.
+    public async Task<List<LineSegment>> GetLineSegmentsAsync(IReadOnlyCollection<string> machineIds, DateTime from, DateTime to)
+    {
+        if (from < _settings.DataStartDate)
+            from = _settings.DataStartDate;
+        if (machineIds.Count == 0 || to <= from)
+            return new List<LineSegment>();
+
+        var d = Dialect.For(_connectionFactory.Provider);
+        const string lineFilter = "{0} IN (SELECT MachineId FROM Machines WHERE MachineId IN @machineIds)";
+        var sql = $@"
+WITH {CleanSnapshotsSql(lineFilter, d)},
+iv AS (
+    SELECT r.numero_linea, r.progressivo, r.tempo_inizio, r.tempo_fine AS t1, r.tot,
+           LAG(r.tempo_fine) OVER (PARTITION BY r.numero_linea ORDER BY r.tempo_fine, r.progressivo) AS t0,
+           LAG(r.tot) OVER ({ByProduction}) AS prev_tot
+    FROM rz r
 ),
+st AS (
+    -- Moved: counter up since the production's previous snapshot, a machine
+    -- reset (total under half the previous one), or a production started
+    -- inside the interval that already shows bags.
+    SELECT iv.numero_linea, iv.progressivo, iv.t0, iv.t1,
+           CASE WHEN iv.tot > iv.prev_tot
+                  OR (iv.tot > 0 AND 2 * iv.tot < iv.prev_tot)
+                  OR (iv.prev_tot IS NULL AND iv.tot > 0 AND iv.tempo_inizio >= iv.t0)
+                THEN CASE WHEN {d.Seconds("iv.t0", "iv.t1")} > {MaxIntervalSeconds}
+                          THEN {(int)LineState.Unplaced} ELSE {(int)LineState.Producing} END
+                WHEN {d.Seconds("iv.t0", "iv.t1")} > {NoDataSeconds} THEN {(int)LineState.NoData}
+                ELSE {(int)LineState.Stopped} END AS state
+    FROM iv
+    WHERE iv.t0 IS NOT NULL AND iv.t1 > iv.t0
+),
+isl AS (
+    SELECT st.*,
+           ROW_NUMBER() OVER (PARTITION BY st.numero_linea ORDER BY st.t1, st.progressivo)
+           - ROW_NUMBER() OVER (PARTITION BY st.numero_linea, st.state ORDER BY st.t1, st.progressivo) AS grp
+    FROM st
+)
+SELECT isl.numero_linea AS MachineId, isl.state AS State, MIN(isl.t0) AS StartTime, MAX(isl.t1) AS EndTime
+FROM isl
+GROUP BY isl.numero_linea, isl.state, isl.grp
+HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
+
+        var parameters = new DynamicParameters();
+        parameters.Add("machineIds", machineIds.ToList());
+        parameters.Add("from", from);
+        parameters.Add("to", to);
+        parameters.Add("readFrom", from - SnapshotMargin < _settings.DataStartDate ? _settings.DataStartDate : from - SnapshotMargin);
+        parameters.Add("readTo", to + SnapshotMargin);
+
+        using var connection = _connectionFactory.CreateConnection();
+        var segments = (await connection.QueryAsync<LineSegment>(sql, parameters)).ToList();
+        foreach (var s in segments)
+            s.MachineId = s.MachineId.TrimEnd();
+        return segments.OrderBy(s => s.MachineId).ThenBy(s => s.StartTime).ToList();
+    }
+
+    // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
+    private async Task<List<ProductionBucket>> QueryBucketsAsync(
+        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+    {
+        // Nothing before DataStartDate is read, not even as the baseline of the
+        // first interval: that interval is then dropped (unknown baseline).
+        var dataStart = _settings.DataStartDate;
+        if (from < dataStart)
+            from = dataStart;
+        if (to <= from)
+            return new List<ProductionBucket>();
+
+        var d = Dialect.For(_connectionFactory.Provider);
+        var bucket = size == BucketSize.Hour ? d.Hour("x.mid_t") : d.Day("x.mid_t");
+        const string byProduction = ByProduction;
+
+        var previous = string.Join(",\n", Counters.Select(c =>
+            $"           LAG(r.{c}) OVER ({byProduction}) AS prev_{c}"));
+        var deltas = string.Join(",\n", Counters.Select(c =>
+            $"           g.known * CASE WHEN g.prev_tot IS NULL OR g.restart = 1 THEN g.{c}"
+            + $" WHEN g.{c} > g.prev_{c} THEN g.{c} - g.prev_{c} ELSE 0 END AS d_{c}"));
+        var saneDeltas = string.Join(",\n", Counters.Select(c => $"           sc.sane * sc.d_{c} AS d_{c}"));
+
+        var sql = $@"
+WITH {CleanSnapshotsSql(lineFilter, d)},
 win AS (
     -- Baseline of each counter = the production's previous snapshot (ordered
     -- by tempo_fine, then progressivo: duplicate rows happen). A counter that
@@ -378,6 +474,7 @@ g AS (
 ),
 dl AS (
     SELECT g.numero_linea, g.ID_produzione, g.codice_articolo, g.target, g.media, g.tempo_fine, g.gap,
+           {d.SecondOfDay("g.tempo_fine")} AS e_sec,
            -- Observed time: 0 without a known baseline or past MaxIntervalSeconds.
            g.known * CASE WHEN g.gap > {MaxIntervalSeconds} THEN 0 ELSE g.gap END AS dur,
 {deltas}
@@ -400,6 +497,8 @@ x AS (
            -- Interval speed (bags/min), for the max speed of the bucket.
            CASE WHEN sc.sane = 1 AND sc.dur >= {MinSpeedIntervalSeconds}
                 THEN CAST(sc.d_tot AS {d.Float}) * 60 / sc.dur ELSE 0 END AS spd,
+           -- Seconds of the interval inside a planned break.
+           {BreakOverlapSql("sc.e_sec", "sc.dur")} AS brk,
 {saneDeltas}
     FROM sc
 )
@@ -423,6 +522,7 @@ FROM (
            CAST(SUM(x.d_metal) AS BIGINT)       AS MetalRejects,
            CAST(SUM(x.dur) AS {d.Float}) / 60   AS ObservedMinutes,
            CAST(SUM(CASE WHEN x.d_tot > 0 THEN x.dur ELSE 0 END) AS {d.Float}) / 60 AS RunMinutes,
+           CAST(SUM(CASE WHEN x.d_tot > 0 THEN 0 ELSE x.brk END) AS {d.Float}) / 60 AS PlannedStopMinutes,
            CAST(MAX(x.spd) AS {d.Float})        AS MaxSpeed,
            -- Fallback weight data (used only when the line has no lot): bags
            -- whose running average is within 15 % of the target.
@@ -497,6 +597,7 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
                 MetalRejects = p.MetalRejects,
                 ObservedMinutes = p.ObservedMinutes,
                 RunMinutes = p.RunMinutes,
+                PlannedStopMinutes = p.PlannedStopMinutes,
                 MaxSpeedBagsPerMinute = p.MaxSpeed,
             };
 
@@ -644,6 +745,7 @@ GROUP BY p.ID_produzione", parameters))
         Func<string, string, string> MinusSeconds,
         Func<string, string> Hour,
         Func<string, string> Day,
+        Func<string, string> SecondOfDay,
         string Float,
         string Now,
         string NowMinus6Hours,
@@ -656,6 +758,7 @@ GROUP BY p.ID_produzione", parameters))
             (x, s) => $"DATEADD(SECOND, -({s}), {x})",
             x => $"DATEADD(HOUR, DATEDIFF(HOUR, 0, {x}), 0)",
             x => $"DATEADD(DAY, DATEDIFF(DAY, 0, {x}), 0)",
+            x => $"DATEDIFF(SECOND, DATEADD(DAY, DATEDIFF(DAY, 0, {x}), 0), {x})",
             "FLOAT",
             "GETDATE()",
             "DATEADD(HOUR, -6, GETDATE())",
@@ -669,6 +772,8 @@ GROUP BY p.ID_produzione", parameters))
             (x, s) => $"datetime(julianday({x}) - ({s}) / 86400.0)",
             x => $"strftime('%Y-%m-%d %H:00:00', {x})",
             x => $"strftime('%Y-%m-%d 00:00:00', {x})",
+            // Wall-clock text read as UTC: modulo a day gives its time of day.
+            x => $"(CAST(strftime('%s', {x}) AS INTEGER) % 86400)",
             "REAL",
             "datetime('now', 'localtime')",
             "datetime('now', 'localtime', '-6 hours')",

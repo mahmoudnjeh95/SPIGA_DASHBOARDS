@@ -197,6 +197,33 @@
                         Command="{Binding AddNominalRateCommand}"/>
                 <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
+                <TextBlock Text="Pauses planifiees et arrets" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Pauses de tous les jours, sur toutes les machines. Le temps ou la ligne est a l'arret pendant une pause n'est pas compte dans la Disponibilite (ni le TRS), ni dans la liste des arrets ; une ligne qui tourne pendant la pause garde ce temps de marche."
+                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Debut (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>
+                    <TextBlock Text="Duree (min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding PlannedBreaks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:PlannedBreakRowViewModel}">
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
+                                <TextBox Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                <TextBox Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="8,0,0,0"/>
+                                <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="8,0,0,0"
+                                        Command="{Binding DataContext.RemovePlannedBreakCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="+ Pause" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                        Command="{Binding AddPlannedBreakCommand}"/>
+                <TextBlock Text="Seuil d'arret (minutes) : un compteur immobile au moins aussi longtemps, hors pauses, est liste dans la fenetre Arrets et sur la fiche a imprimer"
+                           Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
+                <TextBox Text="{Binding StopThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left"/>
+                <TextBlock Text="{Binding BreaksStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
                 <TextBlock Text="Equipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}"/>
                 <TextBlock Text="Cycle par defaut (aucun planning client fourni) : chaque equipe travaille 3 jours de suite sur un poste different, puis se repose 1 jour. A ajuster une fois le vrai planning connu."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>

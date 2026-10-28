@@ -107,6 +107,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -167,7 +168,12 @@
                     Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
                     Click="HistoryButton_Click"/>
 
-            <Button Grid.Column="5" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
+            <Button Grid.Column="5" Content="Arrêts" Margin="12,0,0,0" Padding="12,6"
+                    ToolTip="Arrêts de production par poste et par équipe, fiche à imprimer"
+                    Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
+                    Click="StopsButton_Click"/>
+
+            <Button Grid.Column="6" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
                     Background="{DynamicResource SecondaryButtonBrush}" Foreground="{DynamicResource PrimaryTextBrush}" BorderThickness="0"
                     Click="SettingsButton_Click"/>
         </Grid>

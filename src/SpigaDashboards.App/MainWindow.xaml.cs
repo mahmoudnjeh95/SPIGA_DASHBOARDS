@@ -92,6 +92,13 @@ public partial class MainWindow : Window
         window.ShowDialog();
     }
 
+    private void StopsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var stopsViewModel = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
+        var window = new StopsWindow(stopsViewModel) { Owner = this };
+        window.ShowDialog();
+    }
+
     private void NoteTextBox_GotFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = true;
 
     private void NoteTextBox_LostFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = false;

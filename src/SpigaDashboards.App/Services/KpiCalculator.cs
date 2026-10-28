@@ -38,10 +38,10 @@ public static class KpiCalculator
 
     // TRS (OEE) = Disponibilite x Performance x Qualite. This is a provisional
     // estimate built from data we already have, not the client's official
-    // methodology (which needs planned-stop and ideal-cycle-time inputs we
-    // don't collect yet). `lots` are hour/day buckets (see ProductionBucket):
-    //  - Disponibilite: share of the observed time in which the line produced
-    //    (passed in, see AvailabilityPercent).
+    // methodology. `lots` are hour/day buckets (see ProductionBucket):
+    //  - Disponibilite: share of the observed time, planned breaks the line
+    //    was stopped in excluded, in which the line produced (passed in, see
+    //    AvailabilityPercent).
     //  - Performance: minutes the bags would have taken at each production's
     //    own nominal rate / producing minutes they actually took. Productions
     //    with no known rate are left out of both sides; none at all -> null
@@ -223,11 +223,12 @@ public static class KpiCalculator
         _ => KpiSeverity.Bad,
     };
 
-    // Share (0-100) of the observed time in which the line produced bags.
+    // Share (0-100) of the required time (observed, minus the planned breaks
+    // the line was stopped in) in which the line produced bags.
     public static double AvailabilityPercent(IReadOnlyCollection<ProductionBucket> lots)
     {
-        var observed = lots.Sum(l => l.ObservedMinutes);
-        return observed > 0 ? 100.0 * lots.Sum(l => l.RunMinutes) / observed : 0;
+        var required = lots.Sum(l => l.RequiredMinutes);
+        return required > 0 ? Math.Min(100, 100.0 * lots.Sum(l => l.RunMinutes) / required) : 0;
     }
 
     // Bags per team (TeamScheduleService roster) over the period. Every
