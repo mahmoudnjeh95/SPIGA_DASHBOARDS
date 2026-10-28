@@ -105,4 +105,21 @@
             <views:SynthesisPanel Grid.Row="1"/>
         </Grid>
     </DataTemplate>
+
+    <!-- Conditionnement 1 (CC03 + CC04) / 2 (other lines): production per machine and team over the top-bar period. -->
+    <DataTemplate DataType="{x:Type slides:PackagingSlideViewModel}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Margin="16,6,16,0" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis">
+                <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
+                <Run Text=" · "/><Run Text="{Binding MachinesLabel, Mode=OneWay}"/>
+                <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
+                <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding TotalProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+            </TextBlock>
+            <views:PackagingPanel Grid.Row="1"/>
+        </Grid>
+    </DataTemplate>
 </ResourceDictionary>

@@ -12,3 +12,6 @@ public sealed record PdfSlideDescriptor(string PdfPath) : SlideDescriptor;
 
 // Machines = the sector's machines kept by the filters, in display order.
 public sealed record SynthesisSlideDescriptor(string Sector, IReadOnlyList<string> MachineIds) : SlideDescriptor;
+
+// Conditionnement 1 / 2: production of a group of machines per machine and team.
+public sealed record PackagingSlideDescriptor(string Title, IReadOnlyList<string> MachineIds) : SlideDescriptor;

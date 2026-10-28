@@ -16,6 +16,9 @@ public partial class MainViewModel : ObservableObject
     // One slide per machine, in machine-id order within its sector.
     private static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue" };
 
+    // Conditionnement 1 slide; Conditionnement 2 gets every other machine.
+    private static readonly string[] Packaging1MachineIds = { "CC03", "CC04" };
+
     private static readonly TimeSpan NoteRefreshInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan HealthCheckInterval = TimeSpan.FromMinutes(30);
 
@@ -210,6 +213,7 @@ public partial class MainViewModel : ObservableObject
         // cadences / empty bag weights / team names.
         SynthesisSlideViewModel.ClearCache();
         MachinePeriodSlideViewModel.ClearCache();
+        PackagingSlideViewModel.ClearCache();
         RefreshFilterOptions();
 
         try
@@ -582,6 +586,19 @@ public partial class MainViewModel : ObservableObject
                 slides.Add(new SynthesisSlideDescriptor(sector, ids));
         }
 
+        // Conditionnement 1 / 2, each skipped when the filters leave it no machine.
+        var packagingIds = visible
+            .OrderBy(m => Array.IndexOf(SectorOrder, m.Sector))
+            .ThenBy(m => m.MachineId)
+            .Select(m => m.MachineId)
+            .ToList();
+        var packaging1 = packagingIds.Where(id => Packaging1MachineIds.Contains(id)).ToList();
+        var packaging2 = packagingIds.Except(packaging1).ToList();
+        if (packaging1.Count > 0)
+            slides.Add(new PackagingSlideDescriptor("Conditionnement 1", packaging1));
+        if (packaging2.Count > 0)
+            slides.Add(new PackagingSlideDescriptor("Conditionnement 2", packaging2));
+
         _slides = slides;
     }
 
@@ -630,6 +647,7 @@ public partial class MainViewModel : ObservableObject
                 PdfSlideDescriptor pdf => await PdfSlideViewModel.LoadAsync(pdf.PdfPath),
                 SynthesisSlideDescriptor synthesis => await SynthesisSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings,
                     synthesis.Sector, synthesis.MachineIds.Select(id => _machinesById[id]).ToList(), SynthesisPeriod, _filter),
+                PackagingSlideDescriptor packaging => await LoadPackagingSlideAsync(packaging),
                 _ => null,
             };
             IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;
@@ -657,6 +675,21 @@ public partial class MainViewModel : ObservableObject
         }
         return MachinePeriodSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Sector,
             _machinesById[slide.MachineId], from, to, label, _filter);
+    }
+
+    // Top-bar period; "Aujourd'hui" and "Poste precedent" both show the whole day.
+    private Task<PackagingSlideViewModel> LoadPackagingSlideAsync(PackagingSlideDescriptor slide)
+    {
+        var (from, to) = CurrentRange;
+        var label = PeriodRanges.Label(SelectedPeriod == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : SelectedPeriod, from, to);
+        // Nothing before DataStartDate is read: start there, and say so.
+        if (from < _settings.DataStartDate && to > _settings.DataStartDate)
+        {
+            from = _settings.DataStartDate.Date;
+            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+        }
+        return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, slide.Title,
+            slide.MachineIds.Select(id => _machinesById[id]).ToList(), from, to, label, _filter);
     }
 
     private void SetConnectionState(bool healthy, string errorMessage = "")
