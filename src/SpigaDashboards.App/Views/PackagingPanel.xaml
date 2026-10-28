@@ -23,7 +23,7 @@
             <Setter Property="VerticalAlignment" Value="Bottom"/>
         </Style>
 
-        <!-- Production slide: production in bold, TRS, then bags. TRS slide:
+        <!-- Production slide: production in bold, TRS, then bags (not on Cumul). TRS slide:
              TRS in bold, then D / P / Q. Nothing but "—" when nothing was made. -->
         <DataTemplate x:Key="CellTemplate" DataType="{x:Type slides:PackagingCell}">
             <Grid VerticalAlignment="Center">
@@ -50,6 +50,10 @@
                 <DataTrigger Binding="{Binding DataContext.IsTrs, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
                     <Setter TargetName="ProductionLayout" Property="Visibility" Value="Collapsed"/>
                     <Setter TargetName="TrsLayout" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+                <!-- Cumul: tonnage and TRS only, no bag count. -->
+                <DataTrigger Binding="{Binding DataContext.IsCumul, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                    <Setter TargetName="Bags" Property="Text" Value=""/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding HasProduction}" Value="False">
                     <Setter TargetName="TrsLabel" Property="Text" Value=""/>
