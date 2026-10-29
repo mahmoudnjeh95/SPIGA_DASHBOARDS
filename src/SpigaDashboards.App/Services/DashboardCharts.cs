@@ -42,6 +42,8 @@ public static class DashboardCharts
         {
             new ColumnSeries<double>
             {
+                Rx = 6,
+                Ry = 6,
                 Values = steps.Select(s =>
                 {
                     var observed = s.Lots.Sum(l => l.ObservedMinutes);
@@ -80,6 +82,8 @@ public static class DashboardCharts
         {
             new ColumnSeries<double?>
             {
+                Rx = 6,
+                Ry = 6,
                 Values = avg,
                 Name = "Vitesse moy.",
                 Fill = new SolidColorPaint(Blue),
@@ -157,6 +161,8 @@ public static class DashboardCharts
         {
             new ColumnSeries<double?>
             {
+                Rx = 6,
+                Ry = 6,
                 Values = trs,
                 Name = "TRS",
                 Fill = new SolidColorPaint(Blue),
@@ -282,6 +288,8 @@ public static class DashboardCharts
             {
                 new ColumnSeries<double>
                 {
+                    Rx = 6,
+                    Ry = 6,
                     Values = values.ToArray(),
                     Name = name,
                     Fill = new SolidColorPaint(Blue),
@@ -307,6 +315,8 @@ public static class DashboardCharts
         {
             new ColumnSeries<double?>
             {
+                Rx = 6,
+                Ry = 6,
                 Values = values.ToArray(),
                 Name = "TRS",
                 Fill = new SolidColorPaint(Blue),

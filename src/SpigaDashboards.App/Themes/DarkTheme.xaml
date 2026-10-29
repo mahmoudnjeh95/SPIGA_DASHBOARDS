@@ -17,6 +17,12 @@
     <SolidColorBrush x:Key="WarningBrush" Color="#F1C40F"/>
     <SolidColorBrush x:Key="DangerBrush" Color="#E74C3C"/>
 
+    <!-- Card outline, button hover/press veils, soft accent fill (pills, timer track). -->
+    <SolidColorBrush x:Key="CardBorderBrush" Color="#262B34"/>
+    <SolidColorBrush x:Key="HoverOverlayBrush" Color="#1AFFFFFF"/>
+    <SolidColorBrush x:Key="PressedOverlayBrush" Color="#33FFFFFF"/>
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E3B82F6"/>
+
     <SolidColorBrush x:Key="AlternatingRowBrush" Color="#14FFFFFF"/>
     <SolidColorBrush x:Key="DisconnectedOverlayBrush" Color="#CC111418"/>
 </ResourceDictionary>

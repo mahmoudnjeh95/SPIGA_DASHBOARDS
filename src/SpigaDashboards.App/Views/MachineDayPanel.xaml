@@ -31,43 +31,57 @@
                         <Run Text=" - Poste "/><Run Text="{Binding ShiftName, Mode=OneWay}"/>
                         <Run Text=" ("/><Run Text="{Binding TimeRange, Mode=OneWay}"/><Run Text=")"/>
                     </TextBlock>
-                    <UniformGrid Rows="1" Columns="7">
-                        <StackPanel>
+                    <!-- Each figure as wide as it needs, spaced out; when the seven don't
+                         fit the card (long values such as "7 109 kg" or "44,1 / 58,0"),
+                         the row shrinks as a whole instead of running into each other. -->
+                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,24,0">
                             <TextBlock Text="TRS" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,24,0">
                             <TextBlock Text="Poids moyen" Style="{StaticResource CardLabel}"/>
                             <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="26" SmallFontSize="16" ShowTargetWhenSingle="False"/>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,24,0">
                             <TextBlock Text="Production" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding ProductionText}" Style="{StaticResource CardValue}"/>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="3" Margin="0,0,24,0">
                             <TextBlock Text="Conformite" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="4" Margin="0,0,24,0">
                             <TextBlock Text="Vit. moy / max" Style="{StaticResource CardLabel}"/>
                             <TextBlock Style="{StaticResource CardValue}">
                                 <Run Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                                 <Run Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ —', Mode=OneWay, ConverterCulture=fr-FR}" FontSize="18" Foreground="{DynamicResource SecondaryTextBrush}"/>
                             </TextBlock>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="5" Margin="0,0,24,0">
                             <TextBlock Text="Disponibilite" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
                         </StackPanel>
-                        <StackPanel>
+                        <StackPanel Grid.Column="6">
                             <TextBlock Text="Ecart de poids" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </StackPanel>
-                    </UniformGrid>
+                    </Grid>
+                    </Viewbox>
                 </StackPanel>
             </Border>
         </DataTemplate>

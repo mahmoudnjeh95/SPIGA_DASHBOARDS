@@ -25,11 +25,94 @@
 
         <!-- Shared dashboard styles: used by MainWindow's chrome and every slide
              content control (MachinePanel today; PDF/annual-summary slides later). -->
+        <!-- Tiles: rounded, with a hairline outline that lifts them off the
+             window background (no drop shadow: costly in software rendering,
+             which is what a remote desktop session uses). Views/SlideMotion
+             fades them up one after the other when a slide comes in. -->
         <Style x:Key="KpiTile" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
             <Setter Property="Padding" Value="14,10"/>
             <Setter Property="Margin" Value="6"/>
+        </Style>
+
+        <!-- Toolbar / action button: flat, rounded, with a hover and press veil
+             over whatever Background the button sets (accent or secondary). -->
+        <Style x:Key="BarButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid x:Name="Root" RenderTransformOrigin="0.5,0.5">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="8"/>
+                            <Border x:Name="Veil" Background="{DynamicResource HoverOverlayBrush}" CornerRadius="8" Opacity="0"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Veil" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Veil" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Veil" Property="Background" Value="{DynamicResource PressedOverlayBrush}"/>
+                                <Setter TargetName="Root" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.97" ScaleY="0.97"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="AccentBarButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <!-- Small "live" dot that breathes, beside the current team / poste. -->
+        <Style x:Key="LiveDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Height" Value="10"/>
+            <Setter Property="Fill" Value="{DynamicResource SuccessBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="Loaded">
+                    <BeginStoryboard>
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.3" Duration="0:0:1.1">
+                                <DoubleAnimation.EasingFunction>
+                                    <SineEase EasingMode="EaseInOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="KpiLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
@@ -73,7 +156,9 @@
         </Style>
         <Style x:Key="ChartTile" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource TileBackgroundBrush}"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
             <Setter Property="Padding" Value="10"/>
             <Setter Property="Margin" Value="6"/>
         </Style>

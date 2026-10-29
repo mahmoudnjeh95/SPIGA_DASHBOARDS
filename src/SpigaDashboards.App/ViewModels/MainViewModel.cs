@@ -59,6 +59,14 @@ public partial class MainViewModel : ObservableObject
     // The consignes PDF gets the screen to itself: no team/poste badge over it.
     [ObservableProperty] private bool isPdfSlideShown;
 
+    // Motion only (Views/SlideMotion): SlideChangeCount moves when another
+    // slide comes up (not on a data refresh of the same one), RotationCycle
+    // whenever the auto-advance countdown starts over.
+    [ObservableProperty] private int slideChangeCount;
+    [ObservableProperty] private int rotationCycle;
+    private int _shownIndex = -1;
+    public double SlideSeconds => Math.Max(1, _settings.SlideDurationSeconds);
+
     // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
     [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
 
@@ -248,6 +256,8 @@ public partial class MainViewModel : ObservableObject
         _rotationTimer.Start();
         _noteTimer.Start();
         _refreshTimer.Start();
+        OnPropertyChanged(nameof(SlideSeconds));
+        RotationCycle++;
     }
 
     // For a deck whose window has closed (TV screen): DispatcherTimers keep
@@ -463,7 +473,10 @@ public partial class MainViewModel : ObservableObject
         if (value)
             _rotationTimer.Stop();
         else if (_slides.Count > 0 && !_suspended)
+        {
             _rotationTimer.Start();
+            RotationCycle++;
+        }
 
         AppLogger.Log(value ? "Rotation automatique mise en pause." : "Rotation automatique reprise.");
     }
@@ -505,6 +518,7 @@ public partial class MainViewModel : ObservableObject
 
         _rotationTimer.Stop();
         _rotationTimer.Start();
+        RotationCycle++;
     }
 
     private async Task AdvanceAsync()
@@ -660,6 +674,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var slide = _slides[index];
+            var previousType = CurrentSlide?.GetType();
             CurrentSlide = slide switch
             {
                 MachineSlideDescriptor ms when SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift
@@ -675,6 +690,13 @@ public partial class MainViewModel : ObservableObject
                 _ => null,
             };
             IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;
+            if (index != _shownIndex || previousType != CurrentSlide?.GetType())
+            {
+                _shownIndex = index;
+                SlideChangeCount++;
+                if (!IsRotationPaused)
+                    RotationCycle++;
+            }
             // While suspended, recovery is InitializeAsync's job (it restarts the timers).
             if (!_suspended)
                 SetConnectionState(healthy: true);
