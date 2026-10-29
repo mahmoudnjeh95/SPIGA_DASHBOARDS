@@ -8,7 +8,7 @@
          in red while stopped. A running machine's halo also pulses, so the
          state reads from across the hall. Fixed 144 px wide (the dots run
          across that): wrap it in a Viewbox to draw it smaller. Shared by the
-         machine header and the Cumul slide's machine strip. -->
+         machine header and the Cumul run-state slide. -->
     <StackPanel Width="144"
                 ToolTip="{Binding RunStateLabel}" AutomationProperties.Name="{Binding RunStateLabel}">
         <Grid>

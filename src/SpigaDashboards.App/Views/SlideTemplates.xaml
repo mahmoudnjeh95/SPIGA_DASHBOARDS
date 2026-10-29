@@ -132,43 +132,46 @@
                 <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
                 <Run Text="  ·  TRS " FontSize="18"/><Run Text="{Binding Overall.Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
                                                      FontWeight="Bold" Foreground="{Binding Overall.TrsSeverity, Converter={StaticResource SeverityBrush}}"/>                <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding TotalProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                <!-- Cumul production slide: how many machines run right now. -->
-                <Run FontSize="18">
-                    <Run.Style>
-                        <Style TargetType="Run">
-                            <Setter Property="Text" Value=""/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
-                                    <Setter Property="Text" Value="  ·  En marche "/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Run.Style>
-                </Run><Run FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}">
-                    <Run.Style>
-                        <Style TargetType="Run">
-                            <Setter Property="Text" Value=""/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
-                                    <Setter Property="Text" Value="{Binding RunningCount, Mode=OneWay}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Run.Style>
-                </Run><Run>
-                    <Run.Style>
-                        <Style TargetType="Run">
-                            <Setter Property="Text" Value=""/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowRunTiles}" Value="True">
-                                    <Setter Property="Text" Value="{Binding RunTiles.Count, StringFormat={}/{0}, Mode=OneWay}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Run.Style>
-                </Run>
             </TextBlock>
             <views:PackagingPanel Grid.Row="1"/>
+        </Grid>
+    </DataTemplate>
+
+    <!-- First Cumul slide: only the run-state photo (RunStateImage) of every
+         machine, as big as the screen allows (10 machines = 2 rows of 5),
+         captioned with its name from Parametres. -->
+    <DataTemplate DataType="{x:Type slides:RunStateSlideViewModel}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Margin="16,6,16,0" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis">
+                <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/><Run
+                     Text=" · Etat des machines"/><Run Text="  ·  En marche " FontSize="18"/><Run
+                     Text="{Binding RunningCount, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}"/><Run
+                     Text="{Binding Tiles.Count, StringFormat={}/{0}, Mode=OneWay}"/>
+            </TextBlock>
+            <Border Grid.Row="1" Margin="6" Style="{StaticResource ChartTile}">
+                <ItemsControl ItemsSource="{Binding Tiles}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding TileColumns}"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type slides:MachineRunTile}">
+                            <Viewbox Margin="10,6">
+                                <StackPanel Width="170" Margin="0,8,0,0">
+                                    <views:RunStateImage HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{Binding MachineName}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Viewbox>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
         </Grid>
     </DataTemplate>
 </ResourceDictionary>

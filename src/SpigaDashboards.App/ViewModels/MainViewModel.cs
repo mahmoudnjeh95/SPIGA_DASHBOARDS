@@ -605,11 +605,13 @@ public partial class MainViewModel : ObservableObject
             slides.Add(new PackagingSlideDescriptor(title, ids, Trs: true));
         }
 
-        // Cumul of both groups, then its TRS slide: only when both have
-        // machines (otherwise it would repeat the one shown).
+        // Cumul of both groups: the run-state photos, then its production and
+        // TRS slides. Only when both have machines (otherwise it would repeat
+        // the one shown).
         if (packaging1.Count > 0 && packaging2.Count > 0)
         {
             var all = packaging1.Concat(packaging2).ToList();
+            slides.Add(new RunStateSlideDescriptor("Cumul", all));
             slides.Add(new PackagingSlideDescriptor("Cumul", all, Cumul: true));
             slides.Add(new PackagingSlideDescriptor("Cumul", all, Trs: true, Cumul: true));
         }
@@ -668,6 +670,8 @@ public partial class MainViewModel : ObservableObject
                 SynthesisSlideDescriptor synthesis => await SynthesisSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings,
                     synthesis.Sector, synthesis.MachineIds.Select(id => _machinesById[id]).ToList(), SynthesisPeriod, _filter),
                 PackagingSlideDescriptor packaging => await LoadPackagingSlideAsync(packaging),
+                RunStateSlideDescriptor runState => await RunStateSlideViewModel.LoadAsync(_repository, runState.Title,
+                    runState.MachineIds.Select(id => _machinesById[id]).ToList()),
                 _ => null,
             };
             IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;

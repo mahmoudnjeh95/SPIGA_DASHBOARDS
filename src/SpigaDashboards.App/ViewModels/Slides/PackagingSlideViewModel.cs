@@ -25,33 +25,19 @@ public class PackagingRow
     public PackagingCell Total { get; init; } = new();
 }
 
-// One photo of the Cumul slide's machine overview: the machine's state right now.
-public class MachineRunTile
-{
-    public string MachineId { get; init; } = "";
-    public string MachineName { get; init; } = "";
-    public bool IsConnected { get; init; }
-    public bool BeltRunning { get; init; }
-    public string RunStateLabel => !IsConnected ? "Pas de donnees" : BeltRunning ? "En marche" : "A l'arret";
-}
-
 // Conditionnement slides: the production of a group of lines (Conditionnement 1
 // = CC03 + CC04, Conditionnement 2 = the others, Cumul = all of them) summed
 // per machine and per team over the top-bar period, with the team and machine
 // totals as bars. The TRS variant (IsTrs, the slide right after) shows the
 // same table led by the TRS, and the team and machine TRS as bars against the
-// target. Cumul always covers the current month; its production slide shows
-// which machines run right now in place of the bars.
+// target. Cumul always covers the current month, and its machine bars are
+// labelled with the Parametres names (the run state has its own slide,
+// RunStateSlideViewModel, just before).
 public class PackagingSlideViewModel
 {
     public string Title { get; init; } = "";
     public bool IsTrs { get; init; }
     public bool IsCumul { get; init; }
-
-    // Cumul production slide only (empty otherwise): one tile per machine.
-    public IReadOnlyList<MachineRunTile> RunTiles { get; init; } = Array.Empty<MachineRunTile>();
-    public bool ShowRunTiles => RunTiles.Count > 0;
-    public int RunningCount => RunTiles.Count(t => t.BeltRunning);
     public string MachinesLabel { get; init; } = "";
     public string PeriodLabel { get; init; } = "";
     public string FilterLabel { get; init; } = "";
@@ -140,29 +126,13 @@ public class PackagingSlideViewModel
         // Target line only when every machine shares the same target.
         double? targetLine = targets.Distinct().Count() == 1 ? targets[0] : null;
 
-        // Live state whatever the period: same snapshot as the machine headers.
-        var runTiles = new List<MachineRunTile>();
-        if (cumul && !trs)
-        {
-            foreach (var m in machines)
-            {
-                var status = await repository.GetLatestStatusAsync(m.MachineId);
-                runTiles.Add(new MachineRunTile
-                {
-                    MachineId = m.MachineId,
-                    MachineName = m.MachineName,
-                    IsConnected = status?.IsConnected ?? false,
-                    BeltRunning = status?.BeltRunning ?? false,
-                });
-            }
-        }
+        var machineLabels = cumul ? machines.Select(m => m.MachineName).ToList() : ids;
 
         return new PackagingSlideViewModel
         {
             Title = title,
             IsTrs = trs,
             IsCumul = cumul,
-            RunTiles = runTiles,
             MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", ids),
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
@@ -175,8 +145,8 @@ public class PackagingSlideViewModel
                 ? TrsBars(teams, teamTotals, targetLine)
                 : Bars(teams, teamTotals.Select(c => c.ProductionKg).ToList()),
             MachineChart = trs
-                ? TrsBars(ids, machineTotals, targetLine)
-                : Bars(ids, machineTotals.Select(c => c.ProductionKg).ToList()),
+                ? TrsBars(machineLabels, machineTotals, targetLine)
+                : Bars(machineLabels, machineTotals.Select(c => c.ProductionKg).ToList()),
         };
     }
 

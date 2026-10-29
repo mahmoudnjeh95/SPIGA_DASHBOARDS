@@ -10,10 +10,9 @@
 
     <!-- Conditionnement 1 / 2 / Cumul (PackagingSlideViewModel): on top, the
          production and TRS of each machine per team with row and column
-         totals; below, the team totals and the machine totals as bars (on the
-         Cumul production slide, the run state of every machine instead of the
-         machine bars). On the TRS slide (IsTrs) the cells lead with the TRS
-         and its D / P / Q, and the bars are the TRS. -->
+         totals; below, the team totals and the machine totals as bars. On the
+         TRS slide (IsTrs) the cells lead with the TRS and its D / P / Q, and
+         the bars are the TRS. -->
     <UserControl.Resources>
         <Style x:Key="Head" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
@@ -137,35 +136,8 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <!-- The legend names the target line of the TRS bars. -->
-            <views:ChartCard Grid.Column="0" Chart="{Binding TeamChart}" Title="{Binding TeamChartTitle}" ShowLegend="{Binding IsTrs}"
-                             Visibility="{Binding ShowRunTiles, Converter={StaticResource InverseBoolToVisibility}}"/>
-            <views:ChartCard Grid.Column="1" Chart="{Binding MachineChart}" Title="{Binding MachineChartTitle}" ShowLegend="{Binding IsTrs}"
-                             Visibility="{Binding ShowRunTiles, Converter={StaticResource InverseBoolToVisibility}}"/>
-
-            <!-- Cumul production slide, in place of the bars (the table's totals
-                 have them): every machine's run-state photo (RunStateImage) in one
-                 row, as big as the width allows, captioned with its name only. -->
-            <Border Grid.ColumnSpan="2" Style="{StaticResource ChartTile}"
-                    Visibility="{Binding ShowRunTiles, Converter={StaticResource BoolToVisibility}}">
-                <ItemsControl ItemsSource="{Binding RunTiles}" VerticalAlignment="Center">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Rows="1"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type slides:MachineRunTile}">
-                            <Viewbox Margin="6,0">
-                                <StackPanel Width="170" Margin="0,8,0,0">
-                                    <views:RunStateImage HorizontalAlignment="Center"/>
-                                    <TextBlock Text="{Binding MachineName}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"
-                                               Foreground="{DynamicResource PrimaryTextBrush}" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
-                            </Viewbox>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
+            <views:ChartCard Grid.Column="0" Chart="{Binding TeamChart}" Title="{Binding TeamChartTitle}" ShowLegend="{Binding IsTrs}"/>
+            <views:ChartCard Grid.Column="1" Chart="{Binding MachineChart}" Title="{Binding MachineChartTitle}" ShowLegend="{Binding IsTrs}"/>
         </Grid>
     </Grid>
 </UserControl>

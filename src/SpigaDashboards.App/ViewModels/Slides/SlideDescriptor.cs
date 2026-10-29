@@ -15,5 +15,8 @@ public sealed record SynthesisSlideDescriptor(string Sector, IReadOnlyList<strin
 
 // Conditionnement 1 / 2 / Cumul: production of a group of machines per
 // machine and team; Trs = the TRS slide that follows it, Cumul = every
-// machine of both groups (with their run state).
+// machine of both groups.
 public sealed record PackagingSlideDescriptor(string Title, IReadOnlyList<string> MachineIds, bool Trs = false, bool Cumul = false) : SlideDescriptor;
+
+// Run-state photos of every Cumul machine, the slide before Cumul.
+public sealed record RunStateSlideDescriptor(string Title, IReadOnlyList<string> MachineIds) : SlideDescriptor;
