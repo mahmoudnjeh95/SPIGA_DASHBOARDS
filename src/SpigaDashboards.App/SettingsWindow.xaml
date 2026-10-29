@@ -140,11 +140,72 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <TextBlock Text="Rotation et affichage" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Duree d'affichage par diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Affichage : rotation des diapositives" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Duree d'affichage par defaut d'une diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding SlideDurationSeconds, UpdateSourceTrigger=PropertyChanged}"/>
                 <TextBlock Text="Frequence d'actualisation des donnees (minutes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Text="Diapositives : ordre, affichage et duree" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
+                <TextBlock Text="Decocher une diapositive la retire de la rotation (tableau de bord et ecran TV). Les fleches changent sa place. Duree vide = duree par defaut ci-dessus. Une machine decochee dans la liste des machines n'apparait nulle part, quel que soit ce reglage ; une nouvelle machine prend sa place par defaut."
+                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <Grid Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="90"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="1" Text="Diapositive" Style="{StaticResource FieldLabel}" Margin="28,0,0,0"/>
+                    <TextBlock Grid.Column="2" Text="Duree (s)" Style="{StaticResource FieldLabel}" Margin="8,0,0,0"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Slides}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:SlideRowViewModel}">
+                            <Grid Margin="0,2,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="90"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Position}" Foreground="{DynamicResource SubtleTextBrush}"
+                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
+                                          ToolTip="Afficher cette diapositive dans la rotation">
+                                    <TextBlock Text="{Binding Label}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.45"/>
+                                                        <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </CheckBox>
+                                <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
+                                         IsEnabled="{Binding IsEnabled}" ToolTip="Duree de cette diapositive en secondes (vide = duree par defaut)"/>
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
+                                    <Button Content="&#x25B2;" AutomationProperties.Name="Monter" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0,0,4,0"
+                                            ToolTip="Monter (passe plus tot dans la rotation)"
+                                            Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Content="&#x25BC;" AutomationProperties.Name="Descendre" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0"
+                                            ToolTip="Descendre (passe plus tard dans la rotation)"
+                                            Command="{Binding DataContext.MoveSlideDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="Ordre par defaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                        ToolTip="Remet l'ordre d'origine, toutes les diapositives affichees, duree par defaut"
+                        Command="{Binding ResetSlidesCommand}"/>
+                <TextBlock Text="{Binding SlidesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                 <TextBlock Text="Cadence nominale et sachet vide, par machine et par poids" Style="{StaticResource SectionTitle}"/>
                 <TextBlock Text="Cadence : vitesse ideale (sacs/min) de la machine pour ce poids de sac, sert a la Performance et au TRS. Sachet vide : poids de l'emballage vide (g), deduit du poids mesure pour obtenir le poids net (poids moyen, ecart, surpoids). Une production est associee a la ligne de SA machine pour le poids le plus proche de son poids cible (a 5 % pres), sinon a la ligne &quot;Toutes&quot;. Cadence vide = TRS non calcule pour ce poids."
@@ -283,7 +344,7 @@
                 </StackPanel>
 
                 <TextBlock Text="Document externe (diapositive PDF)" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Consignes, instructions ou document qualite affiche en diapositive 8. Laisser vide pour ne pas afficher cette diapositive."
+                <TextBlock Text="Consignes, instructions ou document qualite affiche en diapositive (sa place se regle dans Affichage ci-dessus). Laisser vide pour ne pas afficher cette diapositive."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                 <StackPanel Orientation="Horizontal">
                     <TextBox Text="{Binding PdfDocumentPath, UpdateSourceTrigger=PropertyChanged}" Width="360" IsReadOnly="True"/>

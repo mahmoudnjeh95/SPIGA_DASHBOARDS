@@ -7,6 +7,7 @@ using Microsoft.Win32;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
+using SpigaDashboards.App.ViewModels.Slides;
 
 namespace SpigaDashboards.App.ViewModels;
 
@@ -54,6 +55,12 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<PlannedBreakRowViewModel> PlannedBreaks { get; } = new();
     [ObservableProperty] private string stopThresholdText = "";
     [ObservableProperty] private string breaksStatusMessage = "";
+
+    // Affichage: every slide the deck can have, in rotation order. Filled
+    // once the machine list is loaded (LoadMachinesAsync).
+    public ObservableCollection<SlideRowViewModel> Slides { get; } = new();
+    [ObservableProperty] private string slidesStatusMessage = "";
+    private List<Machine> _activeMachines = new();
 
     public event EventHandler? SettingsApplied;
 
@@ -140,7 +147,7 @@ public partial class SettingsViewModel : ObservableObject
     private void UpdatePdfDocumentStatus()
     {
         if (string.IsNullOrWhiteSpace(PdfDocumentPath))
-            PdfDocumentStatus = "Aucun document configure : la diapositive 8 sera ignoree.";
+            PdfDocumentStatus = "Aucun document configure : la diapositive document sera ignoree.";
         else if (!File.Exists(PdfDocumentPath))
             PdfDocumentStatus = "Fichier introuvable a ce chemin.";
         else
@@ -300,7 +307,8 @@ public partial class SettingsViewModel : ObservableObject
 
     // Every table cell checked before saving; false = a message says which one.
     public bool Validate()
-        => ParseNominalRates() != null && ParseTrsTargets() != null && ParsePlannedBreaks() != null && ParseStopThreshold() != null;
+        => ParseNominalRates() != null && ParseTrsTargets() != null && ParsePlannedBreaks() != null && ParseStopThreshold() != null
+           && ParseSlides() != null;
 
     private async Task LoadMachinesAsync()
     {
@@ -337,11 +345,96 @@ public partial class SettingsViewModel : ObservableObject
                 };
             }
             MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvee." : "";
+
+            // "Actualiser la liste" keeps the slide edits not saved yet.
+            _activeMachines = machines.Where(m => m.IsActive).ToList();
+            LoadSlides(Slides.Count == 0 ? _settings.Slides : Slides.Select(r => new SlideSetting
+            {
+                Key = r.Key,
+                Enabled = r.IsEnabled,
+                DurationSeconds = int.TryParse(r.DurationText.Trim(), out var seconds) ? seconds : null,
+            }).ToList());
         }
         catch (Exception ex)
         {
             MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
         }
+    }
+
+    // Every slide of the deck (all active machines, document included even
+    // with no PDF chosen yet), in the saved order.
+    private void LoadSlides(IReadOnlyList<SlideSetting> saved)
+    {
+        Slides.Clear();
+        var names = _activeMachines.ToDictionary(m => m.MachineId, m => m.MachineName);
+        var catalog = SlideDeck.Default(_activeMachines, PdfDocumentPath, listPdf: true);
+        foreach (var slide in SlideDeck.Arrange(catalog, saved))
+        {
+            var setting = saved.FirstOrDefault(s => s.Key == slide.Key);
+            Slides.Add(new SlideRowViewModel
+            {
+                Key = slide.Key,
+                Label = SlideDeck.Label(slide, id => names.GetValueOrDefault(id, id)),
+                IsEnabled = setting?.Enabled ?? true,
+                DurationText = setting?.DurationSeconds?.ToString(CultureInfo.InvariantCulture) ?? "",
+            });
+        }
+        RenumberSlides();
+    }
+
+    private void RenumberSlides()
+    {
+        for (var i = 0; i < Slides.Count; i++)
+            Slides[i].Position = i + 1;
+    }
+
+    [RelayCommand]
+    private void MoveSlideUp(SlideRowViewModel row) => MoveSlide(row, -1);
+
+    [RelayCommand]
+    private void MoveSlideDown(SlideRowViewModel row) => MoveSlide(row, +1);
+
+    private void MoveSlide(SlideRowViewModel row, int offset)
+    {
+        var from = Slides.IndexOf(row);
+        var to = from + offset;
+        if (from < 0 || to < 0 || to >= Slides.Count)
+            return;
+        Slides.Move(from, to);
+        RenumberSlides();
+    }
+
+    [RelayCommand]
+    private void ResetSlides() => LoadSlides(Array.Empty<SlideSetting>());
+
+    // Slide list; null (message shown) on a bad duration or with every slide off.
+    private List<SlideSetting>? ParseSlides()
+    {
+        var slides = new List<SlideSetting>();
+        foreach (var row in Slides)
+        {
+            int? seconds = null;
+            if (row.DurationText.Trim().Length > 0)
+            {
+                if (!int.TryParse(row.DurationText.Trim(), out var value) || value < 1 || value > 3600)
+                {
+                    SlidesStatusMessage = $"Duree invalide pour \"{row.Label}\" : \"{row.DurationText}\" (1 a 3600 s, vide = duree par defaut).";
+                    return null;
+                }
+                seconds = value;
+            }
+            slides.Add(new SlideSetting { Key = row.Key, Enabled = row.IsEnabled, DurationSeconds = seconds });
+        }
+        if (Slides.Count > 0 && !Slides.Any(r => r.IsEnabled))
+        {
+            SlidesStatusMessage = "Au moins une diapositive doit etre affichee.";
+            return null;
+        }
+        SlidesStatusMessage = "";
+        // Slides of machines no longer active keep their place for when they come back.
+        var listed = slides.Select(s => s.Key).ToHashSet();
+        slides.AddRange(_settings.Slides.Where(s => !listed.Contains(s.Key)));
+        return slides;
     }
 
     // A blank name is not saved (SaveAsync keeps the old one): show the old one meanwhile.
@@ -426,9 +519,12 @@ public partial class SettingsViewModel : ObservableObject
         _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
         _settings.PlannedBreaks = ParsePlannedBreaks() ?? _settings.PlannedBreaks;
         _settings.StopThresholdMinutes = ParseStopThreshold() ?? _settings.StopThresholdMinutes;
-        // Machine list not loaded (DB down): keep the targets already saved.
+        // Machine list not loaded (DB down): keep the targets and slides already saved.
         if (Machines.Count > 0)
+        {
             _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;
+            _settings.Slides = ParseSlides() ?? _settings.Slides;
+        }
 
         _settingsService.Save(_settings);
         _activeFactory.SwitchTo(BuildFactoryFromFields());

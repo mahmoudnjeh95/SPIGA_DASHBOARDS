@@ -2,7 +2,7 @@
 
   <Package Name="SPIGA Dashboards"
            Manufacturer="L2I - Leader de l'Innovation Industrielle"
-           Version="1.5.0"
+           Version="1.5.1"
            UpgradeCode="D28AD530-83ED-4FCE-BE8D-E8AAE001E645"
            InstallerVersion="500"
            Scope="perUser"

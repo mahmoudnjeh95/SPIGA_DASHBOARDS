@@ -12,13 +12,6 @@ namespace SpigaDashboards.App.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    // Sector display order. CC = couscous, PC = pate courte, PL = pate longue.
-    // One slide per machine, in machine-id order within its sector.
-    private static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue" };
-
-    // Conditionnement 1 slide; Conditionnement 2 gets every other machine.
-    private static readonly string[] Packaging1MachineIds = { "CC03", "CC04" };
-
     private static readonly TimeSpan NoteRefreshInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan HealthCheckInterval = TimeSpan.FromMinutes(30);
 
@@ -64,8 +57,9 @@ public partial class MainViewModel : ObservableObject
     // whenever the auto-advance countdown starts over.
     [ObservableProperty] private int slideChangeCount;
     [ObservableProperty] private int rotationCycle;
-    private int _shownIndex = -1;
-    public double SlideSeconds => Math.Max(1, _settings.SlideDurationSeconds);
+    private string? _shownKey;
+    // The slide shown's duration (Parametres > Affichage, or the default one).
+    public double SlideSeconds => _rotationTimer.Interval.TotalSeconds;
 
     // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
     [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
@@ -577,60 +571,11 @@ public partial class MainViewModel : ObservableObject
         // "Pas de donnees" badge
         // (MachinePanel) so a stopped line is visible on the TV instead of
         // silently vanishing (deliberate change from the spec's "drop out").
-        var slides = new List<SlideDescriptor>();
-        foreach (var sector in SectorOrder)
-        {
-            var sectorMachines = visible
-                .Where(m => m.Sector == sector)
-                .OrderBy(m => m.MachineId)
-                .ToList();
-
-            foreach (var machine in sectorMachines)
-                slides.Add(new MachineSlideDescriptor(sector, machine.MachineId));
-        }
-
-        // Slide 8 per the spec's table: admin-selected external document. Skipped
-        // entirely (not shown as a broken slide) when no path is configured yet.
-        if (!string.IsNullOrWhiteSpace(_settings.PdfDocumentPath))
-            slides.Add(new PdfSlideDescriptor(_settings.PdfDocumentPath));
-
-        // Synthesis, one per sector still shown by the filters, same order as above.
-        foreach (var sector in SectorOrder)
-        {
-            var ids = visible.Where(m => m.Sector == sector).OrderBy(m => m.MachineId).Select(m => m.MachineId).ToList();
-            if (ids.Count > 0)
-                slides.Add(new SynthesisSlideDescriptor(sector, ids));
-        }
-
-        // Conditionnement 1 / 2, each followed by its TRS slide, skipped when
-        // the filters leave it no machine.
-        var packagingIds = visible
-            .OrderBy(m => Array.IndexOf(SectorOrder, m.Sector))
-            .ThenBy(m => m.MachineId)
-            .Select(m => m.MachineId)
+        // Then the order and the slides switched off in Parametres > Affichage.
+        var off = _settings.Slides.Where(s => !s.Enabled).Select(s => s.Key).ToHashSet();
+        _slides = SlideDeck.Arrange(SlideDeck.Default(visible, _settings.PdfDocumentPath), _settings.Slides)
+            .Where(s => !off.Contains(s.Key))
             .ToList();
-        var packaging1 = packagingIds.Where(id => Packaging1MachineIds.Contains(id)).ToList();
-        var packaging2 = packagingIds.Except(packaging1).ToList();
-        foreach (var (title, ids) in new[] { ("Conditionnement 1", packaging1), ("Conditionnement 2", packaging2) })
-        {
-            if (ids.Count == 0)
-                continue;
-            slides.Add(new PackagingSlideDescriptor(title, ids));
-            slides.Add(new PackagingSlideDescriptor(title, ids, Trs: true));
-        }
-
-        // Cumul of both groups: the run-state photos, then its production and
-        // TRS slides. Only when both have machines (otherwise it would repeat
-        // the one shown).
-        if (packaging1.Count > 0 && packaging2.Count > 0)
-        {
-            var all = packaging1.Concat(packaging2).ToList();
-            slides.Add(new RunStateSlideDescriptor("Cumul", all));
-            slides.Add(new PackagingSlideDescriptor("Cumul", all, Cumul: true));
-            slides.Add(new PackagingSlideDescriptor("Cumul", all, Trs: true, Cumul: true));
-        }
-
-        _slides = slides;
     }
 
     // Machine checkboxes of the filter bar: the machines shown in the
@@ -638,7 +583,7 @@ public partial class MainViewModel : ObservableObject
     // machine is renamed too, and the active filter then shows the new name.
     private void RefreshMachineOptions(List<Machine> machines)
     {
-        var ordered = machines.OrderBy(m => Array.IndexOf(SectorOrder, m.Sector)).ThenBy(m => m.MachineId).ToList();
+        var ordered = machines.OrderBy(m => Array.IndexOf(SlideDeck.SectorOrder, m.Sector)).ThenBy(m => m.MachineId).ToList();
         if (ordered.Select(m => (m.MachineId, m.MachineName)).SequenceEqual(_allMachineOptions.Select(o => (o.MachineId, o.MachineName))))
             return;
         foreach (var option in _allMachineOptions)
@@ -690,9 +635,17 @@ public partial class MainViewModel : ObservableObject
                 _ => null,
             };
             IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;
-            if (index != _shownIndex || previousType != CurrentSlide?.GetType())
+            // Before RotationCycle moves: the timer bar reads SlideSeconds then.
+            // Only on a change, as setting it restarts the countdown.
+            var seconds = TimeSpan.FromSeconds(_settings.SlideSecondsFor(slide.Key));
+            if (_rotationTimer.Interval != seconds)
             {
-                _shownIndex = index;
+                _rotationTimer.Interval = seconds;
+                OnPropertyChanged(nameof(SlideSeconds));
+            }
+            if (slide.Key != _shownKey || previousType != CurrentSlide?.GetType())
+            {
+                _shownKey = slide.Key;
                 SlideChangeCount++;
                 if (!IsRotationPaused)
                     RotationCycle++;

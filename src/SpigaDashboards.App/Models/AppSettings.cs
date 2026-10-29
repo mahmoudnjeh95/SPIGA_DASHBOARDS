@@ -107,6 +107,16 @@ public class TvScreenSettings
     public double Height { get; set; } = 540;
 }
 
+// One slide of Parametres > Affichage, by SlideDescriptor.Key. The list's
+// order is the rotation's order.
+public class SlideSetting
+{
+    public string Key { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    // null = SlideDurationSeconds.
+    public int? DurationSeconds { get; set; }
+}
+
 public class AppSettings
 {
     // Default to the real Stiavelli production DB (SQL Server `stats`); the
@@ -118,6 +128,13 @@ public class AppSettings
 
     // How long each slide (sector pair, PDF, annual summary) stays on screen.
     public int SlideDurationSeconds { get; set; } = 15;
+
+    // Rotation order, slides switched off and per-slide durations (Parametres
+    // > Affichage). Empty = the default deck, every slide shown.
+    public List<SlideSetting> Slides { get; set; } = new();
+
+    public int SlideSecondsFor(string key)
+        => Math.Max(1, Slides.FirstOrDefault(s => s.Key == key)?.DurationSeconds ?? SlideDurationSeconds);
 
     // How often the slide deck itself is rebuilt (drops/reinstates disconnected
     // machines, refreshes underlying data). Spec calls for 1-5 min, configurable.
