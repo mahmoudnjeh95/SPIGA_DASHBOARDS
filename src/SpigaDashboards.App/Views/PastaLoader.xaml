@@ -1,0 +1,145 @@
+<UserControl x:Class="SpigaDashboards.App.Views.PastaLoader"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsHitTestVisible="False" Focusable="False">
+
+    <!-- Shown while data is being read (IsActive, after a short delay): the
+         three SPIGA products hop in turn - couscous, a penne (pate courte), a
+         spaghetti nest (pate longue) - over a strand of spaghetti that keeps
+         drawing itself. Durum-wheat gold in both themes. -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="Wheat" Color="#F2BE4E"/>
+        <SolidColorBrush x:Key="WheatDark" Color="#C58A1C"/>
+        <SolidColorBrush x:Key="Shadow" Color="#000000"/>
+    </UserControl.Resources>
+
+    <Border x:Name="Card" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="28,22,28,18" CornerRadius="16"
+            Background="{DynamicResource TileBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.25"/>
+        </Border.Effect>
+        <StackPanel>
+            <Canvas Width="220" Height="112">
+                <!-- Big enough to read on the TV across the room -->
+                <Canvas.LayoutTransform>
+                    <ScaleTransform ScaleX="1.25" ScaleY="1.25"/>
+                </Canvas.LayoutTransform>
+                <!-- Shadows under each piece: shrink while it is in the air -->
+                <Ellipse x:Name="Shadow1" Canvas.Left="27" Canvas.Top="80" Width="36" Height="7" Fill="{StaticResource Shadow}" Opacity="0.22"
+                         RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform><ScaleTransform x:Name="Shadow1Scale"/></Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse x:Name="Shadow2" Canvas.Left="92" Canvas.Top="80" Width="36" Height="7" Fill="{StaticResource Shadow}" Opacity="0.22"
+                         RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform><ScaleTransform x:Name="Shadow2Scale"/></Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse x:Name="Shadow3" Canvas.Left="157" Canvas.Top="80" Width="36" Height="7" Fill="{StaticResource Shadow}" Opacity="0.22"
+                         RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.RenderTransform><ScaleTransform x:Name="Shadow3Scale"/></Ellipse.RenderTransform>
+                </Ellipse>
+
+                <!-- Couscous: a little heap of grains -->
+                <Canvas x:Name="Couscous" Canvas.Left="25" Canvas.Top="44" Width="40" Height="40" RenderTransformOrigin="0.5,1">
+                    <Canvas.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="CouscousScale"/>
+                            <RotateTransform x:Name="CouscousTurn"/>
+                            <TranslateTransform x:Name="CouscousHop"/>
+                        </TransformGroup>
+                    </Canvas.RenderTransform>
+                    <Path Fill="{StaticResource Wheat}" Stroke="{StaticResource WheatDark}" StrokeThickness="0.9">
+                        <Path.Data>
+                            <GeometryGroup>
+                                <EllipseGeometry Center="8,34" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="15,35" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="22,35" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="29,35" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="35,34" RadiusX="3.4" RadiusY="3.1"/>
+                                <EllipseGeometry Center="11.5,28" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="18.5,28.5" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="25.5,28.5" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="32,28" RadiusX="3.4" RadiusY="3.1"/>
+                                <EllipseGeometry Center="15,22" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="22,22" RadiusX="3.6" RadiusY="3.3"/>
+                                <EllipseGeometry Center="28.5,22.5" RadiusX="3.4" RadiusY="3.1"/>
+                                <EllipseGeometry Center="18.5,16" RadiusX="3.5" RadiusY="3.2"/>
+                                <EllipseGeometry Center="25,16.5" RadiusX="3.4" RadiusY="3.1"/>
+                                <EllipseGeometry Center="21.5,10.5" RadiusX="3.3" RadiusY="3"/>
+                            </GeometryGroup>
+                        </Path.Data>
+                    </Path>
+                </Canvas>
+
+                <!-- Penne (pate courte): ridged tube cut on the bias -->
+                <Canvas x:Name="Penne" Canvas.Left="90" Canvas.Top="44" Width="40" Height="40" RenderTransformOrigin="0.5,1">
+                    <Canvas.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="PenneScale"/>
+                            <RotateTransform x:Name="PenneTurn"/>
+                            <TranslateTransform x:Name="PenneHop"/>
+                        </TransformGroup>
+                    </Canvas.RenderTransform>
+                    <Canvas Canvas.Left="20" Canvas.Top="26">
+                        <Canvas.RenderTransform>
+                            <RotateTransform Angle="-28"/>
+                        </Canvas.RenderTransform>
+                        <!-- Tube: lit from above, ridged, cut on the bias -->
+                        <Path Stroke="{StaticResource WheatDark}" StrokeThickness="1.2" StrokeLineJoin="Round"
+                              Data="M -15,-8 L 7,-8 L 15,8 L -7,8 Z">
+                            <Path.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#FFDC80" Offset="0"/>
+                                    <GradientStop Color="#F2BE4E" Offset="0.45"/>
+                                    <GradientStop Color="#D6982A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Path.Fill>
+                        </Path>
+                        <Path Stroke="{StaticResource WheatDark}" StrokeThickness="0.9" Opacity="0.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M -12,-4 L 9,-4 M -10,0 L 11,0 M -8,4 L 13,4"/>
+                        <!-- The cut end, with the hole -->
+                        <Ellipse Canvas.Left="7" Canvas.Top="-8" Width="8" Height="16" Fill="#FFD36A" Stroke="{StaticResource WheatDark}" StrokeThickness="1.1">
+                            <Ellipse.RenderTransform>
+                                <SkewTransform AngleX="26.6" CenterX="4" CenterY="8"/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Canvas.Left="9" Canvas.Top="-4.5" Width="4" Height="9" Fill="#8A5A10">
+                            <Ellipse.RenderTransform>
+                                <SkewTransform AngleX="26.6" CenterX="2" CenterY="4.5"/>
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                    </Canvas>
+                </Canvas>
+
+                <!-- Spaghetti nest (pate longue) -->
+                <Canvas x:Name="Nest" Canvas.Left="155" Canvas.Top="44" Width="40" Height="40" RenderTransformOrigin="0.5,1">
+                    <Canvas.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="NestScale"/>
+                            <RotateTransform x:Name="NestTurn"/>
+                            <TranslateTransform x:Name="NestHop"/>
+                        </TransformGroup>
+                    </Canvas.RenderTransform>
+                    <Path Canvas.Left="19" Canvas.Top="24" Stroke="{StaticResource WheatDark}" StrokeThickness="4.4"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Data="M 0,0 A 2,2 0 0 1 4,0 A 4,4 0 0 1 -4,0 A 6,6 0 0 1 8,0 A 8,8 0 0 1 -8,0 A 10,10 0 0 1 12,0 A 12,12 0 0 1 -12,0 A 14,14 0 0 1 16,0">
+                        <Path.RenderTransform><ScaleTransform ScaleY="0.72"/></Path.RenderTransform>
+                    </Path>
+                    <Path Canvas.Left="19" Canvas.Top="24" Stroke="{StaticResource Wheat}" StrokeThickness="2.6"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Data="M 0,0 A 2,2 0 0 1 4,0 A 4,4 0 0 1 -4,0 A 6,6 0 0 1 8,0 A 8,8 0 0 1 -8,0 A 10,10 0 0 1 12,0 A 12,12 0 0 1 -12,0 A 14,14 0 0 1 16,0">
+                        <Path.RenderTransform><ScaleTransform ScaleY="0.72"/></Path.RenderTransform>
+                    </Path>
+                </Canvas>
+
+                <!-- A strand of spaghetti, drawing itself along the wave -->
+                <Path Stroke="{StaticResource Wheat}" StrokeThickness="4" Opacity="0.22" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M 12,100 C 32,92 52,108 72,100 S 112,92 132,100 S 172,108 208,100"/>
+                <Path x:Name="Strand" Stroke="{StaticResource Wheat}" StrokeThickness="4" StrokeDashArray="16 40"
+                      StrokeDashCap="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M 12,100 C 32,92 52,108 72,100 S 112,92 132,100 S 172,108 208,100"/>
+            </Canvas>
+            <TextBlock x:Name="Caption" HorizontalAlignment="Center" Margin="0,8,0,0" FontSize="15" FontWeight="SemiBold"
+                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -331,6 +331,9 @@
                     views:SlideMotion.Timer="{Binding RotationCycle}"/>
         </Border>
 
+        <!-- Loading motion over the slide, when a load lasts -->
+        <views:PastaLoader Grid.Row="2" IsActive="{Binding ShowLoading}" Background="{DynamicResource LoadingVeilBrush}"/>
+
         <!-- Persistent sticky note bar (never rotates away). Editable in place by whoever's at the kiosk.
              Deliberately a fixed yellow "sticky note" look in both themes, not a themed neutral surface. -->
         <Border Grid.Row="3" Background="#F1C40F" Padding="16,10">

@@ -197,13 +197,17 @@ public class PlanningRepository
                   WHERE Id = @Id", p);
     }
 
+    // A maintenance can last several days: one started this long before a
+    // range still counts in it (board, and the TRS required time).
+    private const int EventLookbackDays = 60;
+
     public async Task<List<MaintenanceEvent>> GetEventsAsync(DateTime from, DateTime to)
     {
         using var connection = await OpenAsync();
         var rows = await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT Id, PlanId, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
               FROM PlanMaintenanceEvents WHERE PlannedStart >= @from AND PlannedStart < @to AND Status <> 2",
-            new { from = from.AddDays(-2), to });
+            new { from = from.AddDays(-EventLookbackDays), to });
         return rows.Where(e => e.PlannedEnd > from).ToList();
     }
 
@@ -250,7 +254,7 @@ public class PlanningRepository
         var events = await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT MachineId, PlannedStart, DurationMinutes FROM PlanMaintenanceEvents
               WHERE PlannedStart >= @early AND PlannedStart < @to AND Status <> 2",
-            new { early = from.AddDays(-2), to });
+            new { early = from.AddDays(-EventLookbackDays), to });
         var stops = await connection.QueryAsync<StopQualification>(
             @"SELECT MachineId, StopStart, StopEnd FROM PlanStopQualifications
               WHERE StopStart >= @early AND StopStart < @to AND CauseCode IN @planned",

@@ -68,6 +68,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
+    <Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,6,0">
             <!-- Header -->
@@ -357,4 +358,7 @@
             </Grid>
         </StackPanel>
     </ScrollViewer>
+    <!-- Loading motion while the statistics are computed -->
+    <views:PastaLoader IsActive="{Binding IsBusy}" Text="Calcul des statistiques…"/>
+    </Grid>
 </UserControl>

@@ -40,7 +40,30 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private object? currentSlide;
     [ObservableProperty] private string noteText = "";
     [ObservableProperty] private DashboardPeriod selectedPeriod = DashboardPeriod.Day;
-    [ObservableProperty] private bool isConnectionHealthy = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
+    private bool isConnectionHealthy = true;
+
+    // Data being read (deck, slide): the loading motion shows if it lasts
+    // (Views/PastaLoader), never over the disconnected overlay. Counted, as
+    // loads nest (InitializeAsync shows the first slide).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLoading))]
+    private bool isLoading;
+    private int _loads;
+    public bool ShowLoading => IsLoading && IsConnectionHealthy;
+
+    private void StartLoad()
+    {
+        _loads++;
+        IsLoading = true;
+    }
+
+    private void EndLoad()
+    {
+        _loads = Math.Max(0, _loads - 1);
+        IsLoading = _loads > 0;
+    }
     [ObservableProperty] private string connectionErrorMessage = "";
     [ObservableProperty] private bool isEditingNote;
     [ObservableProperty] private string noteSaveStatus = "";
@@ -218,6 +241,7 @@ public partial class MainViewModel : ObservableObject
         PackagingSlideViewModel.ClearCache();
         RefreshFilterOptions();
 
+        StartLoad();
         try
         {
             await BuildSlidesAsync();
@@ -243,6 +267,10 @@ public partial class MainViewModel : ObservableObject
         {
             SetConnectionState(healthy: false, ex.Message);
             return;
+        }
+        finally
+        {
+            EndLoad();
         }
 
         if (_stopped)
@@ -369,12 +397,20 @@ public partial class MainViewModel : ObservableObject
         // The deck's shape depends on the sector / machine filters.
         await RunGuardedAsync(async () =>
         {
-            await BuildSlidesAsync();
-            _currentIndex = 0;
-            if (_slides.Count == 0)
-                CurrentSlide = null;
-            else
-                await ShowSlideAsync(0);
+            StartLoad();
+            try
+            {
+                await BuildSlidesAsync();
+                _currentIndex = 0;
+                if (_slides.Count == 0)
+                    CurrentSlide = null;
+                else
+                    await ShowSlideAsync(0);
+            }
+            finally
+            {
+                EndLoad();
+            }
             RestartRotationTimer();
         });
     }
@@ -530,6 +566,7 @@ public partial class MainViewModel : ObservableObject
     // jumps back to the first slide.
     private async Task RebuildSlidesAsync()
     {
+        StartLoad();
         try
         {
             await BuildSlidesAsync();
@@ -552,6 +589,10 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             SetConnectionState(healthy: false, ex.Message);
+        }
+        finally
+        {
+            EndLoad();
         }
     }
 
@@ -616,6 +657,7 @@ public partial class MainViewModel : ObservableObject
         if (_slides.Count == 0)
             return true;
 
+        StartLoad();
         try
         {
             var slide = _slides[index];
@@ -659,6 +701,10 @@ public partial class MainViewModel : ObservableObject
         {
             Suspend(ex.Message);
             return false;
+        }
+        finally
+        {
+            EndLoad();
         }
     }
 

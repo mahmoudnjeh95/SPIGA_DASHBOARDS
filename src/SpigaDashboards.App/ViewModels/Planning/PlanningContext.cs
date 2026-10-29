@@ -73,8 +73,15 @@ public sealed class PlanningContext
         return brush;
     }
 
-    // "7 min", "1 h 05"
-    public static string Duration(double minutes) => ProductionStop.FormatDuration(minutes);
+    // "7 min", "1 h 05", and from a day on "2 j", "1 j 6 h", "2 j 4 h 30"
+    public static string Duration(double minutes)
+    {
+        var total = (int)Math.Round(minutes);
+        if (total < 24 * 60)
+            return ProductionStop.FormatDuration(total);
+        var (days, hours, mins) = (total / 1440, total % 1440 / 60, total % 60);
+        return $"{days} j" + (hours > 0 || mins > 0 ? $" {hours} h" : "") + (mins > 0 ? $" {mins:00}" : "");
+    }
 
     // "Jeu 29"
     public static string Day(DateTime date)

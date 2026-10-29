@@ -25,4 +25,6 @@
 
     <SolidColorBrush x:Key="AlternatingRowBrush" Color="#14FFFFFF"/>
     <SolidColorBrush x:Key="DisconnectedOverlayBrush" Color="#CC111418"/>
+    <!-- Over a slide being reloaded (PastaLoader): lighter, the old slide stays readable. -->
+    <SolidColorBrush x:Key="LoadingVeilBrush" Color="#8C111418"/>
 </ResourceDictionary>

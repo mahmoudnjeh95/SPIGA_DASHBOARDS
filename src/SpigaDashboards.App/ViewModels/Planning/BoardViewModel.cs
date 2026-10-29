@@ -180,17 +180,30 @@ public partial class BoardViewModel : ObservableObject
     [ObservableProperty] private string orderProduct = "";
     [ObservableProperty] private string orderWeight = "";
     [ObservableProperty] private string orderQuantity = "";
-    [ObservableProperty] private string orderHours = "";
     [ObservableProperty] private DateTime? orderDate = DateTime.Today;
     [ObservableProperty] private string orderTime = "06:00";
+    [ObservableProperty] private DateTime? orderEndDate = DateTime.Today;
+    [ObservableProperty] private string orderEndTime = "14:00";
     [ObservableProperty] private string orderEstimate = "";
+    [ObservableProperty] private bool canOrderEndFromRate;
 
     [ObservableProperty] private string eventMachine = "";
     [ObservableProperty] private string eventTask = "";
     [ObservableProperty] private DateTime? eventDate = DateTime.Today;
     [ObservableProperty] private string eventTime = "06:00";
-    [ObservableProperty] private string eventDuration = "60";
+    [ObservableProperty] private DateTime? eventEndDate = DateTime.Today;
+    [ObservableProperty] private string eventEndTime = "07:00";
+    [ObservableProperty] private string eventLength = "";
     [ObservableProperty] private string eventTechnician = "";
+
+    // Start and end of the order / maintenance forms. The end moves with the
+    // start (same length), as in a calendar. An order's end follows the
+    // quantity at the nominal rate until one is typed (_orderEndManual).
+    // _filling: fields set by code, not typed.
+    private bool _filling;
+    private bool _orderEndManual;
+    private DateTime? _orderStart;
+    private DateTime? _eventStart;
 
     [ObservableProperty] private string planMachine = "";
     [ObservableProperty] private string planTask = "";
@@ -204,13 +217,15 @@ public partial class BoardViewModel : ObservableObject
     partial void OnOrderMachineChanged(string value) => UpdateEstimate();
     partial void OnOrderWeightChanged(string value) => UpdateEstimate();
     partial void OnOrderQuantityChanged(string value) => UpdateEstimate();
-    partial void OnOrderHoursChanged(string value) => UpdateEstimate();
-    partial void OnOrderDateChanged(DateTime? value) => UpdateEstimate();
-    partial void OnOrderTimeChanged(string value) => UpdateEstimate();
+    partial void OnOrderDateChanged(DateTime? value) => OrderStartMoved();
+    partial void OnOrderTimeChanged(string value) => OrderStartMoved();
+    partial void OnOrderEndDateChanged(DateTime? value) => OrderEndTyped();
+    partial void OnOrderEndTimeChanged(string value) => OrderEndTyped();
     partial void OnEventMachineChanged(string value) => PreviewEvent();
-    partial void OnEventDateChanged(DateTime? value) => PreviewEvent();
-    partial void OnEventTimeChanged(string value) => PreviewEvent();
-    partial void OnEventDurationChanged(string value) => PreviewEvent();
+    partial void OnEventDateChanged(DateTime? value) => EventStartMoved();
+    partial void OnEventTimeChanged(string value) => EventStartMoved();
+    partial void OnEventEndDateChanged(DateTime? value) => PreviewEvent();
+    partial void OnEventEndTimeChanged(string value) => PreviewEvent();
     partial void OnSelectedBlockChanged(BoardBlock? oldValue, BoardBlock? newValue)
     {
         if (oldValue != null)
@@ -679,7 +694,8 @@ public partial class BoardViewModel : ObservableObject
                 (DetailStatus, DetailStatusBrush) = e.Status == PlanStatus.Done ? ("Réalisée", green)
                     : e.PlannedEnd < now ? ("Non validée", red)
                     : e.PlannedStart <= now ? ("En cours", amber) : ("Planifiée", blue);
-                DetailRows.Add(new DetailRow("Prévue", When(e.PlannedStart)));
+                DetailRows.Add(new DetailRow("Début prévu", When(e.PlannedStart)));
+                DetailRows.Add(new DetailRow("Fin prévue", When(e.PlannedEnd)));
                 DetailRows.Add(new DetailRow("Durée", PlanningContext.Duration(e.DurationMinutes)));
                 if (_plans.FirstOrDefault(p => p.Id == e.PlanId) is { } plan)
                     DetailRows.Add(new DetailRow("Règle", MaintenanceText.Rule(plan)));
@@ -803,12 +819,10 @@ public partial class BoardViewModel : ObservableObject
         OrderProduct = "";
         OrderWeight = "";
         OrderQuantity = "";
-        OrderHours = "";
-        var next = Postes.NextStart(DateTime.Now);
-        OrderDate = next.Date;
-        OrderTime = next.ToString("HH:mm");
         Editor = EditorMode.Order;
-        UpdateEstimate();
+        // One poste by default, then the quantity at the nominal rate once known.
+        var next = Postes.NextStart(DateTime.Now);
+        FillOrderTimes(next, next.AddHours(8), manualEnd: false);
     }
 
     private void EditOrder(ProductionOrder o)
@@ -820,10 +834,58 @@ public partial class BoardViewModel : ObservableObject
         OrderProduct = o.Product;
         OrderWeight = o.TargetWeightGrams > 0 ? o.TargetWeightGrams.ToString("0.##", CultureInfo.InvariantCulture) : "";
         OrderQuantity = o.QuantityBags.ToString(CultureInfo.InvariantCulture);
-        OrderDate = o.PlannedStart.Date;
-        OrderTime = o.PlannedStart.ToString("HH:mm");
-        OrderHours = (o.PlannedEnd - o.PlannedStart).TotalHours.ToString("0.#", CultureInfo.InvariantCulture);
         Editor = EditorMode.Order;
+        FillOrderTimes(o.PlannedStart, o.PlannedEnd, manualEnd: true);
+    }
+
+    private void FillOrderTimes(DateTime start, DateTime end, bool manualEnd)
+    {
+        _filling = true;
+        OrderDate = start.Date;
+        OrderTime = start.ToString("HH:mm");
+        OrderEndDate = end.Date;
+        OrderEndTime = end.ToString("HH:mm");
+        _filling = false;
+        _orderStart = start;
+        _orderEndManual = manualEnd;
+        UpdateEstimate();
+    }
+
+    private void SetOrderEnd(DateTime end)
+    {
+        _filling = true;
+        OrderEndDate = end.Date;
+        OrderEndTime = end.ToString("HH:mm");
+        _filling = false;
+    }
+
+    // The end keeps its distance to the start.
+    private void OrderStartMoved()
+    {
+        if (_filling)
+            return;
+        if (StartAt(OrderDate, OrderTime) is { } start)
+        {
+            if (_orderStart is { } old && start != old && StartAt(OrderEndDate, OrderEndTime) is { } end)
+                SetOrderEnd(end + (start - old));
+            _orderStart = start;
+        }
+        UpdateEstimate();
+    }
+
+    private void OrderEndTyped()
+    {
+        if (_filling)
+            return;
+        _orderEndManual = true;
+        UpdateEstimate();
+    }
+
+    // "Fin à la cadence nominale" chip: back to the end computed from the quantity.
+    [RelayCommand]
+    private void OrderEndFromRate()
+    {
+        _orderEndManual = false;
         UpdateEstimate();
     }
 
@@ -863,61 +925,64 @@ public partial class BoardViewModel : ObservableObject
     private static double ParseNumber(string text)
         => double.TryParse(text.Replace(" ", "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
 
-    // Planned duration: hours typed, else quantity at the nominal rate (Parametres).
-    private double? OrderDurationHours(out string how)
+    // Hours the quantity takes at the nominal rate (Parametres); null if either is missing.
+    private double? RateHours(Machine? machine, out double rate)
     {
-        how = "";
-        var hours = ParseNumber(OrderHours);
-        if (hours > 0)
-        {
-            how = "durée saisie";
-            return hours;
-        }
-        var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == OrderMachine);
+        rate = 0;
         var qty = ParseNumber(OrderQuantity);
         if (machine == null || qty <= 0)
             return null;
-        var rate = _ctx.Settings.FindNominalRate(machine.MachineId, ParseNumber(OrderWeight));
-        if (rate <= 0)
-            return null;
-        how = $"cadence nominale {rate:0.#} sacs/min";
-        return qty / rate / 60;
+        rate = _ctx.Settings.FindNominalRate(machine.MachineId, ParseNumber(OrderWeight));
+        return rate > 0 ? qty / rate / 60 : null;
     }
+
+    // What is wrong with a form's start / end, or null.
+    private static string? SpanError(DateTime? start, DateTime? end)
+        => start == null ? "Heure de début invalide (ex. 06:00, 14h30)."
+            : end == null ? "Heure de fin invalide (ex. 22:00)."
+            : end <= start ? "La fin doit être après le début."
+            : null;
 
     private void UpdateEstimate()
     {
-        if (Editor != EditorMode.Order)
+        if (Editor != EditorMode.Order || _filling)
             return;
-        var hours = OrderDurationHours(out var how);
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == OrderMachine);
-        if (StartAt(OrderDate, OrderTime) is not { } start)
+        var rateHours = RateHours(machine, out var rate);
+        var start = StartAt(OrderDate, OrderTime);
+        if (start is { } s && !_orderEndManual && rateHours is { } h)
+            SetOrderEnd(s.AddHours(h));
+        var end = StartAt(OrderEndDate, OrderEndTime);
+        CanOrderEndFromRate = _orderEndManual && rateHours != null;
+
+        var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
+            : machine != null && ParseNumber(OrderQuantity) > 0 ? $"pas de cadence nominale pour {machine.MachineId} à {ParseNumber(OrderWeight):0.##} g (Paramètres)"
+            : "";
+        if (SpanError(start, end) is { } error)
         {
-            OrderEstimate = "Heure de début invalide (ex. 06:00, 14h30).";
+            OrderEstimate = error;
             SetSlot(null, default, default);
             return;
         }
-        OrderEstimate = hours is { } h
-            ? $"Poste {PosteOf(start)} · durée {PlanningContext.Duration(h * 60)} ({how}) · fin prévue {When(start.AddHours(h))}"
-            : machine != null && ParseNumber(OrderQuantity) > 0
-                ? $"Pas de cadence nominale pour {machine.MachineId} à {ParseNumber(OrderWeight):0.##} g (Paramètres) : indiquez une durée en heures."
-                : "Indiquez la quantité (et le poids pour la cadence nominale), ou une durée en heures.";
+        OrderEstimate = $"Durée {PlanningContext.Duration((end!.Value - start!.Value).TotalMinutes)} · poste {PosteOf(start.Value)} → {PosteOf(end.Value)}"
+            + (rateText.Length > 0 ? $" · {rateText}" : "");
         // Shows on the board where the order will go.
-        SetSlot(hours != null ? machine?.MachineId : null, start, start.AddHours(hours ?? 0));
+        SetSlot(machine?.MachineId, start.Value, end.Value);
     }
 
     [RelayCommand]
     private async Task SaveOrderAsync()
     {
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == OrderMachine);
-        var hours = OrderDurationHours(out _);
-        if (machine == null || string.IsNullOrWhiteSpace(OrderProduct) || hours is not { } h)
+        if (machine == null || string.IsNullOrWhiteSpace(OrderProduct))
         {
-            StatusMessage = "Ligne, produit et quantité (ou durée) sont nécessaires.";
+            StatusMessage = "Ligne et produit sont nécessaires.";
             return;
         }
-        if (StartAt(OrderDate, OrderTime) is not { } start)
+        var (start, end) = (StartAt(OrderDate, OrderTime), StartAt(OrderEndDate, OrderEndTime));
+        if (SpanError(start, end) is { } error)
         {
-            StatusMessage = "Heure de début invalide (ex. 06:00, 14h30).";
+            StatusMessage = error;
             return;
         }
         var o = _editingOrder ?? new ProductionOrder();
@@ -926,8 +991,8 @@ public partial class BoardViewModel : ObservableObject
         o.Product = OrderProduct.Trim();
         o.TargetWeightGrams = ParseNumber(OrderWeight);
         o.QuantityBags = (long)ParseNumber(OrderQuantity);
-        o.PlannedStart = start;
-        o.PlannedEnd = start.AddHours(h);
+        o.PlannedStart = start!.Value;
+        o.PlannedEnd = end!.Value;
         try
         {
             await _ctx.Planning.SaveOrderAsync(o);
@@ -950,13 +1015,10 @@ public partial class BoardViewModel : ObservableObject
         FormTitle = "Planifier une maintenance";
         EventMachine = SelectedMachineName() ?? MachineNames.FirstOrDefault() ?? "";
         EventTask = "";
-        EventDuration = "60";
         EventTechnician = "";
-        var next = Postes.NextStart(DateTime.Now);
-        EventDate = next.Date;
-        EventTime = next.ToString("HH:mm");
         Editor = EditorMode.Event;
-        PreviewEvent();
+        var next = Postes.NextStart(DateTime.Now);
+        FillEventTimes(next, next.AddHours(1));
     }
 
     private void EditEvent(MaintenanceEvent e)
@@ -965,47 +1027,79 @@ public partial class BoardViewModel : ObservableObject
         FormTitle = "Modifier la maintenance";
         EventMachine = _ctx.NameOf(e.MachineId);
         EventTask = e.Task;
-        EventDuration = e.DurationMinutes.ToString(CultureInfo.InvariantCulture);
         EventTechnician = e.Technician ?? "";
-        EventDate = e.PlannedStart.Date;
-        EventTime = e.PlannedStart.ToString("HH:mm");
         Editor = EditorMode.Event;
+        FillEventTimes(e.PlannedStart, e.PlannedEnd);
+    }
+
+    private void FillEventTimes(DateTime start, DateTime end)
+    {
+        _filling = true;
+        EventDate = start.Date;
+        EventTime = start.ToString("HH:mm");
+        EventEndDate = end.Date;
+        EventEndTime = end.ToString("HH:mm");
+        _filling = false;
+        _eventStart = start;
         PreviewEvent();
     }
 
-    // Shows on the board where the maintenance will go.
+    // The end keeps its distance to the start.
+    private void EventStartMoved()
+    {
+        if (_filling)
+            return;
+        if (StartAt(EventDate, EventTime) is { } start)
+        {
+            if (_eventStart is { } old && start != old && StartAt(EventEndDate, EventEndTime) is { } end)
+            {
+                _filling = true;
+                EventEndDate = (end + (start - old)).Date;
+                EventEndTime = (end + (start - old)).ToString("HH:mm");
+                _filling = false;
+            }
+            _eventStart = start;
+        }
+        PreviewEvent();
+    }
+
+    // Shows the length, and on the board where the maintenance will go.
     private void PreviewEvent()
     {
-        if (Editor != EditorMode.Event)
+        if (Editor != EditorMode.Event || _filling)
             return;
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == EventMachine);
-        var minutes = ParseNumber(EventDuration);
-        if (StartAt(EventDate, EventTime) is { } start && minutes > 0)
-            SetSlot(machine?.MachineId, start, start.AddMinutes(minutes));
-        else
+        var (start, end) = (StartAt(EventDate, EventTime), StartAt(EventEndDate, EventEndTime));
+        if (SpanError(start, end) is { } error)
+        {
+            EventLength = error;
             SetSlot(null, default, default);
+            return;
+        }
+        EventLength = $"Durée {PlanningContext.Duration((end!.Value - start!.Value).TotalMinutes)} · poste {PosteOf(start.Value)} → {PosteOf(end.Value)}";
+        SetSlot(machine?.MachineId, start.Value, end.Value);
     }
 
     [RelayCommand]
     private async Task SaveEventAsync()
     {
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == EventMachine);
-        var minutes = (int)ParseNumber(EventDuration);
-        if (machine == null || string.IsNullOrWhiteSpace(EventTask) || minutes <= 0)
+        if (machine == null || string.IsNullOrWhiteSpace(EventTask))
         {
-            StatusMessage = "Ligne, tâche et durée (minutes) sont nécessaires.";
+            StatusMessage = "Ligne et tâche sont nécessaires.";
             return;
         }
-        if (StartAt(EventDate, EventTime) is not { } start)
+        var (start, end) = (StartAt(EventDate, EventTime), StartAt(EventEndDate, EventEndTime));
+        if (SpanError(start, end) is { } error)
         {
-            StatusMessage = "Heure de début invalide (ex. 06:00, 14h30).";
+            StatusMessage = error;
             return;
         }
         var e = _editingEvent ?? new MaintenanceEvent();
         e.MachineId = machine.MachineId;
         e.Task = EventTask.Trim();
-        e.DurationMinutes = minutes;
-        e.PlannedStart = start;
+        e.PlannedStart = start!.Value;
+        e.DurationMinutes = (int)Math.Round((end!.Value - start.Value).TotalMinutes);
         e.Technician = string.IsNullOrWhiteSpace(EventTechnician) ? null : EventTechnician.Trim();
         try
         {
@@ -1247,9 +1341,7 @@ public partial class BoardViewModel : ObservableObject
         if (Editor != EditorMode.Order)
             return;
         OrderMachine = _ctx.NameOf(id);
-        OrderDate = start.Date;
-        OrderTime = start.ToString("HH:mm");
-        OrderHours = (end - start).TotalHours.ToString("0.##", CultureInfo.InvariantCulture);
+        FillOrderTimes(start, end, manualEnd: true);
     }
 
     [RelayCommand]
@@ -1263,9 +1355,7 @@ public partial class BoardViewModel : ObservableObject
         SelectedBlock = null;
         NewEvent();
         EventMachine = _ctx.NameOf(id);
-        EventDate = start.Date;
-        EventTime = start.ToString("HH:mm");
-        EventDuration = ((int)(end - start).TotalMinutes).ToString(CultureInfo.InvariantCulture);
+        FillEventTimes(start, end);
     }
 
     private void SetSlot(string? machineId, DateTime start, DateTime end)

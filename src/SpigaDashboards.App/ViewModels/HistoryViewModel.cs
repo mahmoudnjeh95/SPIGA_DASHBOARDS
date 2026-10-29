@@ -34,6 +34,8 @@ public partial class HistoryViewModel : ObservableObject
     [ObservableProperty] private string selectedWeight = AllOption;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private KpiSummary summary = new();
+    // A search in progress: loading motion over the results.
+    [ObservableProperty] private bool isBusy;
 
     public List<string> SectorOptions { get; } = new() { AllOption, "Couscous", "Pate courte", "Pate longue" };
     public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Après-midi", "Nuit" };
@@ -98,6 +100,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         // An unhandled exception here (async command) would take the whole app
         // down, so surface any failure as a status message instead.
+        IsBusy = true;
         try
         {
             await RunSearchAsync();
@@ -105,6 +108,10 @@ public partial class HistoryViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusMessage = $"Echec de la recherche : {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 

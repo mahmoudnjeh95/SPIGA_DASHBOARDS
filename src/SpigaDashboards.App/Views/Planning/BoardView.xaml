@@ -341,6 +341,9 @@
                 </DockPanel>
             </Border>
 
+            <!-- Loading motion over the board while it is read -->
+            <views:PastaLoader IsActive="{Binding IsBusy}" Text="Chargement du planning…"/>
+
             <!-- What to plan in the slot just picked, at the mouse -->
             <Popup IsOpen="{Binding IsSlotMenuOpen, Mode=TwoWay}" StaysOpen="False" Placement="MousePoint" HorizontalOffset="6" VerticalOffset="6"
                    AllowsTransparency="True" PopupAnimation="Fade">
@@ -481,8 +484,24 @@
                                 </StackPanel>
                             </Grid>
                             <ContentControl Template="{StaticResource PosteChips}" Focusable="False"/>
-                            <TextBlock Text="Durée en heures (sinon calculée à la cadence nominale)" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
-                            <TextBox Style="{StaticResource Input}" Text="{Binding OrderHours, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Durée en heures"/>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
+                                    <DatePicker SelectedDate="{Binding OrderEndDate}" Height="40" VerticalContentAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Style="{StaticResource Input}" Text="{Binding OrderEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
+                                </StackPanel>
+                            </Grid>
+                            <Button Content="Fin à la cadence nominale" Style="{StaticResource SuggestChip}" HorizontalAlignment="Left"
+                                    Command="{Binding OrderEndFromRateCommand}" ToolTip="Fin = quantité à la cadence nominale (Paramètres)"
+                                    Visibility="{Binding CanOrderEndFromRate, Converter={StaticResource BoolToVisibility}}"/>
                             <TextBlock Text="{Binding OrderEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,0"/>
                             <DockPanel Margin="0,16,0,0">
                                 <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Command="{Binding SaveOrderCommand}"/>
@@ -506,11 +525,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Jour" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : jour" Style="{StaticResource FieldLabel}"/>
                                     <DatePicker SelectedDate="{Binding EventDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Style="{StaticResource Input}" Text="{Binding EventTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de début"/>
                                 </StackPanel>
                             </Grid>
@@ -522,14 +541,17 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Durée (min)" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox Style="{StaticResource Input}" Text="{Binding EventDuration, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Durée en minutes"/>
+                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
+                                    <DatePicker SelectedDate="{Binding EventEndDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Intervenant" Style="{StaticResource FieldLabel}"/>
-                                    <TextBox Style="{StaticResource Input}" Text="{Binding EventTechnician, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Intervenant"/>
+                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Style="{StaticResource Input}" Text="{Binding EventEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
                                 </StackPanel>
                             </Grid>
+                            <TextBlock Text="{Binding EventLength}" Style="{StaticResource Caption}" Margin="0,10,0,0"/>
+                            <TextBlock Text="Intervenant" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
+                            <TextBox Style="{StaticResource Input}" Text="{Binding EventTechnician, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Intervenant"/>
                             <DockPanel Margin="0,16,0,0">
                                 <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Command="{Binding SaveEventCommand}"/>
                                 <Button Content="Annuler" Style="{StaticResource BarButton}" HorizontalAlignment="Left" Command="{Binding CancelEditorCommand}"/>

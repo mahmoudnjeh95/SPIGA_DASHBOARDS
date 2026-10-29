@@ -77,6 +77,9 @@
                     views:SlideMotion.Timer="{Binding RotationCycle}"/>
         </Border>
 
+        <!-- Loading motion over the slide, when a load lasts (same as the main window). -->
+        <views:PastaLoader Grid.Row="1" IsActive="{Binding ShowLoading}" Background="{DynamicResource LoadingVeilBrush}"/>
+
         <!-- Sticky note, read-only: it is written from the main window. -->
         <Border Grid.Row="2" Background="#F1C40F" Padding="16,10">
             <Border.Style>
