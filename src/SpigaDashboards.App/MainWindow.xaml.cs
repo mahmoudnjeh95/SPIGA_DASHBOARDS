@@ -4,6 +4,7 @@ using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
+using SpigaDashboards.App.ViewModels.Planning;
 
 namespace SpigaDashboards.App;
 
@@ -97,6 +98,12 @@ public partial class MainWindow : Window
         var stopsViewModel = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
         var window = new StopsWindow(stopsViewModel) { Owner = this };
         window.ShowDialog();
+    }
+
+    private void PlanningButton_Click(object sender, RoutedEventArgs e)
+    {
+        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, new TeamScheduleService(_settings));
+        new PlanningWindow(new PlanningViewModel(context)) { Owner = this }.ShowDialog();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)

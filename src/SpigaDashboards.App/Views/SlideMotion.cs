@@ -126,5 +126,32 @@ public static class SlideMotion
             new DoubleAnimation(0, 1, TimeSpan.FromSeconds(Math.Max(1, GetSeconds(bar)))));
     }
 
+    // ---- Bars that grow in (Planification statistics) ----
+    // Grow="X" grows the element from its left edge, "Y" from its bottom,
+    // each time it is loaded. A transform of its own, created here: one set in
+    // a template would be frozen and shared, and couldn't be animated.
+
+    public static readonly DependencyProperty GrowProperty = DependencyProperty.RegisterAttached(
+        "Grow", typeof(string), typeof(SlideMotion), new PropertyMetadata(null, OnGrowChanged));
+
+    public static string? GetGrow(DependencyObject d) => (string?)d.GetValue(GrowProperty);
+    public static void SetGrow(DependencyObject d, string? value) => d.SetValue(GrowProperty, value);
+
+    private static void OnGrowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is FrameworkElement element && e.OldValue == null && e.NewValue != null)
+            element.Loaded += (_, _) => Grow(element);
+    }
+
+    private static void Grow(FrameworkElement element)
+    {
+        var vertical = GetGrow(element) == "Y";
+        var scale = new ScaleTransform(vertical ? 1 : 0, vertical ? 0 : 1);
+        element.RenderTransformOrigin = vertical ? new Point(0.5, 1) : new Point(0, 0.5);
+        element.RenderTransform = scale;
+        var animation = new DoubleAnimation(0, 1, Ms(750)) { EasingFunction = EaseOut, BeginTime = TimeSpan.FromMilliseconds(80) };
+        scale.BeginAnimation(vertical ? ScaleTransform.ScaleYProperty : ScaleTransform.ScaleXProperty, animation);
+    }
+
     private static Duration Ms(int ms) => new(TimeSpan.FromMilliseconds(ms));
 }

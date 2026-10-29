@@ -1,0 +1,264 @@
+using System.Data;
+using Dapper;
+using SpigaDashboards.App.Models;
+
+namespace SpigaDashboards.App.Data;
+
+// The Planification window's own tables (Plan*), in the same database as the
+// app's other tables (Machines, Notes) so every PC sees the same pannes and
+// planning. Created on first use (idempotent); the Stiavelli tables are never
+// written. The same DDL, for a DBA, is in database/planning.sql.
+public class PlanningRepository
+{
+    private readonly IDbConnectionFactory _connectionFactory;
+    private bool _schemaReady;
+
+    public PlanningRepository(IDbConnectionFactory connectionFactory)
+    {
+        _connectionFactory = connectionFactory;
+    }
+
+    private bool IsSqlServer => _connectionFactory.Provider == DatabaseProvider.SqlServer;
+
+    private string IdentitySelect => IsSqlServer ? "SELECT CAST(SCOPE_IDENTITY() AS INT)" : "SELECT last_insert_rowid()";
+
+    public async Task EnsureSchemaAsync()
+    {
+        if (_schemaReady)
+            return;
+        using var connection = _connectionFactory.CreateConnection();
+        foreach (var statement in IsSqlServer ? SqlServerSchema : SqliteSchema)
+            await connection.ExecuteAsync(statement);
+        _schemaReady = true;
+    }
+
+    // Forget the check after a database switch (Parametres).
+    public void Reset() => _schemaReady = false;
+
+    private static readonly string[] SqlServerSchema =
+    {
+        @"IF OBJECT_ID('dbo.PlanStopQualifications') IS NULL
+          CREATE TABLE dbo.PlanStopQualifications (
+            Id INT IDENTITY(1,1) PRIMARY KEY,
+            MachineId VARCHAR(10) NOT NULL,
+            StopStart DATETIME2(0) NOT NULL,
+            StopEnd DATETIME2(0) NOT NULL,
+            ShiftDate DATE NOT NULL,
+            ShiftId INT NOT NULL,
+            Team NVARCHAR(50) NOT NULL,
+            CauseCode VARCHAR(20) NOT NULL,
+            Component NVARCHAR(100) NULL,
+            Technician NVARCHAR(100) NULL,
+            Comment NVARCHAR(1000) NULL,
+            IsManual BIT NOT NULL,
+            CreatedAt DATETIME2(0) NOT NULL)",
+        @"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PlanStopQualifications_Start')
+          CREATE INDEX IX_PlanStopQualifications_Start ON dbo.PlanStopQualifications (StopStart, MachineId)",
+        @"IF OBJECT_ID('dbo.PlanMaintenancePlans') IS NULL
+          CREATE TABLE dbo.PlanMaintenancePlans (
+            Id INT IDENTITY(1,1) PRIMARY KEY,
+            MachineId VARCHAR(10) NOT NULL,
+            Task NVARCHAR(100) NOT NULL,
+            Kind INT NOT NULL,
+            IntervalDays INT NOT NULL,
+            IntervalBags BIGINT NOT NULL,
+            DurationMinutes INT NOT NULL,
+            LastDoneAt DATETIME2(0) NULL,
+            IsActive BIT NOT NULL)",
+        @"IF OBJECT_ID('dbo.PlanMaintenanceEvents') IS NULL
+          CREATE TABLE dbo.PlanMaintenanceEvents (
+            Id INT IDENTITY(1,1) PRIMARY KEY,
+            PlanId INT NULL,
+            MachineId VARCHAR(10) NOT NULL,
+            Task NVARCHAR(100) NOT NULL,
+            PlannedStart DATETIME2(0) NOT NULL,
+            DurationMinutes INT NOT NULL,
+            Status INT NOT NULL,
+            DoneAt DATETIME2(0) NULL,
+            Technician NVARCHAR(100) NULL,
+            Comment NVARCHAR(1000) NULL)",
+        @"IF OBJECT_ID('dbo.PlanProductionOrders') IS NULL
+          CREATE TABLE dbo.PlanProductionOrders (
+            Id INT IDENTITY(1,1) PRIMARY KEY,
+            OrderNo NVARCHAR(30) NOT NULL,
+            MachineId VARCHAR(10) NOT NULL,
+            Product NVARCHAR(100) NOT NULL,
+            TargetWeightGrams FLOAT NOT NULL,
+            QuantityBags BIGINT NOT NULL,
+            PlannedStart DATETIME2(0) NOT NULL,
+            PlannedEnd DATETIME2(0) NOT NULL,
+            Status INT NOT NULL,
+            Comment NVARCHAR(1000) NULL)",
+    };
+
+    private static readonly string[] SqliteSchema =
+    {
+        @"CREATE TABLE IF NOT EXISTS PlanStopQualifications (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            MachineId TEXT NOT NULL, StopStart TEXT NOT NULL, StopEnd TEXT NOT NULL,
+            ShiftDate TEXT NOT NULL, ShiftId INTEGER NOT NULL, Team TEXT NOT NULL,
+            CauseCode TEXT NOT NULL, Component TEXT NULL, Technician TEXT NULL, Comment TEXT NULL,
+            IsManual INTEGER NOT NULL, CreatedAt TEXT NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS IX_PlanStopQualifications_Start ON PlanStopQualifications (StopStart, MachineId)",
+        @"CREATE TABLE IF NOT EXISTS PlanMaintenancePlans (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            MachineId TEXT NOT NULL, Task TEXT NOT NULL, Kind INTEGER NOT NULL,
+            IntervalDays INTEGER NOT NULL, IntervalBags INTEGER NOT NULL, DurationMinutes INTEGER NOT NULL,
+            LastDoneAt TEXT NULL, IsActive INTEGER NOT NULL)",
+        @"CREATE TABLE IF NOT EXISTS PlanMaintenanceEvents (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            PlanId INTEGER NULL, MachineId TEXT NOT NULL, Task TEXT NOT NULL,
+            PlannedStart TEXT NOT NULL, DurationMinutes INTEGER NOT NULL, Status INTEGER NOT NULL,
+            DoneAt TEXT NULL, Technician TEXT NULL, Comment TEXT NULL)",
+        @"CREATE TABLE IF NOT EXISTS PlanProductionOrders (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            OrderNo TEXT NOT NULL, MachineId TEXT NOT NULL, Product TEXT NOT NULL,
+            TargetWeightGrams REAL NOT NULL, QuantityBags INTEGER NOT NULL,
+            PlannedStart TEXT NOT NULL, PlannedEnd TEXT NOT NULL, Status INTEGER NOT NULL, Comment TEXT NULL)",
+    };
+
+    private async Task<IDbConnection> OpenAsync()
+    {
+        await EnsureSchemaAsync();
+        return _connectionFactory.CreateConnection();
+    }
+
+    // ---- Stop qualifications ----
+
+    // Stops that started in [from, to).
+    public async Task<List<StopQualification>> GetQualificationsAsync(DateTime from, DateTime to)
+    {
+        using var connection = await OpenAsync();
+        var rows = await connection.QueryAsync<StopQualification>(
+            @"SELECT Id, MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode, Component,
+                     Technician, Comment, IsManual, CreatedAt
+              FROM PlanStopQualifications WHERE StopStart >= @from AND StopStart < @to",
+            new { from, to });
+        return rows.OrderBy(q => q.StopStart).ToList();
+    }
+
+    public async Task SaveQualificationAsync(StopQualification q)
+    {
+        using var connection = await OpenAsync();
+        if (q.Id == 0)
+        {
+            q.CreatedAt = DateTime.Now;
+            q.Id = await connection.ExecuteScalarAsync<int>(
+                @"INSERT INTO PlanStopQualifications (MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode,
+                      Component, Technician, Comment, IsManual, CreatedAt)
+                  VALUES (@MachineId, @StopStart, @StopEnd, @ShiftDate, @ShiftId, @Team, @CauseCode,
+                      @Component, @Technician, @Comment, @IsManual, @CreatedAt); " + IdentitySelect, q);
+        }
+        else
+        {
+            await connection.ExecuteAsync(
+                @"UPDATE PlanStopQualifications SET StopStart = @StopStart, StopEnd = @StopEnd, CauseCode = @CauseCode,
+                      Component = @Component, Technician = @Technician, Comment = @Comment
+                  WHERE Id = @Id", q);
+        }
+    }
+
+    public async Task DeleteQualificationAsync(int id)
+    {
+        using var connection = await OpenAsync();
+        await connection.ExecuteAsync("DELETE FROM PlanStopQualifications WHERE Id = @id", new { id });
+    }
+
+    public async Task<List<string>> GetDistinctAsync(string column)
+    {
+        // Column names come from code only (Component / Technician).
+        using var connection = await OpenAsync();
+        var rows = await connection.QueryAsync<string>(
+            $"SELECT DISTINCT {column} FROM PlanStopQualifications WHERE {column} IS NOT NULL");
+        return rows.Where(r => !string.IsNullOrWhiteSpace(r)).ToList();
+    }
+
+    // ---- Maintenance plans and events ----
+
+    public async Task<List<MaintenancePlan>> GetPlansAsync()
+    {
+        using var connection = await OpenAsync();
+        return (await connection.QueryAsync<MaintenancePlan>(
+            @"SELECT Id, MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive
+              FROM PlanMaintenancePlans WHERE IsActive = 1")).ToList();
+    }
+
+    public async Task SavePlanAsync(MaintenancePlan p)
+    {
+        using var connection = await OpenAsync();
+        if (p.Id == 0)
+            p.Id = await connection.ExecuteScalarAsync<int>(
+                @"INSERT INTO PlanMaintenancePlans (MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive)
+                  VALUES (@MachineId, @Task, @Kind, @IntervalDays, @IntervalBags, @DurationMinutes, @LastDoneAt, @IsActive); " + IdentitySelect, p);
+        else
+            await connection.ExecuteAsync(
+                @"UPDATE PlanMaintenancePlans SET MachineId = @MachineId, Task = @Task, Kind = @Kind, IntervalDays = @IntervalDays,
+                      IntervalBags = @IntervalBags, DurationMinutes = @DurationMinutes, LastDoneAt = @LastDoneAt, IsActive = @IsActive
+                  WHERE Id = @Id", p);
+    }
+
+    public async Task<List<MaintenanceEvent>> GetEventsAsync(DateTime from, DateTime to)
+    {
+        using var connection = await OpenAsync();
+        var rows = await connection.QueryAsync<MaintenanceEvent>(
+            @"SELECT Id, PlanId, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
+              FROM PlanMaintenanceEvents WHERE PlannedStart >= @from AND PlannedStart < @to AND Status <> 2",
+            new { from = from.AddDays(-2), to });
+        return rows.Where(e => e.PlannedEnd > from).ToList();
+    }
+
+    // Planned slots of a plan that aren't done yet (to avoid planning it twice).
+    public async Task<List<MaintenanceEvent>> GetOpenEventsAsync()
+    {
+        using var connection = await OpenAsync();
+        return (await connection.QueryAsync<MaintenanceEvent>(
+            @"SELECT Id, PlanId, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
+              FROM PlanMaintenanceEvents WHERE Status = 0")).ToList();
+    }
+
+    public async Task SaveEventAsync(MaintenanceEvent e)
+    {
+        using var connection = await OpenAsync();
+        if (e.Id == 0)
+            e.Id = await connection.ExecuteScalarAsync<int>(
+                @"INSERT INTO PlanMaintenanceEvents (PlanId, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment)
+                  VALUES (@PlanId, @MachineId, @Task, @PlannedStart, @DurationMinutes, @Status, @DoneAt, @Technician, @Comment); " + IdentitySelect, e);
+        else
+            await connection.ExecuteAsync(
+                @"UPDATE PlanMaintenanceEvents SET MachineId = @MachineId, Task = @Task, PlannedStart = @PlannedStart,
+                      DurationMinutes = @DurationMinutes, Status = @Status, DoneAt = @DoneAt, Technician = @Technician, Comment = @Comment
+                  WHERE Id = @Id", e);
+    }
+
+    // ---- Production orders ----
+
+    public async Task<List<ProductionOrder>> GetOrdersAsync(DateTime from, DateTime to)
+    {
+        using var connection = await OpenAsync();
+        return (await connection.QueryAsync<ProductionOrder>(
+            @"SELECT Id, OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment
+              FROM PlanProductionOrders WHERE PlannedStart < @to AND PlannedEnd > @from AND Status <> 2",
+            new { from, to })).OrderBy(o => o.PlannedStart).ToList();
+    }
+
+    public async Task<int> CountOrdersAsync()
+    {
+        using var connection = await OpenAsync();
+        return await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM PlanProductionOrders");
+    }
+
+    public async Task SaveOrderAsync(ProductionOrder o)
+    {
+        using var connection = await OpenAsync();
+        if (o.Id == 0)
+            o.Id = await connection.ExecuteScalarAsync<int>(
+                @"INSERT INTO PlanProductionOrders (OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment)
+                  VALUES (@OrderNo, @MachineId, @Product, @TargetWeightGrams, @QuantityBags, @PlannedStart, @PlannedEnd, @Status, @Comment); " + IdentitySelect, o);
+        else
+            await connection.ExecuteAsync(
+                @"UPDATE PlanProductionOrders SET OrderNo = @OrderNo, MachineId = @MachineId, Product = @Product,
+                      TargetWeightGrams = @TargetWeightGrams, QuantityBags = @QuantityBags, PlannedStart = @PlannedStart,
+                      PlannedEnd = @PlannedEnd, Status = @Status, Comment = @Comment
+                  WHERE Id = @Id", o);
+    }
+}

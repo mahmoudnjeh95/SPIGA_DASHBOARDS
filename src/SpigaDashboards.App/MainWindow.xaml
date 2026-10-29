@@ -109,6 +109,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -175,11 +176,17 @@
                     Style="{StaticResource BarButton}"
                     Click="StopsButton_Click"/>
 
-            <Button Grid.Column="6" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
+            <!-- Pannes (causes of the stops), statistics, week planning and preventive maintenance. -->
+            <Button Grid.Column="6" Content="Planification" Margin="12,0,0,0"
+                    ToolTip="Pannes à qualifier, statistiques des pannes, planning de la semaine et maintenance préventive"
+                    Style="{StaticResource BarButton}"
+                    Click="PlanningButton_Click"/>
+
+            <Button Grid.Column="7" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
                     Style="{StaticResource BarButton}"
                     Click="SettingsButton_Click"/>
 
-            <Button Grid.Column="7" Content="À propos" Margin="12,0,0,0" Padding="12,6"
+            <Button Grid.Column="8" Content="À propos" Margin="12,0,0,0" Padding="12,6"
                     ToolTip="Version de l'application et informations"
                     Style="{StaticResource BarButton}"
                     Click="AboutButton_Click"/>
