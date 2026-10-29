@@ -3,11 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:SpigaDashboards.App.Views"
              xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels.Planning"
-             x:Name="Root">
+             x:Name="Root" PreviewKeyDown="Root_PreviewKeyDown">
 
-    <!-- Planification tab (BoardViewModel): the week of every line by poste,
-         with orders (and their real progress), maintenance and pannes; the
-         side panel shows what is selected, or the form being filled. -->
+    <!-- Planification tab (BoardViewModel): the day, week or month of every
+         line, with orders (and their real progress), maintenance and pannes;
+         a click or drag on an empty part of a line picks a slot to plan in.
+         The side panel shows what is selected, or the form being filled. -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -18,14 +19,21 @@
                 <UniformGrid Rows="1"/>
             </ItemsPanelTemplate>
 
-            <!-- Day columns behind a line: day separators, poste ticks, today tinted. -->
-            <DataTemplate x:Key="DayColumn" DataType="{x:Type vm:DayHeader}">
+            <!-- Columns behind a line: column separators, tick lines (hours or postes), today tinted. -->
+            <DataTemplate x:Key="DayColumn" DataType="{x:Type vm:ColumnHeader}">
                 <Border x:Name="Day" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0">
-                    <UniformGrid Rows="1">
-                        <Border/>
-                        <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1,0,0,0"/>
-                        <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1,0,0,0"/>
-                    </UniformGrid>
+                    <ItemsControl ItemsSource="{Binding Ticks}" ItemsPanel="{StaticResource OneRow}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:ColumnTick}">
+                                <Border x:Name="Tick" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1,0,0,0"/>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsFirst}" Value="True">
+                                        <Setter TargetName="Tick" Property="BorderThickness" Value="0"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </Border>
                 <DataTemplate.Triggers>
                     <DataTrigger Binding="{Binding IsToday}" Value="True">
@@ -90,6 +98,15 @@
                 </DataTemplate.Triggers>
             </DataTemplate>
 
+            <!-- Under the hour of a form: one click for the start of a poste. -->
+            <ControlTemplate x:Key="PosteChips" TargetType="ContentControl">
+                <WrapPanel>
+                    <Button Content="Matin · 06:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteCommand}" CommandParameter="0"/>
+                    <Button Content="Après-midi · 14:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteCommand}" CommandParameter="1"/>
+                    <Button Content="Nuit · 22:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteCommand}" CommandParameter="2"/>
+                </WrapPanel>
+            </ControlTemplate>
+
             <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
                 <Setter Property="Padding" Value="10,4"/>
                 <Setter Property="FontSize" Value="12"/>
@@ -114,12 +131,22 @@
             </Grid.ColumnDefinitions>
             <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0">
                 <TextBlock Text="PLANIFICATION" Style="{StaticResource Eyebrow}"/>
-                <TextBlock Text="{Binding WeekLabel}" Style="{StaticResource H1}" Margin="0,2,0,0"/>
+                <TextBlock Text="{Binding RangeLabel}" Style="{StaticResource H1}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                <Button Content="‹" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding PreviousWeekCommand}" ToolTip="Semaine précédente"/>
-                <Button Content="Cette semaine" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding ThisWeekCommand}"/>
-                <Button Content="›" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding NextWeekCommand}" ToolTip="Semaine suivante"/>
+                <Border Style="{StaticResource SegTrack}" Margin="0,0,12,0">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton GroupName="BoardRange" Content="Jour" Style="{StaticResource Seg}"
+                                     IsChecked="{Binding RangeKey, Converter={StaticResource ValueToBool}, ConverterParameter=0}"/>
+                        <RadioButton GroupName="BoardRange" Content="Semaine" Style="{StaticResource Seg}"
+                                     IsChecked="{Binding RangeKey, Converter={StaticResource ValueToBool}, ConverterParameter=1}"/>
+                        <RadioButton GroupName="BoardRange" Content="Mois" Style="{StaticResource Seg}"
+                                     IsChecked="{Binding RangeKey, Converter={StaticResource ValueToBool}, ConverterParameter=2}"/>
+                    </StackPanel>
+                </Border>
+                <Button Content="‹" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding PreviousCommand}" ToolTip="Précédent"/>
+                <Button Content="Aujourd'hui" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding TodayCommand}"/>
+                <Button Content="›" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding NextCommand}" ToolTip="Suivant"/>
                 <Button Content="+ Règle préventive" Style="{StaticResource BarButton}" Margin="16,0,0,0" Command="{Binding NewPlanCommand}"/>
                 <Button Content="Planifier une maintenance" Style="{StaticResource BarButton}" Margin="8,0,0,0" Background="#FAB219" Foreground="#1A1406"
                         Command="{Binding NewEventCommand}"/>
@@ -152,14 +179,14 @@
             </Border>
             <Border Style="{StaticResource Card}" Margin="7,0">
                 <StackPanel>
-                    <TextBlock Text="Maintenances cette semaine" Style="{StaticResource Small}" FontSize="13"/>
+                    <TextBlock Text="{Binding PeriodSuffix, StringFormat='Maintenances {0}'}" Style="{StaticResource Small}" FontSize="13"/>
                     <TextBlock Text="{Binding MaintText}" Style="{StaticResource BigValue}" Margin="0,4,0,4"/>
                     <TextBlock Text="{Binding MaintSub}" Style="{StaticResource Small}"/>
                 </StackPanel>
             </Border>
             <Border Style="{StaticResource Card}" Margin="7,0">
                 <StackPanel>
-                    <TextBlock Text="Pannes cette semaine" Style="{StaticResource Small}" FontSize="13"/>
+                    <TextBlock Text="{Binding PeriodSuffix, StringFormat='Pannes {0}'}" Style="{StaticResource Small}" FontSize="13"/>
                     <TextBlock Text="{Binding PannesText}" Style="{StaticResource BigValue}" Margin="0,4,0,4"/>
                     <TextBlock Text="{Binding PannesSub}" Style="{StaticResource Small}"/>
                 </StackPanel>
@@ -184,18 +211,21 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="LIGNE" Style="{StaticResource Small}" FontSize="11" FontWeight="Bold" Margin="18,0,0,8" VerticalAlignment="Bottom"/>
                         <Grid Grid.Column="1" Margin="0,0,10,0">
-                            <ItemsControl ItemsSource="{Binding Days}" ItemsPanel="{StaticResource OneRow}">
+                            <ItemsControl ItemsSource="{Binding Columns}" ItemsPanel="{StaticResource OneRow}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:DayHeader}">
+                                    <DataTemplate DataType="{x:Type vm:ColumnHeader}">
                                         <Border x:Name="Day" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0" Padding="0,9,0,0">
                                             <StackPanel>
-                                                <TextBlock x:Name="Name" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Margin="8,0,0,6"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
-                                                <UniformGrid Rows="1">
-                                                    <TextBlock Text="M" FontSize="10" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,0,0,4"/>
-                                                    <TextBlock Text="AM" FontSize="10" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                                                    <TextBlock Text="N" FontSize="10" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                                                </UniformGrid>
+                                                <TextBlock x:Name="Name" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Margin="6,0,0,6"
+                                                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                                <ItemsControl ItemsSource="{Binding Ticks}" ItemsPanel="{StaticResource OneRow}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type vm:ColumnTick}">
+                                                            <TextBlock Text="{Binding Label}" FontSize="10" HorizontalAlignment="Center" Margin="0,0,0,4"
+                                                                       Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                             </StackPanel>
                                         </Border>
                                         <DataTemplate.Triggers>
@@ -264,8 +294,11 @@
                                                             </StackPanel>
                                                         </StackPanel>
                                                         <Grid Grid.Column="1" Margin="0,0,10,0">
-                                                            <ItemsControl ItemsSource="{Binding DataContext.Days, ElementName=Root}" ItemsPanel="{StaticResource OneRow}"
+                                                            <ItemsControl ItemsSource="{Binding DataContext.Columns, ElementName=Root}" ItemsPanel="{StaticResource OneRow}"
                                                                           ItemTemplate="{StaticResource DayColumn}" IsHitTestVisible="False"/>
+                                                            <!-- Empty part of the line: click or drag to pick a slot -->
+                                                            <Border Background="Transparent"
+                                                                    MouseLeftButtonDown="Slot_MouseDown" MouseMove="Slot_MouseMove" MouseLeftButtonUp="Slot_MouseUp"/>
                                                             <ItemsControl ItemsSource="{Binding Blocks}" ItemTemplate="{StaticResource Block}">
                                                                 <ItemsControl.ItemsPanel>
                                                                     <ItemsPanelTemplate>
@@ -279,6 +312,15 @@
                                                                     </Style>
                                                                 </ItemsControl.ItemContainerStyle>
                                                             </ItemsControl>
+                                                            <!-- Slot picked, or where the open form puts its block -->
+                                                            <views:TimelinePanel IsHitTestVisible="False" Visibility="{Binding HasSlot, Converter={StaticResource BoolToVisibility}}">
+                                                                <Border Margin="1,6" CornerRadius="7" BorderThickness="2" Background="{DynamicResource AccentSoftBrush}"
+                                                                        BorderBrush="{DynamicResource AccentBrush}"
+                                                                        views:TimelinePanel.Start="{Binding SlotStartFrac}" views:TimelinePanel.End="{Binding SlotEndFrac}">
+                                                                    <TextBlock Text="{Binding SlotText}" FontSize="11" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource AccentBrush}"/>
+                                                                </Border>
+                                                            </views:TimelinePanel>
                                                             <views:TimelinePanel IsHitTestVisible="False"
                                                                                  Visibility="{Binding DataContext.IsNowVisible, ElementName=Root, Converter={StaticResource BoolToVisibility}}">
                                                                 <Border Width="2" Opacity="0.85" Background="{DynamicResource PrimaryTextBrush}"
@@ -299,13 +341,35 @@
                 </DockPanel>
             </Border>
 
+            <!-- What to plan in the slot just picked, at the mouse -->
+            <Popup IsOpen="{Binding IsSlotMenuOpen, Mode=TwoWay}" StaysOpen="False" Placement="MousePoint" HorizontalOffset="6" VerticalOffset="6"
+                   AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Style="{StaticResource Card}" Width="300" Padding="16,14" Margin="0,0,14,14">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.35"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <TextBlock Text="NOUVEAU CRÉNEAU" Style="{StaticResource Eyebrow}"/>
+                        <TextBlock Text="{Binding SlotTitle}" Style="{StaticResource H2}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding SlotWhen}" Style="{StaticResource Caption}" Margin="0,2,0,0"/>
+                        <DockPanel Margin="0,10,0,0" Visibility="{Binding HasSlotWarning, Converter={StaticResource BoolToVisibility}}">
+                            <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Fill="#EC835A" Margin="0,5,8,0" VerticalAlignment="Top"/>
+                            <TextBlock Text="{Binding SlotWarning}" Style="{StaticResource Caption}" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                        </DockPanel>
+                        <Button Content="+ Ordre de fabrication" Style="{StaticResource AccentBarButton}" Margin="0,14,0,0" Command="{Binding OrderInSlotCommand}"/>
+                        <Button Content="Planifier une maintenance" Style="{StaticResource BarButton}" Margin="0,8,0,0" Background="#FAB219" Foreground="#1A1406"
+                                Command="{Binding EventInSlotCommand}"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
+
             <!-- Side panel -->
             <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- Nothing selected -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14" Visibility="{Binding ShowEmptyDetail, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Style="{StaticResource Caption}" Margin="0,4"
-                                   Text="Cliquez un bloc du planning pour voir son détail : avancement réel d'un ordre, maintenance à valider, panne."/>
+                                   Text="Cliquez un bloc du planning pour voir son détail : avancement réel d'un ordre, maintenance à valider, panne. Cliquez ou glissez sur une partie vide d'une ligne pour y planifier un ordre ou une maintenance."/>
                     </Border>
 
                     <!-- Selected block -->
@@ -412,10 +476,11 @@
                                     <DatePicker SelectedDate="{Binding OrderDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Début : poste" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox Style="{StaticResource DarkComboBox}" Height="40" FontSize="14" ItemsSource="{Binding PosteOptions}" SelectedItem="{Binding OrderPoste}"/>
+                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Style="{StaticResource Input}" Text="{Binding OrderTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de début"/>
                                 </StackPanel>
                             </Grid>
+                            <ContentControl Template="{StaticResource PosteChips}" Focusable="False"/>
                             <TextBlock Text="Durée en heures (sinon calculée à la cadence nominale)" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
                             <TextBox Style="{StaticResource Input}" Text="{Binding OrderHours, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Durée en heures"/>
                             <TextBlock Text="{Binding OrderEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,0"/>
@@ -445,10 +510,11 @@
                                     <DatePicker SelectedDate="{Binding EventDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Poste" Style="{StaticResource FieldLabel}"/>
-                                    <ComboBox Style="{StaticResource DarkComboBox}" Height="40" FontSize="14" ItemsSource="{Binding PosteOptions}" SelectedItem="{Binding EventPoste}"/>
+                                    <TextBlock Text="Heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Style="{StaticResource Input}" Text="{Binding EventTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de début"/>
                                 </StackPanel>
                             </Grid>
+                            <ContentControl Template="{StaticResource PosteChips}" Focusable="False"/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -566,7 +632,7 @@
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Alertes de planification" Style="{StaticResource H2}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Rien à signaler sur cette semaine." Style="{StaticResource Caption}"
+                            <TextBlock Text="Rien à signaler sur la période affichée." Style="{StaticResource Caption}"
                                        Visibility="{Binding HasAlerts, Converter={StaticResource InverseBoolToVisibility}}"/>
                             <ItemsControl ItemsSource="{Binding Alerts}">
                                 <ItemsControl.ItemTemplate>

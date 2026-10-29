@@ -18,7 +18,16 @@ public enum BlockKind
     Panne,
 }
 
-// One block on a line of the week board, placed by fractions of the week.
+// What the board shows: a day (postes cut in hours), a week (days cut in
+// postes) or a month (days). Every period starts at 06:00, with the Matin.
+public enum BoardRange
+{
+    Day,
+    Week,
+    Month,
+}
+
+// One block on a line of the board, placed by fractions of the period shown.
 public partial class BoardBlock : ObservableObject
 {
     public string Key { get; init; } = "";
@@ -40,17 +49,25 @@ public partial class BoardBlock : ObservableObject
     public double ProducedBags { get; init; }
 }
 
-public sealed class MachineRow
+public sealed partial class MachineRow : ObservableObject
 {
     public string MachineId { get; init; } = "";
     public string MachineName { get; init; } = "";
     public string StateText { get; init; } = "";
     public Brush StateBrush { get; init; } = Brushes.Gray;
     public ObservableCollection<BoardBlock> Blocks { get; } = new();
+
+    // The slot picked on this line (click / drag), or where the open form will put its block.
+    [ObservableProperty] private bool hasSlot;
+    [ObservableProperty] private double slotStartFrac;
+    [ObservableProperty] private double slotEndFrac;
+    [ObservableProperty] private string slotText = "";
 }
 
 public sealed record SectorGroup(string Name, Brush Color, string Caption, IReadOnlyList<MachineRow> Rows);
-public sealed record DayHeader(string Name, bool IsToday);
+// A column of the board (a poste, or a day) and its ticks (hours, postes, or the weekday).
+public sealed record ColumnTick(string Label, bool IsFirst);
+public sealed record ColumnHeader(string Name, IReadOnlyList<ColumnTick> Ticks, bool IsToday);
 public sealed record DetailRow(string Key, string Value);
 public sealed record AlertRow(string Machine, string Text, Brush Brush);
 
@@ -73,9 +90,11 @@ public static class MaintenanceText
         : $"Usage · tous les {PlanningContext.Bags(p.IntervalBags)} sacs";
 }
 
-// "Planification" tab: the week of every line (orders, maintenance, pannes)
-// with the real progress of each order from the counter, the preventive
-// maintenance rules and what is due, and the alerts a planner acts on.
+// "Planification" tab: the day, week or month of every line (orders,
+// maintenance, pannes) with the real progress of each order from the counter,
+// the preventive maintenance rules and what is due, and the alerts a planner
+// acts on. A click or drag on an empty part of a line picks a slot to plan
+// an order or a maintenance in, as in a calendar.
 public partial class BoardViewModel : ObservableObject
 {
     public static readonly string[] PosteNames = { "Matin", "Après-midi", "Nuit" };
@@ -91,24 +110,23 @@ public partial class BoardViewModel : ObservableObject
     public BoardViewModel(PlanningContext ctx)
     {
         _ctx = ctx;
-        WeekStart = MondayOf(DateTime.Now);
+        RangeStart = StartOf(DateTime.Now, Range);
     }
 
-    public ObservableCollection<DayHeader> Days { get; } = new();
+    public ObservableCollection<ColumnHeader> Columns { get; } = new();
     public ObservableCollection<SectorGroup> Sectors { get; } = new();
     public ObservableCollection<PreventiveRow> Preventives { get; } = new();
     public ObservableCollection<AlertRow> Alerts { get; } = new();
     public ObservableCollection<DetailRow> DetailRows { get; } = new();
     public ObservableCollection<string> MachineNames { get; } = new();
-    public List<string> PosteOptions { get; } = PosteNames.ToList();
     public List<string> PlanKindOptions { get; } = new() { "Calendaire (jours)", "Usage (sacs produits)" };
 
-    [ObservableProperty] private DateTime weekStart;
-    [ObservableProperty] private string weekLabel = "";
+    [ObservableProperty] private BoardRange range = BoardRange.Week;
+    [ObservableProperty] private DateTime rangeStart;
+    [ObservableProperty] private string rangeLabel = "";
+    [ObservableProperty] private string periodSuffix = "de la semaine";
     [ObservableProperty] private double nowFrac = -1;
     [ObservableProperty] private bool isNowVisible;
-    [ObservableProperty] private double todayStartFrac;
-    [ObservableProperty] private double todayEndFrac;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string statusMessage = "";
 
@@ -164,13 +182,13 @@ public partial class BoardViewModel : ObservableObject
     [ObservableProperty] private string orderQuantity = "";
     [ObservableProperty] private string orderHours = "";
     [ObservableProperty] private DateTime? orderDate = DateTime.Today;
-    [ObservableProperty] private string orderPoste = PosteNames[0];
+    [ObservableProperty] private string orderTime = "06:00";
     [ObservableProperty] private string orderEstimate = "";
 
     [ObservableProperty] private string eventMachine = "";
     [ObservableProperty] private string eventTask = "";
     [ObservableProperty] private DateTime? eventDate = DateTime.Today;
-    [ObservableProperty] private string eventPoste = PosteNames[0];
+    [ObservableProperty] private string eventTime = "06:00";
     [ObservableProperty] private string eventDuration = "60";
     [ObservableProperty] private string eventTechnician = "";
 
@@ -188,27 +206,69 @@ public partial class BoardViewModel : ObservableObject
     partial void OnOrderQuantityChanged(string value) => UpdateEstimate();
     partial void OnOrderHoursChanged(string value) => UpdateEstimate();
     partial void OnOrderDateChanged(DateTime? value) => UpdateEstimate();
-    partial void OnOrderPosteChanged(string value) => UpdateEstimate();
+    partial void OnOrderTimeChanged(string value) => UpdateEstimate();
+    partial void OnEventMachineChanged(string value) => PreviewEvent();
+    partial void OnEventDateChanged(DateTime? value) => PreviewEvent();
+    partial void OnEventTimeChanged(string value) => PreviewEvent();
+    partial void OnEventDurationChanged(string value) => PreviewEvent();
     partial void OnSelectedBlockChanged(BoardBlock? oldValue, BoardBlock? newValue)
     {
         if (oldValue != null)
             oldValue.IsSelected = false;
         if (newValue != null)
+        {
             newValue.IsSelected = true;
+            ClearSlot();
+        }
         OnPropertyChanged(nameof(ShowDetail));
         OnPropertyChanged(nameof(ShowEmptyDetail));
         ShowDetails(newValue);
     }
-    partial void OnEditorChanged(EditorMode value) => OnPropertyChanged(nameof(ShowEmptyDetail));
-
-    private static DateTime MondayOf(DateTime t)
+    partial void OnEditorChanged(EditorMode value)
     {
-        var day = Postes.Of(t).ShiftDate;
-        return day.AddDays(-(((int)day.DayOfWeek + 6) % 7)).AddHours(6);
+        OnPropertyChanged(nameof(ShowEmptyDetail));
+        if (value is EditorMode.None or EditorMode.Plan)
+            ClearSlot();
     }
 
-    private DateTime WeekEnd => WeekStart.AddDays(7);
-    private double Frac(DateTime t) => Math.Clamp((t - WeekStart).TotalHours / 168, 0, 1);
+    // Jour / Semaine / Mois segments.
+    public string RangeKey
+    {
+        get => ((int)Range).ToString(CultureInfo.InvariantCulture);
+        set => Range = (BoardRange)int.Parse(value, CultureInfo.InvariantCulture);
+    }
+
+    partial void OnRangeChanged(BoardRange oldValue, BoardRange newValue)
+    {
+        OnPropertyChanged(nameof(RangeKey));
+        // Stays on now if it was shown, else on the start of what was shown.
+        var now = DateTime.Now;
+        var anchor = now >= RangeStart && now < EndOf(RangeStart, oldValue) ? now : RangeStart;
+        RangeStart = StartOf(anchor, newValue);
+        _ = RefreshAsync();
+    }
+
+    private static DateTime StartOf(DateTime t, BoardRange range)
+    {
+        var day = Postes.Of(t).ShiftDate;
+        return range switch
+        {
+            BoardRange.Day => day.AddHours(6),
+            BoardRange.Month => new DateTime(day.Year, day.Month, 1).AddHours(6),
+            _ => day.AddDays(-(((int)day.DayOfWeek + 6) % 7)).AddHours(6),
+        };
+    }
+
+    private static DateTime EndOf(DateTime start, BoardRange range) => range switch
+    {
+        BoardRange.Day => start.AddDays(1),
+        BoardRange.Month => start.AddMonths(1),
+        _ => start.AddDays(7),
+    };
+
+    private DateTime RangeEnd => EndOf(RangeStart, Range);
+    private double RangeHours => (RangeEnd - RangeStart).TotalHours;
+    private double Frac(DateTime t) => Math.Clamp((t - RangeStart).TotalHours / RangeHours, 0, 1);
 
     public async Task InitializeAsync()
     {
@@ -219,25 +279,32 @@ public partial class BoardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task PreviousWeekAsync()
+    private async Task PreviousAsync()
     {
-        WeekStart = WeekStart.AddDays(-7);
+        RangeStart = Step(-1);
         await RefreshAsync();
     }
 
     [RelayCommand]
-    private async Task NextWeekAsync()
+    private async Task NextAsync()
     {
-        WeekStart = WeekStart.AddDays(7);
+        RangeStart = Step(1);
         await RefreshAsync();
     }
 
     [RelayCommand]
-    private async Task ThisWeekAsync()
+    private async Task TodayAsync()
     {
-        WeekStart = MondayOf(DateTime.Now);
+        RangeStart = StartOf(DateTime.Now, Range);
         await RefreshAsync();
     }
+
+    private DateTime Step(int count) => Range switch
+    {
+        BoardRange.Day => RangeStart.AddDays(count),
+        BoardRange.Month => RangeStart.AddMonths(count),
+        _ => RangeStart.AddDays(7 * count),
+    };
 
     [RelayCommand]
     public async Task RefreshAsync()
@@ -249,7 +316,7 @@ public partial class BoardViewModel : ObservableObject
             return;
         }
         IsBusy = true;
-        StatusMessage = "Chargement de la semaine…";
+        StatusMessage = "Chargement du planning…";
         try
         {
             await BuildAsync();
@@ -274,26 +341,26 @@ public partial class BoardViewModel : ObservableObject
     private async Task BuildAsync()
     {
         var now = DateTime.Now;
-        var week = ISOWeek.GetWeekOfYear(WeekStart);
-        WeekLabel = $"Semaine {week} · {WeekStart.ToString("d MMM", PlanningContext.French)} → {WeekEnd.AddDays(-1).ToString("d MMM yyyy", PlanningContext.French)}";
-        NowFrac = (now - WeekStart).TotalHours / 168;
-        IsNowVisible = NowFrac is >= 0 and <= 1;
-        var today = Postes.Of(now).ShiftDate.AddHours(6);
-        TodayStartFrac = Frac(today);
-        TodayEndFrac = Frac(today.AddDays(1));
-
-        Days.Clear();
-        for (var i = 0; i < 7; i++)
+        var french = PlanningContext.French;
+        var week = ISOWeek.GetWeekOfYear(RangeStart);
+        (RangeLabel, PeriodSuffix) = Range switch
         {
-            var d = WeekStart.Date.AddDays(i);
-            Days.Add(new DayHeader(PlanningContext.Day(d), d == today.Date));
-        }
+            BoardRange.Day => (Capitalize(RangeStart.ToString("dddd d MMMM yyyy", french)) + $" · semaine {week}", "du jour"),
+            BoardRange.Month => (Capitalize(RangeStart.ToString("MMMM yyyy", french)), "du mois"),
+            _ => ($"Semaine {week} · {RangeStart.ToString("d MMM", french)} → {RangeEnd.AddDays(-1).ToString("d MMM yyyy", french)}", "de la semaine"),
+        };
+        NowFrac = (now - RangeStart).TotalHours / RangeHours;
+        IsNowVisible = NowFrac is >= 0 and <= 1;
 
-        _orders = await _ctx.Planning.GetOrdersAsync(WeekStart, WeekEnd);
-        _events = await _ctx.Planning.GetEventsAsync(WeekStart, WeekEnd);
+        Columns.Clear();
+        foreach (var column in BuildColumns(now))
+            Columns.Add(column);
+
+        _orders = await _ctx.Planning.GetOrdersAsync(RangeStart, RangeEnd);
+        _events = await _ctx.Planning.GetEventsAsync(RangeStart, RangeEnd);
         _plans = await _ctx.Planning.GetPlansAsync();
         var openEvents = await _ctx.Planning.GetOpenEventsAsync();
-        var pannes = (await _ctx.Planning.GetQualificationsAsync(WeekStart, WeekEnd)).Where(q => q.IsPanne).ToList();
+        var pannes = (await _ctx.Planning.GetQualificationsAsync(RangeStart, RangeEnd)).Where(q => q.IsPanne).ToList();
 
         // Real production of the orders already started (hour buckets).
         var started = _orders.Where(o => o.PlannedStart < now).ToList();
@@ -353,10 +420,11 @@ public partial class BoardViewModel : ObservableObject
                     var progress = o.QuantityBags > 0 ? Math.Min(1, done / o.QuantityBags) : 0;
                     if (o.Status == PlanStatus.Done)
                         progress = Math.Max(progress, 1);
+                    // Labels where there is room: 10 h on a week, 1 h 30 on a day, 2 days on a month.
                     row.Blocks.Add(new BoardBlock
                     {
                         Key = "O" + o.Id, Kind = BlockKind.Order, StartFrac = Frac(o.PlannedStart), EndFrac = Frac(o.PlannedEnd),
-                        Label = o.OrderNo, Sub = o.Product, ShowLabel = (o.PlannedEnd - o.PlannedStart).TotalHours >= 10,
+                        Label = o.OrderNo, Sub = o.Product, ShowLabel = hours / RangeHours >= 0.06,
                         Tooltip = $"{o.OrderNo} · {o.Product} · {When(o.PlannedStart)} → {When(o.PlannedEnd)}",
                         Fill = PlanningContext.Brush(color, 0x40), Stroke = PlanningContext.Brush(color),
                         HasProgress = o.PlannedStart < now || o.Status == PlanStatus.Done, Progress = progress,
@@ -371,7 +439,7 @@ public partial class BoardViewModel : ObservableObject
                     {
                         Key = "E" + e.Id, Kind = kind, StartFrac = Frac(e.PlannedStart), EndFrac = Frac(e.PlannedEnd),
                         Label = kind == BlockKind.MaintenanceLate ? "Non validée" : e.Task, Sub = e.Task,
-                        ShowLabel = e.DurationMinutes >= 360,
+                        ShowLabel = Frac(e.PlannedEnd) - Frac(e.PlannedStart) >= 0.036,
                         Tooltip = $"Maintenance · {e.Task} · {When(e.PlannedStart)} · {PlanningContext.Duration(e.DurationMinutes)}",
                         Source = e,
                     });
@@ -395,13 +463,13 @@ public partial class BoardViewModel : ObservableObject
                 rows.Add(row);
             }
             orderHours += sectorHours;
-            var charge = rows.Count == 0 ? 0 : sectorHours / (rows.Count * 168) * 100;
+            var charge = rows.Count == 0 ? 0 : sectorHours / (rows.Count * RangeHours) * 100;
             Sectors.Add(new SectorGroup(SectorLabel(sector.Key), PlanningContext.Brush(color),
                 $"{rows.Count} ligne{(rows.Count > 1 ? "s" : "")} · charge {charge:0} %", rows));
         }
 
         // KPIs
-        var chargeAll = _ctx.Machines.Count == 0 ? 0 : orderHours / (_ctx.Machines.Count * 168) * 100;
+        var chargeAll = _ctx.Machines.Count == 0 ? 0 : orderHours / (_ctx.Machines.Count * RangeHours) * 100;
         ChargeText = $"{chargeAll:0} %";
         ChargeRatio = Math.Clamp(chargeAll / 100, 0, 1);
         var running = _orders.Where(o => o.Status == PlanStatus.Planned && o.PlannedStart <= now && o.PlannedEnd > now).ToList();
@@ -466,9 +534,36 @@ public partial class BoardViewModel : ObservableObject
         OnPropertyChanged(nameof(HasAlerts));
 
         SelectedBlock = allBlocks.FirstOrDefault(b => b.Key == selectedKey);
+        ShowSlot();
     }
 
-    private DateTime Clamp(DateTime t) => t < WeekStart ? WeekStart : t > WeekEnd ? WeekEnd : t;
+    // Columns of the header (and lines behind the blocks): the 3 postes cut in
+    // hours for a day, the days cut in postes for a week, the days for a month.
+    private IEnumerable<ColumnHeader> BuildColumns(DateTime now)
+    {
+        if (Range == BoardRange.Day)
+        {
+            for (var p = 0; p < 3; p++)
+            {
+                var start = RangeStart.AddHours(8 * p);
+                var ticks = Enumerable.Range(0, 8).Select(h => new ColumnTick(start.AddHours(h).ToString("HH"), h == 0)).ToList();
+                yield return new ColumnHeader($"{PosteNames[p]} · {start:HH} h – {start.AddHours(8):HH} h", ticks,
+                    now >= start && now < start.AddHours(8));
+            }
+            yield break;
+        }
+        var today = Postes.Of(now).ShiftDate;
+        var postes = new[] { new ColumnTick("M", true), new ColumnTick("AM", false), new ColumnTick("N", false) };
+        for (var d = RangeStart.Date; d < RangeEnd.Date; d = d.AddDays(1))
+            yield return Range == BoardRange.Week
+                ? new ColumnHeader(PlanningContext.Day(d), postes, d == today)
+                : new ColumnHeader(d.Day.ToString(CultureInfo.InvariantCulture),
+                    new[] { new ColumnTick(PlanningContext.French.DateTimeFormat.GetShortestDayName(d.DayOfWeek), true) }, d == today);
+    }
+
+    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpper(text[0]) + text[1..];
+
+    private DateTime Clamp(DateTime t) => t < RangeStart ? RangeStart : t > RangeEnd ? RangeEnd : t;
 
     private static string SectorLabel(string sector) => sector switch
     {
@@ -710,8 +805,8 @@ public partial class BoardViewModel : ObservableObject
         OrderQuantity = "";
         OrderHours = "";
         var next = Postes.NextStart(DateTime.Now);
-        OrderDate = Postes.Of(next).ShiftDate;
-        OrderPoste = PosteNames[Postes.Of(next).ShiftId - 1];
+        OrderDate = next.Date;
+        OrderTime = next.ToString("HH:mm");
         Editor = EditorMode.Order;
         UpdateEstimate();
     }
@@ -725,9 +820,8 @@ public partial class BoardViewModel : ObservableObject
         OrderProduct = o.Product;
         OrderWeight = o.TargetWeightGrams > 0 ? o.TargetWeightGrams.ToString("0.##", CultureInfo.InvariantCulture) : "";
         OrderQuantity = o.QuantityBags.ToString(CultureInfo.InvariantCulture);
-        var poste = Postes.Of(o.PlannedStart);
-        OrderDate = poste.ShiftDate;
-        OrderPoste = PosteNames[poste.ShiftId - 1];
+        OrderDate = o.PlannedStart.Date;
+        OrderTime = o.PlannedStart.ToString("HH:mm");
         OrderHours = (o.PlannedEnd - o.PlannedStart).TotalHours.ToString("0.#", CultureInfo.InvariantCulture);
         Editor = EditorMode.Order;
         UpdateEstimate();
@@ -741,8 +835,30 @@ public partial class BoardViewModel : ObservableObject
         _ => null,
     };
 
-    private static DateTime PosteStart(DateTime? date, string poste)
-        => (date ?? DateTime.Today).Date.AddHours(Array.IndexOf(PosteNames, poste) switch { 1 => 14, 2 => 22, _ => 6 });
+    // "6", "06:30", "14h", "14h30" → that time of the day picked; null if not a time.
+    private static DateTime? StartAt(DateTime? date, string time)
+    {
+        var parts = time.Trim().ToLowerInvariant().Replace('h', ':').Split(':');
+        if (parts.Length > 2 || !int.TryParse(parts[0], out var h) || h is < 0 or > 23)
+            return null;
+        var m = 0;
+        if (parts.Length == 2 && parts[1].Length > 0 && (!int.TryParse(parts[1], out m) || m is < 0 or > 59))
+            return null;
+        return (date ?? DateTime.Today).Date.AddHours(h).AddMinutes(m);
+    }
+
+    private static string PosteOf(DateTime t) => PosteNames[Postes.Of(t).ShiftId - 1];
+
+    // M / AM / N chips under the hour of the open form.
+    [RelayCommand]
+    private void PickPoste(string index)
+    {
+        var time = int.Parse(index, CultureInfo.InvariantCulture) switch { 1 => "14:00", 2 => "22:00", _ => "06:00" };
+        if (Editor == EditorMode.Order)
+            OrderTime = time;
+        else if (Editor == EditorMode.Event)
+            EventTime = time;
+    }
 
     private static double ParseNumber(string text)
         => double.TryParse(text.Replace(" ", "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
@@ -773,13 +889,20 @@ public partial class BoardViewModel : ObservableObject
         if (Editor != EditorMode.Order)
             return;
         var hours = OrderDurationHours(out var how);
-        var start = PosteStart(OrderDate, OrderPoste);
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == OrderMachine);
+        if (StartAt(OrderDate, OrderTime) is not { } start)
+        {
+            OrderEstimate = "Heure de début invalide (ex. 06:00, 14h30).";
+            SetSlot(null, default, default);
+            return;
+        }
         OrderEstimate = hours is { } h
-            ? $"Durée {PlanningContext.Duration(h * 60)} ({how}) · fin prévue {When(start.AddHours(h))}"
+            ? $"Poste {PosteOf(start)} · durée {PlanningContext.Duration(h * 60)} ({how}) · fin prévue {When(start.AddHours(h))}"
             : machine != null && ParseNumber(OrderQuantity) > 0
                 ? $"Pas de cadence nominale pour {machine.MachineId} à {ParseNumber(OrderWeight):0.##} g (Paramètres) : indiquez une durée en heures."
                 : "Indiquez la quantité (et le poids pour la cadence nominale), ou une durée en heures.";
+        // Shows on the board where the order will go.
+        SetSlot(hours != null ? machine?.MachineId : null, start, start.AddHours(hours ?? 0));
     }
 
     [RelayCommand]
@@ -792,14 +915,19 @@ public partial class BoardViewModel : ObservableObject
             StatusMessage = "Ligne, produit et quantité (ou durée) sont nécessaires.";
             return;
         }
+        if (StartAt(OrderDate, OrderTime) is not { } start)
+        {
+            StatusMessage = "Heure de début invalide (ex. 06:00, 14h30).";
+            return;
+        }
         var o = _editingOrder ?? new ProductionOrder();
         o.OrderNo = OrderNo.Trim();
         o.MachineId = machine.MachineId;
         o.Product = OrderProduct.Trim();
         o.TargetWeightGrams = ParseNumber(OrderWeight);
         o.QuantityBags = (long)ParseNumber(OrderQuantity);
-        o.PlannedStart = PosteStart(OrderDate, OrderPoste);
-        o.PlannedEnd = o.PlannedStart.AddHours(h);
+        o.PlannedStart = start;
+        o.PlannedEnd = start.AddHours(h);
         try
         {
             await _ctx.Planning.SaveOrderAsync(o);
@@ -825,9 +953,10 @@ public partial class BoardViewModel : ObservableObject
         EventDuration = "60";
         EventTechnician = "";
         var next = Postes.NextStart(DateTime.Now);
-        EventDate = Postes.Of(next).ShiftDate;
-        EventPoste = PosteNames[Postes.Of(next).ShiftId - 1];
+        EventDate = next.Date;
+        EventTime = next.ToString("HH:mm");
         Editor = EditorMode.Event;
+        PreviewEvent();
     }
 
     private void EditEvent(MaintenanceEvent e)
@@ -838,10 +967,23 @@ public partial class BoardViewModel : ObservableObject
         EventTask = e.Task;
         EventDuration = e.DurationMinutes.ToString(CultureInfo.InvariantCulture);
         EventTechnician = e.Technician ?? "";
-        var poste = Postes.Of(e.PlannedStart);
-        EventDate = poste.ShiftDate;
-        EventPoste = PosteNames[poste.ShiftId - 1];
+        EventDate = e.PlannedStart.Date;
+        EventTime = e.PlannedStart.ToString("HH:mm");
         Editor = EditorMode.Event;
+        PreviewEvent();
+    }
+
+    // Shows on the board where the maintenance will go.
+    private void PreviewEvent()
+    {
+        if (Editor != EditorMode.Event)
+            return;
+        var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == EventMachine);
+        var minutes = ParseNumber(EventDuration);
+        if (StartAt(EventDate, EventTime) is { } start && minutes > 0)
+            SetSlot(machine?.MachineId, start, start.AddMinutes(minutes));
+        else
+            SetSlot(null, default, default);
     }
 
     [RelayCommand]
@@ -854,11 +996,16 @@ public partial class BoardViewModel : ObservableObject
             StatusMessage = "Ligne, tâche et durée (minutes) sont nécessaires.";
             return;
         }
+        if (StartAt(EventDate, EventTime) is not { } start)
+        {
+            StatusMessage = "Heure de début invalide (ex. 06:00, 14h30).";
+            return;
+        }
         var e = _editingEvent ?? new MaintenanceEvent();
         e.MachineId = machine.MachineId;
         e.Task = EventTask.Trim();
         e.DurationMinutes = minutes;
-        e.PlannedStart = PosteStart(EventDate, EventPoste);
+        e.PlannedStart = start;
         e.Technician = string.IsNullOrWhiteSpace(EventTechnician) ? null : EventTechnician.Trim();
         try
         {
@@ -1001,12 +1148,168 @@ public partial class BoardViewModel : ObservableObject
         }
     }
 
+    // ---- Slot picked on the board (as in a calendar) ----
+
+    private string? _slotMachineId;
+    private DateTime _slotStart;
+    private DateTime _slotEnd;
+    private double _slotAnchor;
+    private bool _slotTaken;
+
+    [ObservableProperty] private bool isSlotMenuOpen;
+    [ObservableProperty] private string slotTitle = "";
+    [ObservableProperty] private string slotWhen = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSlotWarning))]
+    private string slotWarning = "";
+    public bool HasSlotWarning => SlotWarning.Length > 0;
+
+    // Closed without picking an action: the slot goes away (back to what the open form shows, if any).
+    partial void OnIsSlotMenuOpenChanged(bool value)
+    {
+        if (value || _slotTaken)
+            return;
+        if (Editor == EditorMode.Order)
+            UpdateEstimate();
+        else if (Editor == EditorMode.Event)
+            PreviewEvent();
+        else
+            SetSlot(null, default, default);
+    }
+
+    // In hours, what a drag snaps to and what a single click picks:
+    // 15 min / 1 h on a day, 1 h / a poste on a week, a poste / a day on a month.
+    private (double Snap, double Click) SlotUnits => Range switch
+    {
+        BoardRange.Day => (0.25, 1),
+        BoardRange.Month => (8, 24),
+        _ => (1, 8),
+    };
+
+    private DateTime SnapAt(double frac, double unit, bool up)
+    {
+        var steps = Math.Clamp(frac, 0, 1) * RangeHours / unit;
+        return RangeStart.AddHours((up ? Math.Ceiling(steps) : Math.Floor(steps)) * unit);
+    }
+
+    // Mouse down on an empty part of a line (frac = where, 0..1 of the period).
+    public void BeginSlot(MachineRow row, double frac)
+    {
+        IsSlotMenuOpen = false;
+        _slotAnchor = Math.Clamp(frac, 0, 0.9999);
+        var click = SlotUnits.Click;
+        var start = SnapAt(_slotAnchor, click, false);
+        SetSlot(row.MachineId, start, start.AddHours(click) > RangeEnd ? RangeEnd : start.AddHours(click));
+    }
+
+    public void DragSlot(double frac)
+    {
+        if (_slotMachineId == null)
+            return;
+        var snap = SlotUnits.Snap;
+        var start = SnapAt(Math.Min(_slotAnchor, frac), snap, false);
+        var end = SnapAt(Math.Max(_slotAnchor, frac), snap, true);
+        if (end <= start)
+            end = start.AddHours(snap);
+        SetSlot(_slotMachineId, start, end > RangeEnd ? RangeEnd : end);
+    }
+
+    // Mouse up: offers what to plan in the slot.
+    public void EndSlot()
+    {
+        if (_slotMachineId is not { } id)
+            return;
+        SlotTitle = $"{id} · {_ctx.NameOf(id)}";
+        SlotWhen = $"{Span(_slotStart, _slotEnd)} · {PlanningContext.Duration((_slotEnd - _slotStart).TotalMinutes)}";
+        var busy = _orders.Where(o => o.MachineId == id && o.Status == PlanStatus.Planned && o.PlannedStart < _slotEnd && o.PlannedEnd > _slotStart)
+            .Select(o => o.OrderNo)
+            .Concat(_events.Where(e => e.MachineId == id && e.Status == PlanStatus.Planned && e.PlannedStart < _slotEnd && e.PlannedEnd > _slotStart)
+                .Select(e => $"« {e.Task} »"))
+            .ToList();
+        SlotWarning = busy.Count == 0 ? "" : "Déjà occupé : " + string.Join(", ", busy);
+        _slotTaken = false;
+        IsSlotMenuOpen = true;
+    }
+
+    [RelayCommand]
+    private void CancelSlot() => IsSlotMenuOpen = false;
+
+    [RelayCommand]
+    private async Task OrderInSlotAsync()
+    {
+        if (_slotMachineId is not { } id)
+            return;
+        var (start, end) = (_slotStart, _slotEnd);
+        _slotTaken = true;
+        IsSlotMenuOpen = false;
+        SelectedBlock = null;
+        await NewOrderAsync();
+        if (Editor != EditorMode.Order)
+            return;
+        OrderMachine = _ctx.NameOf(id);
+        OrderDate = start.Date;
+        OrderTime = start.ToString("HH:mm");
+        OrderHours = (end - start).TotalHours.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    [RelayCommand]
+    private void EventInSlot()
+    {
+        if (_slotMachineId is not { } id)
+            return;
+        var (start, end) = (_slotStart, _slotEnd);
+        _slotTaken = true;
+        IsSlotMenuOpen = false;
+        SelectedBlock = null;
+        NewEvent();
+        EventMachine = _ctx.NameOf(id);
+        EventDate = start.Date;
+        EventTime = start.ToString("HH:mm");
+        EventDuration = ((int)(end - start).TotalMinutes).ToString(CultureInfo.InvariantCulture);
+    }
+
+    private void SetSlot(string? machineId, DateTime start, DateTime end)
+    {
+        _slotMachineId = machineId;
+        _slotStart = start;
+        _slotEnd = end;
+        ShowSlot();
+    }
+
+    // Draws the slot on its line (if it falls in the period shown).
+    private void ShowSlot()
+    {
+        foreach (var row in Sectors.SelectMany(s => s.Rows))
+        {
+            var on = row.MachineId == _slotMachineId && _slotEnd > RangeStart && _slotStart < RangeEnd;
+            row.HasSlot = on;
+            if (!on)
+                continue;
+            row.SlotStartFrac = Frac(_slotStart);
+            row.SlotEndFrac = Frac(_slotEnd);
+            var hours = (_slotEnd - _slotStart).TotalHours;
+            row.SlotText = hours < 24 ? $"{_slotStart:HH:mm} – {_slotEnd:HH:mm}"
+                : hours == 24 ? PlanningContext.Day(_slotStart)
+                : $"{PlanningContext.Day(_slotStart)} → {PlanningContext.Day(_slotEnd.AddHours(-1))}";
+        }
+    }
+
+    private void ClearSlot()
+    {
+        IsSlotMenuOpen = false;
+        SetSlot(null, default, default);
+    }
+
+    // "Jeu 29 · 06:00 → 14:00", or "Jeu 29 · 06:00 → Sam 31 · 06:00"
+    private static string Span(DateTime start, DateTime end)
+        => start.Date == end.Date ? $"{When(start)} → {end:HH:mm}" : $"{When(start)} → {When(end)}";
+
     [RelayCommand]
     private void CancelEditor() => Editor = EditorMode.None;
 
     private async Task GoToAsync(DateTime t, string key)
     {
-        WeekStart = MondayOf(t);
+        RangeStart = StartOf(t, Range);
         await RefreshAsync();
         SelectedBlock = Sectors.SelectMany(s => s.Rows).SelectMany(r => r.Blocks).FirstOrDefault(b => b.Key == key);
     }
