@@ -36,12 +36,18 @@ public static class KpiCalculator
         _ => 3,
     };
 
-    // TRS (OEE) = Disponibilite x Performance x Qualite. This is a provisional
-    // estimate built from data we already have, not the client's official
-    // methodology. `lots` are hour/day buckets (see ProductionBucket):
-    //  - Disponibilite: share of the observed time, planned breaks the line
-    //    was stopped in excluded, in which the line produced (passed in, see
-    //    AvailabilityPercent).
+    // TRS (OEE) = temps utile / temps requis (NF E60-182), = Disponibilite x
+    // Performance x Qualite on one line at one rate. `lots` are hour/day
+    // buckets (see ProductionBucket):
+    //  - temps requis: observed time minus the planned stops the line was
+    //    stopped in (daily breaks, Planification maintenance slots and
+    //    "Planifié" stops; see ProductionRepository.QueryBucketsAsync);
+    //  - temps utile: bags in tolerance / the production's nominal rate.
+    //    Both are summed over every bucket before dividing, so a cumul of
+    //    several lines, teams or days is never an average of their TRS.
+    //    Productions with no known rate are left out of both.
+    //  - Disponibilite: share of the required time in which the line
+    //    produced (passed in, see AvailabilityPercent).
     //  - Performance: minutes the bags would have taken at each production's
     //    own nominal rate / producing minutes they actually took. Productions
     //    with no known rate are left out of both sides; none at all -> null
@@ -151,13 +157,25 @@ public static class KpiCalculator
         var totalBags = producing.Sum(l => (long)l.TotalBags);
         var runMinutes = producing.Sum(l => l.RunMinutes);
 
-        var qualityPercent = totalBags > 0 ? 100.0 * producing.Sum(l => (long)l.BagsInTolerance) / totalBags : 0;
-
         var actualRate = runMinutes > 0 ? totalBags / runMinutes : 0;
         var ratedRunMinutes = producing.Sum(l => l.RatedRunMinutes);
-        double? performancePercent = ratedRunMinutes > 0 ? 100.0 * producing.Sum(l => l.IdealMinutes) / ratedRunMinutes : null;
+        var idealMinutes = producing.Sum(l => l.IdealMinutes);
+        double? performancePercent = ratedRunMinutes > 0 ? 100.0 * idealMinutes / ratedRunMinutes : null;
 
-        double? trsPercent = performancePercent is { } perf ? availabilityPercent * perf * qualityPercent / 10000.0 : null;
+        // Qualite = temps utile / temps net (bags in tolerance / bags on one
+        // line at one rate), so that D x P x Q is exactly the TRS below;
+        // bags in tolerance / bags when no rate is known.
+        var usefulMinutes = lots.Sum(l => l.UsefulMinutes);
+        var qualityPercent = idealMinutes > 0 ? 100.0 * usefulMinutes / idealMinutes
+            : totalBags > 0 ? 100.0 * producing.Sum(l => (long)l.BagsInTolerance) / totalBags : 0;
+
+        // Temps utile / temps requis, summed over every bucket (stopped ones
+        // too) before dividing: a cumul weighs each line by the time it was
+        // required, never an average of the lines' TRS.
+        var ratedRequired = lots.Sum(l => l.RatedRequiredMinutes);
+        double? trsPercent = performancePercent.HasValue && ratedRequired > 0
+            ? 100.0 * usefulMinutes / ratedRequired
+            : null;
         var maxSpeed = producing.Max(l => l.MaxSpeedBagsPerMinute);
 
         return new KpiSummary
@@ -223,12 +241,17 @@ public static class KpiCalculator
         _ => KpiSeverity.Bad,
     };
 
-    // Share (0-100) of the required time (observed, minus the planned breaks
-    // the line was stopped in) in which the line produced bags.
+    // Share (0-100) of the required time (observed, minus the planned stops
+    // the line was stopped in) in which the line produced bags. Over the
+    // productions with a known nominal rate when there are any, i.e. the
+    // time the TRS covers: a line with no rate set would otherwise pull the
+    // D of a cumul down without counting in its P, Q or TRS.
     public static double AvailabilityPercent(IReadOnlyCollection<ProductionBucket> lots)
     {
-        var required = lots.Sum(l => l.RequiredMinutes);
-        return required > 0 ? Math.Min(100, 100.0 * lots.Sum(l => l.RunMinutes) / required) : 0;
+        var rated = lots.Where(l => l.IsRated).ToList();
+        var basis = rated.Sum(l => l.RequiredMinutes) > 0 ? rated : lots.ToList();
+        var required = basis.Sum(l => l.RequiredMinutes);
+        return required > 0 ? Math.Min(100, 100.0 * basis.Sum(l => l.RunMinutes) / required) : 0;
     }
 
     // Bags per team (TeamScheduleService roster) over the period. Every

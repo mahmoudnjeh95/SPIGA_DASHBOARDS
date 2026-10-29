@@ -230,6 +230,38 @@ public class PlanningRepository
                   WHERE Id = @Id", e);
     }
 
+    // ---- Planned stops, for the TRS ----
+
+    // Time each line was planned to stand still in [from, to): maintenance
+    // slots (planned or done, not cancelled) and stops qualified with a
+    // "Planifié" cause (Maintenance préventive, Pas de production prévue).
+    // Read by the KPI queries, so it never creates the tables: before the
+    // Planification window was first opened there is simply nothing.
+    public async Task<List<(string MachineId, DateTime Start, DateTime End)>> GetPlannedStopWindowsAsync(DateTime from, DateTime to)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var exists = await connection.ExecuteScalarAsync<int>(IsSqlServer
+            ? "SELECT CASE WHEN OBJECT_ID('dbo.PlanMaintenanceEvents') IS NULL OR OBJECT_ID('dbo.PlanStopQualifications') IS NULL THEN 0 ELSE 1 END"
+            : "SELECT CASE WHEN COUNT(*) = 2 THEN 1 ELSE 0 END FROM sqlite_master WHERE type = 'table' AND name IN ('PlanMaintenanceEvents', 'PlanStopQualifications')");
+        if (exists == 0)
+            return new();
+
+        var planned = StopCauses.All.Where(c => c.Family == CauseFamily.Planifie).Select(c => c.Code).ToList();
+        var events = await connection.QueryAsync<MaintenanceEvent>(
+            @"SELECT MachineId, PlannedStart, DurationMinutes FROM PlanMaintenanceEvents
+              WHERE PlannedStart >= @early AND PlannedStart < @to AND Status <> 2",
+            new { early = from.AddDays(-2), to });
+        var stops = await connection.QueryAsync<StopQualification>(
+            @"SELECT MachineId, StopStart, StopEnd FROM PlanStopQualifications
+              WHERE StopStart >= @early AND StopStart < @to AND CauseCode IN @planned",
+            new { early = from.AddDays(-2), to, planned });
+
+        return events.Select(e => (e.MachineId, e.PlannedStart, e.PlannedEnd))
+            .Concat(stops.Select(q => (q.MachineId, q.StopStart, q.StopEnd)))
+            .Where(w => w.Item3 > from && w.Item2 < to && w.Item3 > w.Item2)
+            .ToList();
+    }
+
     // ---- Production orders ----
 
     public async Task<List<ProductionOrder>> GetOrdersAsync(DateTime from, DateTime to)

@@ -51,6 +51,14 @@ public class ProductionBucket
     public double IdealMinutes { get; set; }
     public double RatedRunMinutes { get; set; }
 
+    // Nominal rate of the production (bags/min), 0 = unknown. The TRS and
+    // its D x P x Q only cover buckets with a rate, stopped ones included:
+    // temps utile = bags in tolerance at the nominal rate.
+    public double NominalRate { get; set; }
+    public bool IsRated => NominalRate > 0;
+    public double UsefulMinutes => IsRated ? BagsInTolerance / NominalRate : 0;
+    public double RatedRequiredMinutes => IsRated ? RequiredMinutes : 0;
+
     // Weight data (net of the empty bag): Stiavelli lots (lotto, real lot
     // averages) when the line has lots in the range, otherwise Stiavelli's
     // running average when it looks sane (see ProductionRepository).

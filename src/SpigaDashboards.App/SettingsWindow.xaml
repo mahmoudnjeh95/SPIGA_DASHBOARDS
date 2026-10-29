@@ -198,7 +198,7 @@
                 <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                 <TextBlock Text="Pauses planifiees et arrets" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Pauses de tous les jours, sur toutes les machines. Le temps ou la ligne est a l'arret pendant une pause n'est pas compte dans la Disponibilite (ni le TRS), ni dans la liste des arrets ; une ligne qui tourne pendant la pause garde ce temps de marche."
+                <TextBlock Text="Pauses de tous les jours, sur toutes les machines. Le temps ou la ligne est a l'arret pendant une pause n'est pas compte dans la Disponibilite (ni le TRS), ni dans la liste des arrets ; une ligne qui tourne pendant la pause garde ce temps de marche. Meme regle pour les creneaux de maintenance et les arrets de cause « Planifie » saisis dans Planification."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                     <TextBlock Text="Debut (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>

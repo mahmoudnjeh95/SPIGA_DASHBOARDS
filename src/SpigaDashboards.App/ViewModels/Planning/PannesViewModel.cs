@@ -44,7 +44,11 @@ public partial class StopRow : ObservableObject
     public string DurationText => PlanningContext.Duration(Minutes);
 }
 
-public sealed record CauseOptionGroup(string Name, Brush Color, IReadOnlyList<CauseOption> Causes);
+// Note: shown under the family name ("hors TRS" for the planned causes).
+public sealed record CauseOptionGroup(string Name, Brush Color, IReadOnlyList<CauseOption> Causes, string Note = "")
+{
+    public bool HasNote => Note.Length > 0;
+}
 
 public partial class CauseOption : ObservableObject
 {
@@ -76,7 +80,9 @@ public partial class PannesViewModel : ObservableObject
                 var option = new CauseOption { Code = c.Code, Label = c.Label };
                 option.Pick = new RelayCommand(() => SelectedCauseCode = c.Code);
                 return option;
-            }).ToList())).ToList();
+            }).ToList(),
+            // Planned stops are left out of the TRS (ProductionRepository).
+            f == CauseFamily.Planifie ? "hors TRS" : "")).ToList();
     }
 
     public List<string> PeriodOptions { get; } = new() { "Aujourd'hui", "7 jours", "30 jours" };

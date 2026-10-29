@@ -45,6 +45,26 @@ public static class BreakSchedule
         return seconds / 60;
     }
 
+    // The parts of [from, to) outside every planned break, so a maintenance
+    // slot over a break isn't deducted twice.
+    public static List<(DateTime Start, DateTime End)> Outside(IReadOnlyList<(int Start, int End)> windows, DateTime from, DateTime to)
+    {
+        var pieces = new List<(DateTime Start, DateTime End)>();
+        var cursor = from;
+        var breaks = new List<(DateTime Start, DateTime End)>();
+        for (var day = from.Date.AddDays(-1); day < to; day = day.AddDays(1))
+            breaks.AddRange(windows.Select(w => (day.AddSeconds(w.Start), day.AddSeconds(w.End))));
+        foreach (var (s, e) in breaks.Where(b => b.End > from && b.Start < to).OrderBy(b => b.Start))
+        {
+            if (s > cursor)
+                pieces.Add((cursor, s));
+            cursor = Max(cursor, e);
+        }
+        if (to > cursor)
+            pieces.Add((cursor, to));
+        return pieces;
+    }
+
     // "10:00-10:20, 13:40-14:00" for headers.
     public static string Describe(IEnumerable<PlannedBreak> breaks)
     {

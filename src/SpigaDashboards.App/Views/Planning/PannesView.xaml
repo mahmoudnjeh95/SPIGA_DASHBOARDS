@@ -282,9 +282,13 @@
                                                 <ColumnDefinition Width="116"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Top" Margin="0,11,0,0">
-                                                <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Color}" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Name}" Style="{StaticResource Small}"/>
+                                            <StackPanel VerticalAlignment="Top" Margin="0,11,0,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border Width="9" Height="9" CornerRadius="2" Background="{Binding Color}" Margin="0,0,8,0"/>
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Small}"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Note}" Style="{StaticResource Small}" FontSize="11" Margin="17,2,0,0"
+                                                           Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}"/>
                                             </StackPanel>
                                             <ItemsControl Grid.Column="1" ItemsSource="{Binding Causes}">
                                                 <ItemsControl.ItemsPanel>

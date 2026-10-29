@@ -69,6 +69,9 @@ public class ProductionRepository
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly AppSettings _settings;
 
+    // Planned stops (maintenance slots, "Planifié" stops) left out of the TRS.
+    private readonly PlanningRepository _planning;
+
     // Whether Stiavelli's lotto table is readable (null = not checked yet).
     // The SQLite dev DB has none: weights then come from media_totale.
     private bool? _hasLotTable;
@@ -77,6 +80,7 @@ public class ProductionRepository
     {
         _connectionFactory = connectionFactory;
         _settings = settings;
+        _planning = new PlanningRepository(connectionFactory);
     }
 
     // Drops pooled connections, which are all dead after a network/server drop
@@ -348,6 +352,67 @@ rz AS (
         return terms.Count == 0 ? "0" : "(" + string.Join("\n             + ", terms) + ")";
     }
 
+    // Seconds of an interval (ending endRel seconds after @readFrom, lasting
+    // duration seconds) inside a stop planned in the Planification window for
+    // its line: maintenance slots and "Planifié" stops. The windows are merged
+    // per line and cut out of the daily breaks first (those are in brk), so
+    // no second is deducted twice.
+    private string PlannedOverlapSql(
+        IEnumerable<(string MachineId, DateTime Start, DateTime End)> windows, DateTime readFrom, DateTime readTo,
+        string line, string endRel, string duration)
+    {
+        static string Min(string a, string b) => $"CASE WHEN {a} < {b} THEN {a} ELSE {b} END";
+        static string Max(string a, string b) => $"CASE WHEN {a} > {b} THEN {a} ELSE {b} END";
+
+        var breaks = BreakSchedule.DayWindows(_settings.PlannedBreaks);
+        var start = $"({endRel} - {duration})";
+        var cases = new List<string>();
+        foreach (var g in windows.GroupBy(w => w.MachineId.Trim()))
+        {
+            // Codes go into the SQL text: Machines ids only (CC01, PL03, ...).
+            if (g.Key.Length == 0 || !g.Key.All(c => char.IsLetterOrDigit(c) || c is '-' or '_' or ' '))
+                continue;
+            var merged = new List<(DateTime Start, DateTime End)>();
+            foreach (var (_, s, e) in g.OrderBy(w => w.Start))
+            {
+                var (cs, ce) = (s < readFrom ? readFrom : s, e > readTo ? readTo : e);
+                if (ce <= cs)
+                    continue;
+                if (merged.Count > 0 && cs <= merged[^1].End)
+                    merged[^1] = (merged[^1].Start, ce > merged[^1].End ? ce : merged[^1].End);
+                else
+                    merged.Add((cs, ce));
+            }
+            var terms = merged
+                .SelectMany(w => BreakSchedule.Outside(breaks, w.Start, w.End))
+                .Select(w =>
+                {
+                    var (s, e) = ((long)(w.Start - readFrom).TotalSeconds, (long)(w.End - readFrom).TotalSeconds);
+                    var overlap = $"{Min(endRel, e.ToString())} - {Max(start, s.ToString())}";
+                    return $"CASE WHEN {overlap} > 0 THEN {overlap} ELSE 0 END";
+                })
+                .ToList();
+            if (terms.Count > 0)
+                cases.Add($"WHEN '{g.Key}' THEN (" + string.Join("\n               + ", terms) + ")");
+        }
+        return cases.Count == 0 ? "0" : $"CASE {line} " + string.Join("\n             ", cases) + " ELSE 0 END";
+    }
+
+    // Planned stops of the Planification window over the read range; none
+    // (and a log line) if they can't be read, so the KPIs never fail on them.
+    private async Task<List<(string MachineId, DateTime Start, DateTime End)>> LoadPlannedStopsAsync(DateTime from, DateTime to)
+    {
+        try
+        {
+            return await _planning.GetPlannedStopWindowsAsync(from, to);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Arrets planifies (Planification) illisibles, non deduits du TRS : " + ex.Message);
+            return new();
+        }
+    }
+
     // A snapshot interval longer than this with the counter frozen means
     // StatsViewer wasn't writing (every line at once when the server PC is
     // off): "no data" rather than a machine stop. The cadence is 1-2 min.
@@ -416,8 +481,30 @@ HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
         return segments.OrderBy(s => s.MachineId).ThenBy(s => s.StartTime).ToList();
     }
 
-    // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
+    // Ranges over a day are read one calendar day at a time: SQL Server's
+    // cost grows faster than the range (the month Cumul of 10 lines passed
+    // the 60 s timeout on 29/10 while each day takes 2-4 s). Buckets never
+    // cross midnight and each day reads its own SnapshotMargin, so the result
+    // is the same.
     private async Task<List<ProductionBucket>> QueryBucketsAsync(
+        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+    {
+        if (from < _settings.DataStartDate)
+            from = _settings.DataStartDate;
+        if (to - from <= TimeSpan.FromDays(1))
+            return await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+        var buckets = new List<ProductionBucket>();
+        for (var start = from; start < to;)
+        {
+            var end = start.Date.AddDays(1) < to ? start.Date.AddDays(1) : to;
+            buckets.AddRange(await QueryRangeAsync(lineFilter, size, start, end, filterParams, includeWeights));
+            start = end;
+        }
+        return buckets;
+    }
+
+    // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
+    private async Task<List<ProductionBucket>> QueryRangeAsync(
         string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
     {
         // Nothing before DataStartDate is read, not even as the baseline of the
@@ -438,6 +525,11 @@ HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
             $"           g.known * CASE WHEN g.prev_tot IS NULL OR g.restart = 1 THEN g.{c}"
             + $" WHEN g.{c} > g.prev_{c} THEN g.{c} - g.prev_{c} ELSE 0 END AS d_{c}"));
         var saneDeltas = string.Join(",\n", Counters.Select(c => $"           sc.sane * sc.d_{c} AS d_{c}"));
+
+        var readFrom = from - SnapshotMargin < dataStart ? dataStart : from - SnapshotMargin;
+        var readTo = to + SnapshotMargin;
+        var planned = PlannedOverlapSql(await LoadPlannedStopsAsync(readFrom, readTo), readFrom, readTo,
+            "sc.numero_linea", "sc.e_rel", "sc.dur");
 
         var sql = $@"
 WITH {CleanSnapshotsSql(lineFilter, d)},
@@ -475,6 +567,7 @@ g AS (
 dl AS (
     SELECT g.numero_linea, g.ID_produzione, g.codice_articolo, g.target, g.media, g.tempo_fine, g.gap,
            {d.SecondOfDay("g.tempo_fine")} AS e_sec,
+           {(planned == "0" ? "0" : d.Seconds("@readFrom", "g.tempo_fine"))} AS e_rel,
            -- Observed time: 0 without a known baseline or past MaxIntervalSeconds.
            g.known * CASE WHEN g.gap > {MaxIntervalSeconds} THEN 0 ELSE g.gap END AS dur,
 {deltas}
@@ -499,6 +592,8 @@ x AS (
                 THEN CAST(sc.d_tot AS {d.Float}) * 60 / sc.dur ELSE 0 END AS spd,
            -- Seconds of the interval inside a planned break.
            {BreakOverlapSql("sc.e_sec", "sc.dur")} AS brk,
+           -- Seconds of the interval inside a stop planned in Planification.
+           {planned} AS pln,
 {saneDeltas}
     FROM sc
 )
@@ -522,7 +617,9 @@ FROM (
            CAST(SUM(x.d_metal) AS BIGINT)       AS MetalRejects,
            CAST(SUM(x.dur) AS {d.Float}) / 60   AS ObservedMinutes,
            CAST(SUM(CASE WHEN x.d_tot > 0 THEN x.dur ELSE 0 END) AS {d.Float}) / 60 AS RunMinutes,
-           CAST(SUM(CASE WHEN x.d_tot > 0 THEN 0 ELSE x.brk END) AS {d.Float}) / 60 AS PlannedStopMinutes,
+           -- Only stopped time is planned: a line that runs through a break
+           -- or a maintenance slot keeps that time as run time.
+           CAST(SUM(CASE WHEN x.d_tot > 0 THEN 0 WHEN x.brk + x.pln > x.dur THEN x.dur ELSE x.brk + x.pln END) AS {d.Float}) / 60 AS PlannedStopMinutes,
            CAST(MAX(x.spd) AS {d.Float})        AS MaxSpeed,
            -- Fallback weight data (used only when the line has no lot): bags
            -- whose running average is within 15 % of the target.
@@ -539,8 +636,8 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
         var parameters = new DynamicParameters(filterParams);
         parameters.Add("from", from);
         parameters.Add("to", to);
-        parameters.Add("readFrom", from - SnapshotMargin < dataStart ? dataStart : from - SnapshotMargin);
-        parameters.Add("readTo", to + SnapshotMargin);
+        parameters.Add("readFrom", readFrom);
+        parameters.Add("readTo", readTo);
 
         using var connection = _connectionFactory.CreateConnection();
         var parts = (await connection.QueryAsync<BucketPartRow>(sql, parameters)).ToList();
@@ -605,6 +702,7 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
             // per-article rate in Products wins, otherwise the machine/weight
             // table from Parametres. Unknown rate (0) = left out of both sides.
             var rate = p.ArticleRate > 0 ? p.ArticleRate : _settings.FindNominalRate(p.MachineId, p.TargetNetWeight);
+            b.NominalRate = rate > 0 ? rate : 0;
             if (p.TotalBags > 0 && rate > 0)
             {
                 b.IdealMinutes = p.TotalBags / rate;
