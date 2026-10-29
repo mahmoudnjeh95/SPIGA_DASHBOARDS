@@ -1,7 +1,8 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
   <PropertyGroup>
-    <OutputName>SpigaDashboards-Setup</OutputName>
+    <!-- Version: Directory.Build.props at the repo root. -->
+    <OutputName>SpigaDashboards-$(Version)-Setup</OutputName>
     <!-- The published payload is win-x64 self-contained, so every harvested
          component must default to 64-bit too (otherwise ICE80 flags them as
          32-bit components sitting inside the 64-bit Program Files folder). -->
@@ -10,7 +11,7 @@
          file as key path (ICE38/ICE64/ICE91 expect HKCU key paths there).
          Windows Installer handles this fine; the ICEs are only advisory. -->
     <SuppressIces>ICE38;ICE64;ICE91</SuppressIces>
-    <DefineConstants>PublishDir=$(MSBuildProjectDirectory)\..\publish\app;DevDbFile=$(MSBuildProjectDirectory)\..\database\spiga_dashboards.db</DefineConstants>
+    <DefineConstants>ProductVersion=$(Version);PublishDir=$(MSBuildProjectDirectory)\..\publish\app;DevDbFile=$(MSBuildProjectDirectory)\..\database\spiga_dashboards.db</DefineConstants>
   </PropertyGroup>
 
 </Project>

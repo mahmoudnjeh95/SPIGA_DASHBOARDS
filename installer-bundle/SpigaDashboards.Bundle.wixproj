@@ -1,10 +1,11 @@
 <Project Sdk="WixToolset.Sdk/5.0.2">
 
   <PropertyGroup>
-    <OutputName>SpigaDashboards-Setup</OutputName>
+    <!-- Version: Directory.Build.props at the repo root. -->
+    <OutputName>SpigaDashboards-$(Version)-Setup</OutputName>
     <OutputType>Bundle</OutputType>
     <Platform>x64</Platform>
-    <DefineConstants>MsiFile=$(MSBuildProjectDirectory)\..\installer\bin\x64\Release\SpigaDashboards-Setup.msi</DefineConstants>
+    <DefineConstants>ProductVersion=$(Version);MsiFile=$(MSBuildProjectDirectory)\..\installer\bin\x64\Release\SpigaDashboards-$(Version)-Setup.msi</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

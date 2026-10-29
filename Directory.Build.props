@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- The one place to bump the version: the app ("A propos"), the MSI
+       (installer\Package.wxs) and the setup .exe (installer-bundle\Bundle.wxs)
+       all read it, and the installer files are named after it
+       (SpigaDashboards-<version>-Setup.msi / .exe). A higher version is what
+       lets the installer replace the one already installed. -->
+  <PropertyGroup>
+    <Version>1.5.1</Version>
+  </PropertyGroup>
+
+</Project>
