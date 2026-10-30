@@ -34,8 +34,9 @@ public static class DashboardCharts
     public static List<Step> Steps(IEnumerable<(DateTime Key, string Label, List<ProductionBucket> Lots)> groups)
         => groups.Select(g => new Step(g.Label, g.Lots)).ToList();
 
-    // Share of each step the line was producing (1 = ran the whole observed
-    // time, 0 = stopped or no snapshot at all).
+    // Share of each step the line was producing over the time it was required
+    // to run (observed minus the planned breaks it stopped in): 1 = ran the
+    // whole hour apart from its break, 0 = stopped or no snapshot at all.
     public static ChartParts OnOff(IReadOnlyList<Step> steps)
     {
         var series = new ISeries[]
@@ -46,8 +47,8 @@ public static class DashboardCharts
                 Ry = 6,
                 Values = steps.Select(s =>
                 {
-                    var observed = s.Lots.Sum(l => l.ObservedMinutes);
-                    return observed > 0 ? Math.Round(s.Lots.Sum(l => l.RunMinutes) / observed, 2) : 0;
+                    var required = s.Lots.Sum(l => l.RequiredMinutes);
+                    return required > 0 ? Math.Round(Math.Min(1, s.Lots.Sum(l => l.RunMinutes) / required), 2) : 0;
                 }).ToArray(),
                 Name = "En marche",
                 Fill = new SolidColorPaint(Green),
