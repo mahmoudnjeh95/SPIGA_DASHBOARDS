@@ -153,7 +153,7 @@ public partial class StatsViewModel : ObservableObject
         {
             var (m, list) = perMachine[i];
             var mins = list.Sum(q => q.Minutes);
-            ByMachine.Add(new StatBar(m.MachineId, PlanningContext.Duration(mins), $"{list.Count} p.", mins / maxMachine,
+            ByMachine.Add(new StatBar(m.MachineName, PlanningContext.Duration(mins), $"{list.Count} p.", mins / maxMachine,
                 i < 2 && mins > 0 ? Blue : BlueDim,
                 $"{m.MachineName} : {PlanningContext.Duration(mins)} · {list.Count} arrêts" + (list.Count > 0 ? $" · MTTR {PlanningContext.Duration(mins / list.Count)}" : ""),
                 Extra: m.MachineName));

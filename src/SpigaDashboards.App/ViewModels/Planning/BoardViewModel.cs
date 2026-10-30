@@ -531,21 +531,21 @@ public partial class BoardViewModel : ObservableObject
         var orange = PlanningContext.Brush(Color.FromRgb(0xEC, 0x83, 0x5A));
         var amber = PlanningContext.Brush(Color.FromRgb(0xFA, 0xB2, 0x19));
         foreach (var (p, s) in overduePlans)
-            Alerts.Add(new AlertRow(p.MachineId, $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
+            Alerts.Add(new AlertRow(_ctx.NameOf(p.MachineId), $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
         foreach (var o in lateOrders)
         {
             var late = Behind(o, produced.GetValueOrDefault(o.Id), now);
-            Alerts.Add(new AlertRow(o.MachineId, $"{o.OrderNo} en retard de {PlanningContext.Duration(late * 60)} au rythme actuel.", orange));
+            Alerts.Add(new AlertRow(_ctx.NameOf(o.MachineId), $"{o.OrderNo} en retard de {PlanningContext.Duration(late * 60)} au rythme actuel.", orange));
         }
         foreach (var e in _events.Where(e => e.Status == PlanStatus.Planned && e.PlannedEnd < now))
-            Alerts.Add(new AlertRow(e.MachineId, $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
+            Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
         foreach (var e in _events.Where(e => e.Status == PlanStatus.Planned))
             foreach (var o in _orders.Where(o => o.MachineId == e.MachineId && o.PlannedStart < e.PlannedEnd && o.PlannedEnd > e.PlannedStart))
-                Alerts.Add(new AlertRow(e.MachineId, $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
+                Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
         var planned = _orders.Where(o => o.Status == PlanStatus.Planned).OrderBy(o => o.PlannedStart).ToList();
         for (var i = 0; i < planned.Count; i++)
             foreach (var other in planned.Skip(i + 1).Where(x => x.MachineId == planned[i].MachineId && x.PlannedStart < planned[i].PlannedEnd))
-                Alerts.Add(new AlertRow(other.MachineId, $"{planned[i].OrderNo} et {other.OrderNo} se chevauchent ({When(other.PlannedStart)}).", orange));
+                Alerts.Add(new AlertRow(_ctx.NameOf(other.MachineId), $"{planned[i].OrderNo} et {other.OrderNo} se chevauchent ({When(other.PlannedStart)}).", orange));
         OnPropertyChanged(nameof(HasAlerts));
 
         SelectedBlock = allBlocks.FirstOrDefault(b => b.Key == selectedKey);
@@ -956,7 +956,7 @@ public partial class BoardViewModel : ObservableObject
         CanOrderEndFromRate = _orderEndManual && rateHours != null;
 
         var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
-            : machine != null && ParseNumber(OrderQuantity) > 0 ? $"pas de cadence nominale pour {machine.MachineId} à {ParseNumber(OrderWeight):0.##} g (Paramètres)"
+            : machine != null && ParseNumber(OrderQuantity) > 0 ? $"pas de cadence nominale pour {machine.MachineName} à {ParseNumber(OrderWeight):0.##} g (Paramètres)"
             : "";
         if (SpanError(start, end) is { } error)
         {

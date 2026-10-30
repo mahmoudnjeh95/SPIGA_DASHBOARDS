@@ -55,7 +55,7 @@
                     </Grid>
                     <StackPanel Grid.Row="1" Margin="0,6,0,0">
                         <TextBlock Text="{Binding Label}" FontFamily="Cascadia Mono, Consolas" FontSize="12" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}"/>
                         <TextBlock Text="{Binding Value}" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
                         <TextBlock Text="{Binding Detail}" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
                     </StackPanel>
