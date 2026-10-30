@@ -125,7 +125,7 @@ public class SynthesisSlideViewModel
             Lines = lines,
             GrainLabel = "par " + PeriodRanges.GrainName(grain),
             TrsChart = DashboardCharts.Lines(labels, trsLines, v => $"{v:0}%", targets.Count == 1 ? targets[0] : null),
-            DeviationChart = DashboardCharts.Lines(labels, deviationLines, v => $"{v:+0.0;-0.0;0}%", 0),
+            DeviationChart = DashboardCharts.Lines(labels, deviationLines, v => $"{v:+0.00;-0.00;0}%", 0),
         };
     }
 }

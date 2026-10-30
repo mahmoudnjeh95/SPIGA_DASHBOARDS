@@ -34,6 +34,29 @@ public static class DashboardCharts
     public static List<Step> Steps(IEnumerable<(DateTime Key, string Label, List<ProductionBucket> Lots)> groups)
         => groups.Select(g => new Step(g.Label, g.Lots)).ToList();
 
+    // Every value is printed on the charts (the TV has no mouse for tooltips),
+    // smaller as the steps get more numerous (a month by day = 31 bars).
+    private static double LabelSize(int steps) => steps <= 16 ? 13 : steps <= 24 ? 11 : 9;
+
+    // Line charts: half a step of margin on each side, so the values of the
+    // first and last points aren't cut off.
+    private static Axis LineXAxis(IReadOnlyCollection<string> labels)
+    {
+        var axis = ChartHelpers.BuildXAxis(labels);
+        axis.MinLimit = -0.5;
+        axis.MaxLimit = labels.Count - 0.5;
+        return axis;
+    }
+
+    // Value axis around the points with room above them for their values.
+    private static Axis PaddedYAxis(IEnumerable<double?> values, Func<double, string> labeler)
+    {
+        var known = values.Where(v => v.HasValue).Select(v => v!.Value).DefaultIfEmpty(0).ToList();
+        var (low, high) = (known.Min(), known.Max());
+        var range = Math.Max(high - low, Math.Max(Math.Abs(high), 1) * 0.02);
+        return ChartHelpers.BuildYAxis(low - 0.2 * range, high + 0.35 * range, labeler: labeler);
+    }
+
     // Share of each step the line was producing over the time it was required
     // to run (observed minus the planned breaks it stopped in): 1 = ran the
     // whole hour apart from its break, 0 = stopped or no snapshot at all.
@@ -54,15 +77,21 @@ public static class DashboardCharts
                 Fill = new SolidColorPaint(Green),
                 Padding = 2,
                 MaxBarWidth = 40,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = LabelSize(steps.Count),
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
             },
         };
+        // Headroom above 100 % for the labels of full bars.
         return new ChartParts(series,
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1, minStep: 0.5, labeler: v => $"{v:P0}") });
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1.25, minStep: 0.5, labeler: v => v <= 1 ? $"{v:P0}" : "") });
     }
 
     // Average speed (bags / producing minute) as columns, max speed reached
     // (fastest snapshot interval) as a line; steps without production are gaps.
+    // Average printed inside its bar, max above its point, so they never overlap.
     public static ChartParts Speed(IReadOnlyList<Step> steps)
     {
         var avg = steps.Select(s =>
@@ -89,9 +118,9 @@ public static class DashboardCharts
                 Name = "Vitesse moy.",
                 Fill = new SolidColorPaint(Blue),
                 MaxBarWidth = 36,
-                DataLabelsPaint = steps.Count <= 16 ? new SolidColorPaint(ChartHelpers.TextColor) : null,
-                DataLabelsPosition = DataLabelsPosition.Top,
-                DataLabelsSize = 13,
+                DataLabelsPaint = new SolidColorPaint(SKColors.White),
+                DataLabelsPosition = DataLabelsPosition.Middle,
+                DataLabelsSize = LabelSize(steps.Count),
                 DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue:0}" : "",
             },
             new LineSeries<double?>
@@ -103,6 +132,10 @@ public static class DashboardCharts
                 GeometrySize = 8,
                 Fill = null,
                 LineSmoothness = 0,
+                DataLabelsPaint = new SolidColorPaint(Orange),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = LabelSize(steps.Count),
+                DataLabelsFormatter = p => $"{p.Coordinate.PrimaryValue:0}",
             },
         };
         return new ChartParts(series,
@@ -132,6 +165,10 @@ public static class DashboardCharts
                 Stroke = new SolidColorPaint(Green, 3),
                 Fill = null,
                 GeometrySize = 10,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = LabelSize(weighed.Count),
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French),
             },
             new LineSeries<double>
             {
@@ -149,7 +186,7 @@ public static class DashboardCharts
         var low = Math.Max(0, Math.Floor(weights.Min() - pad));
         var high = Math.Ceiling(weights.Max() + pad);
         return new ChartParts(series,
-            new[] { ChartHelpers.BuildXAxis(weighed.Select(b => b.Label)) },
+            new[] { LineXAxis(weighed.Select(b => b.Label).ToList()) },
             new[] { ChartHelpers.BuildYAxis(low, high, minStep: (high - low) / 2, labeler: v => $"{v:0} g") });
     }
 
@@ -167,9 +204,9 @@ public static class DashboardCharts
                 Values = trs,
                 Name = "TRS",
                 Fill = new SolidColorPaint(Blue),
-                DataLabelsPaint = steps.Count <= 16 ? new SolidColorPaint(ChartHelpers.TextColor) : null,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
-                DataLabelsSize = 12,
+                DataLabelsSize = LabelSize(steps.Count),
                 DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue:0}" : "",
                 MaxBarWidth = 36,
             },
@@ -187,7 +224,8 @@ public static class DashboardCharts
             new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: top, minStep: 50, labeler: v => $"{v:0}%") });
     }
 
-    // Net weight produced per step, one stacked colour per target weight.
+    // Net weight produced per step, one stacked colour per target weight, the
+    // step's total printed above the stack (an invisible line carries it).
     public static ChartParts ProductionByWeight(IReadOnlyList<Step> steps)
     {
         var weights = steps.SelectMany(s => s.Lots).Where(l => l.TargetNetWeight > 0)
@@ -208,10 +246,29 @@ public static class DashboardCharts
             Name = $"{w:0} g",
             Fill = new SolidColorPaint(ChartHelpers.Palette[i % ChartHelpers.Palette.Length]),
             MaxBarWidth = 36,
-        }).ToArray();
-        return new ChartParts(series,
+        }).ToList();
+        var totals = steps.Select(s => Math.Round(KpiCalculator.ByWeight(s.Lots).Sum(k => k.ProductionKg) / unit, 1)).ToArray();
+        series.Add(new LineSeries<double>
+        {
+            Values = totals,
+            Name = "Total",
+            IsVisibleAtLegend = false,
+            Stroke = null,
+            Fill = null,
+            GeometrySize = 0,
+            GeometryStroke = null,
+            GeometryFill = null,
+            DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+            DataLabelsPosition = DataLabelsPosition.Top,
+            DataLabelsSize = LabelSize(steps.Count),
+            DataLabelsFormatter = p => p.Coordinate.PrimaryValue <= 0 ? ""
+                : useTonnes ? p.Coordinate.PrimaryValue.ToString("0.#", French) : ChartHelpers.Compact(p.Coordinate.PrimaryValue),
+        });
+        // Headroom above the tallest stack for its total.
+        return new ChartParts(series.ToArray(),
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, labeler: v => useTonnes ? $"{v:0.#} t" : ChartHelpers.Compact(v) + " kg") });
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: totals.Max() > 0 ? totals.Max() * 1.35 : null,
+                labeler: v => useTonnes ? $"{v:0.#} t" : ChartHelpers.Compact(v) + " kg") });
     }
 
     // Weight deviation (% of the target) per step, 0 % reference line.
@@ -231,6 +288,12 @@ public static class DashboardCharts
                 GeometrySize = 8,
                 Fill = null,
                 LineSmoothness = 0,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = Math.Min(11, LabelSize(steps.Count)),
+                // Deviations are hundredths of a percent: two decimals, no
+                // "%" (the axis says it) to keep neighbouring values apart.
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("+0.00;-0.00;0", French),
             },
             new LineSeries<double>
             {
@@ -242,8 +305,8 @@ public static class DashboardCharts
             },
         };
         return new ChartParts(series,
-            new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(labeler: v => $"{v:+0.0;-0.0;0}%") });
+            new[] { LineXAxis(steps.Select(s => s.Label).ToList()) },
+            new[] { PaddedYAxis(values.Append(0), v => $"{v:+0.00;-0.00;0}%") });
     }
 
     // One line per named series (synthesis: one per production line), gaps for unknown values.
@@ -261,6 +324,11 @@ public static class DashboardCharts
             GeometrySize = 8,
             Fill = null,
             LineSmoothness = 0,
+            // In the line's own colour, to tell the lines' values apart.
+            DataLabelsPaint = new SolidColorPaint(ChartHelpers.Palette[i % ChartHelpers.Palette.Length]),
+            DataLabelsPosition = DataLabelsPosition.Top,
+            DataLabelsSize = Math.Min(11, LabelSize(labels.Count)),
+            DataLabelsFormatter = p => labeler(p.Coordinate.PrimaryValue),
         }).ToList();
         if (reference is { } r)
         {
@@ -274,8 +342,8 @@ public static class DashboardCharts
             });
         }
         return new ChartParts(series.ToArray(),
-            new[] { ChartHelpers.BuildXAxis(labels) },
-            new[] { ChartHelpers.BuildYAxis(labeler: labeler) });
+            new[] { LineXAxis(labels) },
+            new[] { PaddedYAxis(lines.SelectMany(l => l.Values).Append(reference), labeler) });
     }
 
     // Single-series bar chart with the value printed on each bar (teams, machines).
