@@ -62,6 +62,10 @@ public class ProductionRepository
     // more or less on the counter swings the rate too much to mean anything.
     private const int MinSpeedIntervalSeconds = 20;
 
+    // Longest snapshot interval used for the average speed: past this the
+    // line may have stopped and restarted between two snapshots.
+    private const int MaxSteadyIntervalSeconds = 300;
+
     // Latest snapshots read for the line status: enough to reach the current
     // production's previous snapshot past duplicates and stray rows.
     private const int StatusRows = 60;
@@ -287,6 +291,8 @@ public class ProductionRepository
         public double RunMinutes { get; set; }
         public double PlannedStopMinutes { get; set; }
         public double MaxSpeed { get; set; }
+        public long SteadyBags { get; set; }
+        public double SteadyMinutes { get; set; }
         public long MediaBags { get; set; }
         public double MediaWeightSum { get; set; }
     }
@@ -569,7 +575,7 @@ g AS (
     FROM flg f
 ),
 dl AS (
-    SELECT g.numero_linea, g.ID_produzione, g.codice_articolo, g.target, g.media, g.tempo_fine, g.gap,
+    SELECT g.numero_linea, g.ID_produzione, g.progressivo, g.codice_articolo, g.target, g.media, g.tempo_fine, g.gap,
            {d.SecondOfDay("g.tempo_fine")} AS e_sec,
            {(planned == "0" ? "0" : d.Seconds("@readFrom", "g.tempo_fine"))} AS e_rel,
            -- Observed time: 0 without a known baseline or past MaxIntervalSeconds.
@@ -587,6 +593,13 @@ sc AS (
                 THEN 0 ELSE 1 END AS sane
     FROM dl
 ),
+nb AS (
+    -- Bags of the line's previous and next intervals, whatever their production.
+    SELECT sc.*,
+           LAG(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo) AS prev_d,
+           LEAD(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo) AS next_d
+    FROM sc
+),
 x AS (
     -- Attributed to the bucket containing the midpoint of the interval.
     SELECT sc.numero_linea, sc.ID_produzione, sc.codice_articolo, sc.target, sc.media, sc.dur,
@@ -594,12 +607,18 @@ x AS (
            -- Interval speed (bags/min), for the max speed of the bucket.
            CASE WHEN sc.sane = 1 AND sc.dur >= {MinSpeedIntervalSeconds}
                 THEN CAST(sc.d_tot AS {d.Float}) * 60 / sc.dur ELSE 0 END AS spd,
+           -- Steady running (average speed): the line produced in this interval
+           -- and in the ones before and after it, so the interval in which it
+           -- stops or restarts (partly stopped) is left out.
+           CASE WHEN sc.sane = 1 AND sc.d_tot > 0 AND sc.prev_d > 0 AND sc.next_d > 0
+                     AND sc.dur > 0 AND sc.dur <= {MaxSteadyIntervalSeconds}
+                THEN 1 ELSE 0 END AS stdy,
            -- Seconds of the interval inside a planned break.
            {BreakOverlapSql("sc.e_sec", "sc.dur")} AS brk,
            -- Seconds of the interval inside a stop planned in Planification.
            {planned} AS pln,
 {saneDeltas}
-    FROM sc
+    FROM nb sc
 )
 SELECT a.*, pr.ProductName, CAST(COALESCE(pr.NominalRatePerMinute, 0) AS {d.Float}) AS ArticleRate
 FROM (
@@ -625,6 +644,8 @@ FROM (
            -- or a maintenance slot keeps that time as run time.
            CAST(SUM(CASE WHEN x.d_tot > 0 THEN 0 WHEN x.brk + x.pln > x.dur THEN x.dur ELSE x.brk + x.pln END) AS {d.Float}) / 60 AS PlannedStopMinutes,
            CAST(MAX(x.spd) AS {d.Float})        AS MaxSpeed,
+           CAST(SUM(x.stdy * x.d_tot) AS BIGINT) AS SteadyBags,
+           CAST(SUM(x.stdy * x.dur) AS {d.Float}) / 60 AS SteadyMinutes,
            -- Fallback weight data (used only when the line has no lot): bags
            -- whose running average is within 15 % of the target.
            CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.85 * x.target AND x.media <= 1.15 * x.target
@@ -700,6 +721,8 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
                 RunMinutes = p.RunMinutes,
                 PlannedStopMinutes = p.PlannedStopMinutes,
                 MaxSpeedBagsPerMinute = p.MaxSpeed,
+                SteadyBags = p.SteadyBags,
+                SteadyMinutes = p.SteadyMinutes,
             };
 
             // Performance inputs at the production's own nominal rate: a

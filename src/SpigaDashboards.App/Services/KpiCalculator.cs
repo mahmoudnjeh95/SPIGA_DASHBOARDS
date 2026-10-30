@@ -137,6 +137,19 @@ public static class KpiCalculator
         return known.Count == 0 ? "—" : string.Join(" · ", known).Replace(' ', ' ').Replace(' ', ' ');
     }
 
+    // Vitesse moy. = bags / minute of steady running: the snapshot intervals
+    // in which a line stops or restarts are partly stopped and would drag the
+    // speed under the machine's real one. A period without any steady interval
+    // (a run of a minute or two) falls back to bags / producing minute.
+    public static double? AverageSpeed(IReadOnlyCollection<ProductionBucket> lots)
+    {
+        var steady = lots.Sum(l => l.SteadyMinutes);
+        if (steady > 0)
+            return lots.Sum(l => l.SteadyBags) / steady;
+        var run = lots.Sum(l => l.RunMinutes);
+        return run > 0 ? lots.Sum(l => l.TotalBags) / run : null;
+    }
+
     private static KpiSummary SummarizeCore(IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent)
     {
         // Weight comes from lots / sane running averages, which can sit in a
@@ -155,9 +168,7 @@ public static class KpiCalculator
         }
 
         var totalBags = producing.Sum(l => (long)l.TotalBags);
-        var runMinutes = producing.Sum(l => l.RunMinutes);
-
-        var actualRate = runMinutes > 0 ? totalBags / runMinutes : 0;
+        var actualRate = AverageSpeed(producing) ?? 0;
         var ratedRunMinutes = producing.Sum(l => l.RatedRunMinutes);
         var idealMinutes = producing.Sum(l => l.IdealMinutes);
         double? performancePercent = ratedRunMinutes > 0 ? 100.0 * idealMinutes / ratedRunMinutes : null;

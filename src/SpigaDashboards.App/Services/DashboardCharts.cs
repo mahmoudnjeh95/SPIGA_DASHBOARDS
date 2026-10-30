@@ -89,16 +89,13 @@ public static class DashboardCharts
             new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1.25, minStep: 0.5, labeler: v => v <= 1 ? $"{v:P0}" : "") });
     }
 
-    // Average speed (bags / producing minute) as columns, max speed reached
-    // (fastest snapshot interval) as a line; steps without production are gaps.
-    // Average printed inside its bar, max above its point, so they never overlap.
+    // Average speed (bags / minute of steady running, KpiCalculator.AverageSpeed)
+    // as columns, max speed reached (fastest snapshot interval) as a line; steps
+    // without production are gaps. Average printed inside its bar, max above its
+    // point, so they never overlap.
     public static ChartParts Speed(IReadOnlyList<Step> steps)
     {
-        var avg = steps.Select(s =>
-        {
-            var run = s.Lots.Sum(l => l.RunMinutes);
-            return run > 0 ? (double?)Math.Round(s.Lots.Sum(l => l.TotalBags) / run, 1) : null;
-        }).ToArray();
+        var avg = steps.Select(s => KpiCalculator.AverageSpeed(s.Lots) is { } v ? (double?)Math.Round(v, 1) : null).ToArray();
         var max = steps.Select(s =>
         {
             var m = s.Lots.Select(l => l.MaxSpeedBagsPerMinute).DefaultIfEmpty(0).Max();

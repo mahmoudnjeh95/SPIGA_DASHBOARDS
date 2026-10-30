@@ -33,7 +33,7 @@ public class ProductionBucket
     public long MetalRejects { get; set; }
 
     // Minutes covered by snapshot intervals in this bucket, and the part of
-    // them in which the line produced bags (Disponibilite / speed inputs).
+    // them in which the line produced bags (Disponibilite / Performance inputs).
     public double ObservedMinutes { get; set; }
     public double RunMinutes { get; set; }
 
@@ -44,6 +44,12 @@ public class ProductionBucket
 
     // Fastest snapshot interval of the bucket (bags/min), 0 = none measured.
     public double MaxSpeedBagsPerMinute { get; set; }
+
+    // Bags and minutes of steady running: snapshot intervals in which the
+    // line produced, as it did in the intervals before and after (average
+    // speed input, see KpiCalculator.AverageSpeed).
+    public long SteadyBags { get; set; }
+    public double SteadyMinutes { get; set; }
 
     // Performance inputs, only when the production's nominal rate is known:
     // minutes the bags would have taken at the nominal rate, and the
@@ -72,7 +78,8 @@ public class ProductionBucket
     public bool IsProducing => TotalBags > 0;
     public bool HasWeightData => WeighedBags > 0;
     public double? AvgWeight => HasWeightData ? WeighedWeightSum / WeighedBags : null;
-    public double SpeedBagsPerMinute => RunMinutes > 0 ? TotalBags / RunMinutes : 0;
+    public double SpeedBagsPerMinute => SteadyMinutes > 0 ? SteadyBags / SteadyMinutes
+        : RunMinutes > 0 ? TotalBags / RunMinutes : 0;
     public bool IsConform => TotalBags > 0 && (double)(BagsUnderTolerance + BagsOverTolerance) / TotalBags < 0.08;
 }
 
