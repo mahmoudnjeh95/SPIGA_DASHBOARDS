@@ -31,8 +31,8 @@ public static class StopSheetPdf
 
     private static readonly (string Header, double Width)[] Columns =
     {
-        ("Machine", 115), ("Début", 42), ("Fin", 42), ("Durée", 45), ("Pause", 48), ("Type", 58),
-        ("Cause de l'arrêt (à remplir par l'équipe)", 215), ("Action / commentaire", 167), ("Visa", 50),
+        ("Machine", 115), ("Début", 42), ("Fin", 42), ("Durée", 45), ("Pause", 48), ("Type", 70),
+        ("Cause de l'arrêt (à remplir par l'équipe)", 203), ("Action / commentaire", 167), ("Visa", 50),
     };
 
     public static void Export(IReadOnlyList<ProductionStop> stops, AppSettings settings, string path)
@@ -120,11 +120,15 @@ public static class StopSheetPdf
 
     private static double DrawRow(XGraphics gfx, double y, ProductionStop stop)
     {
+        var q = stop.Qualification;
         var cells = new[]
         {
             stop.MachineName,
             stop.Start.ToString("HH:mm"), stop.End.ToString("HH:mm"), stop.DurationText, stop.BreakText, stop.TypeLabel,
-            "", "", "",
+            // Cause already given in the Planification window, else left blank for the team.
+            q == null ? "" : StopCauses.Label(q.CauseCode) + (string.IsNullOrWhiteSpace(q.Component) ? "" : " · " + q.Component),
+            q == null ? "" : string.Join(" · ", new[] { q.Comment, q.Technician }.Where(s => !string.IsNullOrWhiteSpace(s))),
+            "",
         };
         var x = Margin;
         for (var c = 0; c < Columns.Length; c++)

@@ -129,6 +129,22 @@ public class PlanningRepository
     public async Task<List<StopQualification>> GetQualificationsAsync(DateTime from, DateTime to)
     {
         using var connection = await OpenAsync();
+        return await QueryQualificationsAsync(connection, from, to);
+    }
+
+    // Same, for the Arrets window: read only, never creates the tables (none
+    // before the Planification window was first opened = no qualification).
+    public async Task<List<StopQualification>> FindQualificationsAsync(DateTime from, DateTime to)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        var exists = await connection.ExecuteScalarAsync<int>(IsSqlServer
+            ? "SELECT CASE WHEN OBJECT_ID('dbo.PlanStopQualifications') IS NULL THEN 0 ELSE 1 END"
+            : "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'PlanStopQualifications'");
+        return exists == 0 ? new() : await QueryQualificationsAsync(connection, from, to);
+    }
+
+    private static async Task<List<StopQualification>> QueryQualificationsAsync(IDbConnection connection, DateTime from, DateTime to)
+    {
         var rows = await connection.QueryAsync<StopQualification>(
             @"SELECT Id, MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode, Component,
                      Technician, Comment, IsManual, CreatedAt

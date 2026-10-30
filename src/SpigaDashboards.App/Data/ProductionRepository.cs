@@ -398,6 +398,10 @@ rz AS (
         return cases.Count == 0 ? "0" : $"CASE {line} " + string.Join("\n             ", cases) + " ELSE 0 END";
     }
 
+    // Causes given to stops in the Planification window (Arrets window and sheet).
+    public Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
+        => _planning.FindQualificationsAsync(from, to);
+
     // Planned stops of the Planification window over the read range; none
     // (and a log line) if they can't be read, so the KPIs never fail on them.
     private async Task<List<(string MachineId, DateTime Start, DateTime End)>> LoadPlannedStopsAsync(DateTime from, DateTime to)

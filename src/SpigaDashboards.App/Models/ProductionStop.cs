@@ -37,12 +37,24 @@ public class ProductionStop
     public double BreakMinutes { get; set; }
     public double NoDataMinutes { get; set; }
 
+    // Cause given in the Planification window (matched on machine + start),
+    // null = not qualified yet. A panne declared there by hand has no
+    // detected stop: it is listed from its qualification alone (IsManual).
+    public StopQualification? Qualification { get; set; }
+
     public double TotalMinutes => (End - Start).TotalMinutes;
     public double NetMinutes => Math.Max(0, TotalMinutes - BreakMinutes);
     public bool IsMostlyNoData => NoDataMinutes >= NetMinutes / 2;
+    public bool IsManual => Qualification?.IsManual == true;
 
     public string ShiftName => Services.KpiCalculator.ShiftName(ShiftId);
-    public string TypeLabel => IsMostlyNoData ? "Sans données" : "Arrêt";
+    public string TypeLabel => IsManual ? "Saisie manuelle" : IsMostlyNoData ? "Sans données" : "Arrêt";
+    public CauseFamily? CauseFamily => Qualification?.Cause?.Family;
+    public string CauseLabel => Qualification == null ? "—" : StopCauses.Label(Qualification.CauseCode);
+    // "Mâchoires de soudure · Karim · changé la résistance"
+    public string DetailText => Qualification == null ? ""
+        : string.Join(" · ", new[] { Qualification.Component, Qualification.Technician, Qualification.Comment }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
     public string DurationText => FormatDuration(NetMinutes);
     public string BreakText => BreakMinutes >= 0.5 ? FormatDuration(BreakMinutes) : "";
 

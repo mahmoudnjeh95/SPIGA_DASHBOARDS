@@ -115,15 +115,28 @@
                   Background="{DynamicResource TileBackgroundBrush}" RowBackground="{DynamicResource TileBackgroundBrush}" AlternatingRowBackground="{DynamicResource AlternatingRowBrush}"
                   BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CanUserAddRows="False">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Date" Binding="{Binding ShiftDate, StringFormat={}{0:ddd dd/MM/yyyy}}" Width="120"/>
-                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="80"/>
-                <DataGridTextColumn Header="Équipe" Binding="{Binding Team}" Width="100"/>
-                <DataGridTextColumn Header="Machine" Binding="{Binding MachineName}" Width="150"/>
-                <DataGridTextColumn Header="Début" Binding="{Binding Start, StringFormat={}{0:HH:mm}}" Width="65"/>
-                <DataGridTextColumn Header="Fin" Binding="{Binding End, StringFormat={}{0:HH:mm}}" Width="65"/>
-                <DataGridTextColumn Header="Durée (hors pause)" Binding="{Binding DurationText}" Width="130"/>
-                <DataGridTextColumn Header="Pause déduite" Binding="{Binding BreakText}" Width="105"/>
-                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="*"/>
+                <DataGridTextColumn Header="Date" Binding="{Binding ShiftDate, StringFormat={}{0:ddd dd/MM/yyyy}}" Width="110"/>
+                <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="75"/>
+                <DataGridTextColumn Header="Équipe" Binding="{Binding Team}" Width="80"/>
+                <DataGridTextColumn Header="Machine" Binding="{Binding MachineName}" Width="125"/>
+                <DataGridTextColumn Header="Début" Binding="{Binding Start, StringFormat={}{0:HH:mm}}" Width="55"/>
+                <DataGridTextColumn Header="Fin" Binding="{Binding End, StringFormat={}{0:HH:mm}}" Width="55"/>
+                <DataGridTextColumn Header="Durée" Binding="{Binding DurationText}" Width="70"/>
+                <DataGridTextColumn Header="Pause déduite" Binding="{Binding BreakText}" Width="95"/>
+                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="100"/>
+                <!-- Cause given in the Planification window, in its family's colour. -->
+                <DataGridTemplateColumn Header="Cause" Width="175">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="9" Height="9" Margin="0,0,6,0" VerticalAlignment="Center"
+                                         Fill="{Binding CauseFamily, Converter={StaticResource CauseFamilyBrush}}"/>
+                                <TextBlock Text="{Binding CauseLabel}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Détail" Binding="{Binding DetailText}" Width="*" MinWidth="150"/>
             </DataGrid.Columns>
         </DataGrid>
 

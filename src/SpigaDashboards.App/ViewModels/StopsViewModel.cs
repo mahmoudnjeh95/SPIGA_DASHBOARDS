@@ -121,7 +121,8 @@ public partial class StopsViewModel : ObservableObject
         var segments = await _repository.GetLineSegmentsAsync(machines.Select(m => m.MachineId).ToList(), from, to);
         var names = _machines.ToDictionary(m => m.MachineId, m => m.MachineName);
         var shiftId = ShiftOptions.IndexOf(SelectedShift); // 0 = Tous, 1 Matin, 2 Après-midi, 3 Nuit
-        var stops = StopDetector.Detect(segments, from, to, _settings, _teamSchedule, names)
+        var detected = StopDetector.Detect(segments, from, to, _settings, _teamSchedule, names);
+        var stops = WithQualifications(detected, await LoadQualificationsAsync(machines, from, to), names, from, to)
             .Where(s => shiftId <= 0 || s.ShiftId == shiftId)
             .Where(s => SelectedTeam == AllOption || s.Team == SelectedTeam)
             .ToList();
@@ -140,6 +141,57 @@ public partial class StopsViewModel : ObservableObject
             : $"{stops.Count} arrêt(s), durée totale hors pauses : {ProductionStop.FormatDuration(stops.Sum(s => s.NetMinutes))}";
         StatusMessage = stops.Count == 0 ? "Aucun arrêt sur cette période." : "";
         OnPropertyChanged(nameof(SettingsText));
+    }
+
+    // Causes given in the Planification window to these machines' stops;
+    // none (and a log line) if they can't be read, the stops still show.
+    private async Task<List<StopQualification>> LoadQualificationsAsync(List<Machine> machines, DateTime from, DateTime to)
+    {
+        try
+        {
+            var ids = machines.Select(m => m.MachineId).ToHashSet();
+            return (await _repository.GetStopQualificationsAsync(from.AddHours(-1), to.AddHours(1)))
+                .Where(q => ids.Contains(q.MachineId))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Causes des arrets (Planification) illisibles : " + ex.Message);
+            return new();
+        }
+    }
+
+    // Each detected stop gets its cause, matched as in the Pannes view (same
+    // machine, start within 3 min, each cause used once). Causes left over
+    // (pannes declared by hand) are listed as stops of their own when they
+    // start in [from, to) (the causes are read 1 h wider for the matching).
+    private static List<ProductionStop> WithQualifications(List<ProductionStop> stops, List<StopQualification> quals,
+        Dictionary<string, string> names, DateTime from, DateTime to)
+    {
+        var used = new HashSet<int>();
+        foreach (var stop in stops)
+        {
+            stop.Qualification = quals.FirstOrDefault(q => !used.Contains(q.Id) && q.MachineId == stop.MachineId
+                && Math.Abs((q.StopStart - stop.Start).TotalMinutes) <= 3);
+            if (stop.Qualification != null)
+                used.Add(stop.Qualification.Id);
+        }
+
+        var extra = quals.Where(q => !used.Contains(q.Id) && q.StopStart >= from && q.StopStart < to && q.StopEnd > q.StopStart)
+            .Select(q => new ProductionStop
+            {
+                MachineId = q.MachineId,
+                MachineName = names.GetValueOrDefault(q.MachineId, q.MachineId),
+                ShiftDate = q.ShiftDate,
+                ShiftId = q.ShiftId,
+                Team = q.Team,
+                Start = q.StopStart,
+                End = q.StopEnd,
+                Qualification = q,
+            });
+        return stops.Concat(extra)
+            .OrderBy(s => s.ShiftDate).ThenBy(s => s.ShiftId).ThenBy(s => s.MachineId).ThenBy(s => s.Start)
+            .ToList();
     }
 
     [RelayCommand]

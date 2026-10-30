@@ -15,6 +15,7 @@
         <conv:BoolToStatusBrushConverter x:Key="BoolToStatusBrush"/>
         <conv:NullToVisibilityConverter x:Key="NullToVisibility"/>
         <conv:InverseNullToVisibilityConverter x:Key="InverseNullToVisibility"/>
+        <conv:CauseFamilyBrushConverter x:Key="CauseFamilyBrush"/>
         <conv:PercentBandBrushConverter x:Key="PercentBandBrush"/>
         <conv:SeverityBrushConverter x:Key="SeverityBrush"/>
 
