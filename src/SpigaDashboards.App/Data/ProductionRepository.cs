@@ -58,9 +58,15 @@ public class ProductionRepository
     // dropped. No line here comes anywhere near 300 bags/min.
     private const int MaxBagsPerMinute = 300;
 
-    // Shortest snapshot interval used for the max speed: under 20 s, one bag
-    // more or less on the counter swings the rate too much to mean anything.
-    private const int MinSpeedIntervalSeconds = 20;
+    // Max speed = best rate over this many consecutive snapshot intervals of
+    // the line (5 minutes at the lines' 60 s snapshots), not over one: a
+    // snapshot taken before a few bags are counted makes a short minute then a
+    // long one (CC01 31/10: 35, 57, 34 bags while running at 46/min).
+    private const int MaxSpeedWindowIntervals = 5;
+
+    // Shortest window used for the max speed (start of the read range, or
+    // faster snapshots): too short for the rate to mean anything.
+    private const int MinSpeedWindowSeconds = 270;
 
     // Longest snapshot interval used for the average speed: past this the
     // line may have stopped and restarted between two snapshots.
@@ -597,16 +603,23 @@ nb AS (
     -- Bags of the line's previous and next intervals, whatever their production.
     SELECT sc.*,
            LAG(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo) AS prev_d,
-           LEAD(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo) AS next_d
+           LEAD(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo) AS next_d,
+           -- Bags, seconds and sanity of the window ending with this interval.
+           SUM(sc.sane * sc.d_tot) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo
+               ROWS BETWEEN {MaxSpeedWindowIntervals - 1} PRECEDING AND CURRENT ROW) AS win_d,
+           SUM(sc.dur) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo
+               ROWS BETWEEN {MaxSpeedWindowIntervals - 1} PRECEDING AND CURRENT ROW) AS win_dur,
+           MIN(sc.sane) OVER (PARTITION BY sc.numero_linea ORDER BY sc.tempo_fine, sc.progressivo
+               ROWS BETWEEN {MaxSpeedWindowIntervals - 1} PRECEDING AND CURRENT ROW) AS win_sane
     FROM sc
 ),
 x AS (
     -- Attributed to the bucket containing the midpoint of the interval.
     SELECT sc.numero_linea, sc.ID_produzione, sc.codice_articolo, sc.target, sc.media, sc.dur,
            {d.MinusSeconds("sc.tempo_fine", "sc.dur / 2")} AS mid_t,
-           -- Interval speed (bags/min), for the max speed of the bucket.
-           CASE WHEN sc.sane = 1 AND sc.dur >= {MinSpeedIntervalSeconds}
-                THEN CAST(sc.d_tot AS {d.Float}) * 60 / sc.dur ELSE 0 END AS spd,
+           -- Window speed (bags/min), for the max speed of the bucket.
+           CASE WHEN sc.win_sane = 1 AND sc.win_dur >= {MinSpeedWindowSeconds}
+                THEN CAST(sc.win_d AS {d.Float}) * 60 / sc.win_dur ELSE 0 END AS spd,
            -- Steady running (average speed): the line produced in this interval
            -- and in the ones before and after it, so the interval in which it
            -- stops or restarts (partly stopped) is left out.
