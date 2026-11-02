@@ -23,13 +23,15 @@ public partial class TvWindow : Window
     private readonly DispatcherTimer _cursorTimer;
     private bool _closingForShutdown;
 
-    public TvWindow(MainViewModel viewModel, AppSettings settings, SettingsService settingsService)
+    public TvWindow(MainViewModel viewModel, AppSettings settings, SettingsService settingsService, LicenseService license)
     {
         InitializeComponent();
         _viewModel = viewModel;
         _settings = settings;
         _settingsService = settingsService;
         DataContext = viewModel;
+        LicenseOverlay.DataContext = license;
+        LicenseGraceBanner.DataContext = license;
 
         PlaceFromSettings();
 

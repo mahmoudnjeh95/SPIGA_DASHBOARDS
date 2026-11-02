@@ -36,7 +36,10 @@ public partial class App : Application
         var teamSchedule = new TeamScheduleService(settings);
         var mainViewModel = new MainViewModel(repository, settings, teamSchedule);
 
-        var window = new MainWindow(mainViewModel, settingsService, settings, activeFactory, repository);
+        var license = new LicenseService();
+        license.Start();
+
+        var window = new MainWindow(mainViewModel, settingsService, settings, activeFactory, repository, license);
         window.Show();
     }
 

@@ -22,3 +22,8 @@ Machine d’emballage à l’arrêt ou en marche.png
 
 # Release builds (Setup.exe / portable zip), kept out of git
 release/
+
+# Licence dongles: the private key and issued licences never go into git
+*.pem
+spiga.lic
+dongles.csv

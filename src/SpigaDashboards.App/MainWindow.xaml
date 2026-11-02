@@ -90,7 +90,7 @@
          resolution actually is, so the whole dashboard is always visible with
          no scrolling, clipping, or hovering required. -->
     <Viewbox Stretch="Fill">
-    <Grid Width="1600" Height="900">
+    <Grid x:Name="DashboardRoot" Width="1600" Height="900">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -378,6 +378,24 @@
                             Style="{StaticResource BarButton}"
                             Click="SettingsButton_Click"/>
                 </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Licence (DataContext = LicenseService): warning while the USB dongle is
+             missing but within its grace minute, then the lock screen over everything. -->
+        <Border x:Name="LicenseGraceBanner" Grid.Row="2" Panel.ZIndex="99" HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,12,0,0" Background="#F1C40F" CornerRadius="10" Padding="22,10" IsHitTestVisible="False"
+                Visibility="{Binding GraceMessage, Converter={StaticResource NullToVisibility}}">
+            <TextBlock Text="{Binding GraceMessage}" FontSize="18" FontWeight="SemiBold" Foreground="#1B1F26"/>
+        </Border>
+        <Border x:Name="LicenseOverlay" Grid.RowSpan="4" Panel.ZIndex="100" Background="{DynamicResource WindowBackgroundBrush}"
+                Visibility="{Binding IsLicensed, Converter={StaticResource InverseBoolToVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="800">
+                <Image Source="/Assets/spiga-logo.png" Height="110" Margin="0,0,0,30"/>
+                <TextBlock Text="Licence non détectée" FontSize="40" FontWeight="Bold"
+                           Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" Margin="0,0,0,14"/>
+                <TextBlock Text="Branchez la clé USB de licence SPIGA Dashboards sur ce PC. L'affichage reprend automatiquement dès qu'elle est détectée."
+                           FontSize="20" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
             </StackPanel>
         </Border>
 

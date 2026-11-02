@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
     private readonly ProductionRepository _repository;
+    private readonly LicenseService _license;
     private TvWindow? _tvWindow;
 
     public MainWindow(
@@ -22,7 +23,8 @@ public partial class MainWindow : Window
         SettingsService settingsService,
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
-        ProductionRepository repository)
+        ProductionRepository repository,
+        LicenseService license)
     {
         InitializeComponent();
         _viewModel = viewModel;
@@ -30,8 +32,13 @@ public partial class MainWindow : Window
         _settings = settings;
         _activeFactory = activeFactory;
         _repository = repository;
+        _license = license;
 
         DataContext = viewModel;
+        LicenseOverlay.DataContext = license;
+        LicenseGraceBanner.DataContext = license;
+        license.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(LicenseService.IsLicensed)) ApplyLicenseState(); };
+        ApplyLicenseState();
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
         Loaded += async (_, _) => await viewModel.InitializeAsync();
         // Back on the TV after a restart, if it was left open there.
@@ -39,6 +46,18 @@ public partial class MainWindow : Window
         Closed += (_, _) => _tvWindow?.CloseForShutdown();
 
         UpdateThemeToggleLabel();
+    }
+
+    // Locked: no dialog left open above the lock screen, and no keyboard
+    // (Tab + Enter) path to the buttons under it.
+    private void ApplyLicenseState()
+    {
+        if (!_license.IsLicensed)
+        {
+            foreach (var owned in OwnedWindows.Cast<Window>().ToList())
+                owned.Close();
+        }
+        DashboardRoot.IsEnabled = _license.IsLicensed;
     }
 
     private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
@@ -80,7 +99,7 @@ public partial class MainWindow : Window
 
         // Its own deck, not this window's: filters set here stay off the TV.
         var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings));
-        _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService) { ShowActivated = activate };
+        _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService, _license) { ShowActivated = activate };
         _tvWindow.Closed += (_, _) => _tvWindow = null;
         _tvWindow.Show();
     }

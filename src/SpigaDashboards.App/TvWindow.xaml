@@ -113,6 +113,23 @@
                 <Run Text="Double-clic ou Echap : quitter le plein ecran · Clic droit : fermer" FontSize="16"/>
             </TextBlock>
         </Border>
+
+        <!-- Licence (DataContext = LicenseService), as on the main window. -->
+        <Border x:Name="LicenseGraceBanner" Grid.Row="1" Panel.ZIndex="99" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,12" Background="#F1C40F" CornerRadius="10" Padding="22,10" IsHitTestVisible="False"
+                Visibility="{Binding GraceMessage, Converter={StaticResource NullToVisibility}}">
+            <TextBlock Text="{Binding GraceMessage}" FontSize="18" FontWeight="SemiBold" Foreground="#1B1F26"/>
+        </Border>
+        <Border x:Name="LicenseOverlay" Grid.RowSpan="3" Panel.ZIndex="100" Background="{DynamicResource WindowBackgroundBrush}"
+                Visibility="{Binding IsLicensed, Converter={StaticResource InverseBoolToVisibility}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="800">
+                <Image Source="/Assets/spiga-logo.png" Height="110" Margin="0,0,0,30"/>
+                <TextBlock Text="Licence non détectée" FontSize="40" FontWeight="Bold"
+                           Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" Margin="0,0,0,14"/>
+                <TextBlock Text="Branchez la clé USB de licence SPIGA Dashboards sur le PC. L'affichage reprend automatiquement dès qu'elle est détectée."
+                           FontSize="20" Foreground="{DynamicResource SecondaryTextBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
+            </StackPanel>
+        </Border>
     </Grid>
     </Viewbox>
 </Window>

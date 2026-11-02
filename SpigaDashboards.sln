@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{1995B557-71B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpigaDashboards.App", "src\SpigaDashboards.App\SpigaDashboards.App.csproj", "{D012B286-C0D8-4518-B29D-2E5B4C591797}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{3A698C3A-18EE-4B40-8EB6-11F012AE64CA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpigaLicenseManager", "tools\SpigaLicenseManager\SpigaLicenseManager.csproj", "{81F11EFF-D531-4859-BF2D-91E983E30D13}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,8 +24,13 @@ Global
 		{D012B286-C0D8-4518-B29D-2E5B4C591797}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D012B286-C0D8-4518-B29D-2E5B4C591797}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D012B286-C0D8-4518-B29D-2E5B4C591797}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81F11EFF-D531-4859-BF2D-91E983E30D13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81F11EFF-D531-4859-BF2D-91E983E30D13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81F11EFF-D531-4859-BF2D-91E983E30D13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81F11EFF-D531-4859-BF2D-91E983E30D13}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{D012B286-C0D8-4518-B29D-2E5B4C591797} = {1995B557-71B8-4AD9-BC79-15DFEFB2F073}
+		{81F11EFF-D531-4859-BF2D-91E983E30D13} = {3A698C3A-18EE-4B40-8EB6-11F012AE64CA}
 	EndGlobalSection
 EndGlobal
