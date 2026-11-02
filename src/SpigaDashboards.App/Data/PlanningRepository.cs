@@ -239,7 +239,7 @@ public class PlanningRepository
             @"SELECT Id, PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
               FROM PlanMaintenanceEvents WHERE PlannedStart >= @from AND PlannedStart < @to AND Status <> 2",
             new { from = from.AddDays(-EventLookbackDays), to });
-        return rows.Where(e => e.PlannedEnd > from).ToList();
+        return rows.Where(e => e.PlannedStart >= from || e.ActualEnd > from).ToList();
     }
 
     // Planned slots of a plan that aren't done yet (to avoid planning it twice).
@@ -302,7 +302,7 @@ public class PlanningRepository
 
         var planned = StopCauses.All.Where(c => c.Family == CauseFamily.Planifie).Select(c => c.Code).ToList();
         var events = await connection.QueryAsync<MaintenanceEvent>(
-            @"SELECT MachineId, PlannedStart, DurationMinutes FROM PlanMaintenanceEvents
+            @"SELECT MachineId, PlannedStart, DurationMinutes, Status, DoneAt FROM PlanMaintenanceEvents
               WHERE PlannedStart >= @early AND PlannedStart < @to AND Status <> 2",
             new { early = from.AddDays(-EventLookbackDays), to });
         var stops = await connection.QueryAsync<StopQualification>(
@@ -310,7 +310,7 @@ public class PlanningRepository
               WHERE StopStart >= @early AND StopStart < @to AND CauseCode IN @planned",
             new { early = from.AddDays(-2), to, planned });
 
-        return events.Select(e => (e.MachineId, e.PlannedStart, e.PlannedEnd))
+        return events.Select(e => (e.MachineId, e.PlannedStart, e.ActualEnd))
             .Concat(stops.Select(q => (q.MachineId, q.StopStart, q.StopEnd)))
             .Where(w => w.Item3 > from && w.Item2 < to && w.Item3 > w.Item2)
             .ToList();

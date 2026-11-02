@@ -143,6 +143,12 @@ public class MaintenanceEvent
     public DateTime PlannedEnd => PlannedStart.AddMinutes(DurationMinutes);
     public bool IsStop => Kind == SlotKind.PlannedStop;
 
+    // Validated before its planned end: the slot ended then (not before its
+    // start), and the rest goes back to the TRS.
+    public DateTime ActualEnd => Status == PlanStatus.Done && DoneAt is { } done && done < PlannedEnd
+        ? (done > PlannedStart ? done : PlannedStart)
+        : PlannedEnd;
+
     // Still planned (not done / cancelled) and running at `time`.
     public bool IsActiveAt(DateTime time) => Status == PlanStatus.Planned && PlannedStart <= time && PlannedEnd > time;
 }

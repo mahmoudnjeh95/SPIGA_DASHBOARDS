@@ -409,7 +409,7 @@ public partial class PannesViewModel : ObservableObject
         {
             var length = (row.End - row.Start).TotalMinutes;
             var slot = slots.FirstOrDefault(e => e.MachineId == row.MachineId
-                && (Min(e.PlannedEnd, row.End) - Max(e.PlannedStart, row.Start)).TotalMinutes >= 0.8 * length);
+                && (Min(e.ActualEnd, row.End) - Max(e.PlannedStart, row.Start)).TotalMinutes >= 0.8 * length);
             if (slot == null || length <= 0)
                 continue;
             var q = new StopQualification

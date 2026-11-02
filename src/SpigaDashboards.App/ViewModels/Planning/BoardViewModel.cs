@@ -493,7 +493,8 @@ public partial class BoardViewModel : ObservableObject
                         Source = e,
                     });
                 }
-                foreach (var e in _events.Where(e => e.MachineId == m.MachineId && !e.IsStop))
+                // Done ones first, so one still to do is drawn on top and can be clicked.
+                foreach (var e in _events.Where(e => e.MachineId == m.MachineId && !e.IsStop).OrderBy(e => e.Status == PlanStatus.Done ? 0 : 1))
                 {
                     var kind = e.Status == PlanStatus.Done ? BlockKind.MaintenanceDone
                         : e.PlannedEnd < now ? BlockKind.MaintenanceLate : BlockKind.Maintenance;
@@ -502,9 +503,9 @@ public partial class BoardViewModel : ObservableObject
                     {
                         Key = "E" + e.Id, Kind = kind, StartFrac = startFrac, EndFrac = endFrac,
                         Label = kind == BlockKind.MaintenanceLate ? "Non validée" : e.Task,
-                        Sub = kind == BlockKind.MaintenanceLate ? e.Task : ShortSpan(e.PlannedStart, e.PlannedEnd),
+                        Sub = kind == BlockKind.MaintenanceLate ? e.Task : ShortSpan(e.PlannedStart, e.ActualEnd),
                         ShowLabel = endFrac - startFrac >= 0.036, Icon = kind == BlockKind.MaintenanceLate ? WarningIcon : WrenchIcon,
-                        Tooltip = $"Maintenance{(kind == BlockKind.MaintenanceLate ? " non validée" : "")} · {e.Task} · {Span(e.PlannedStart, e.PlannedEnd)} · {PlanningContext.Duration(e.DurationMinutes)}",
+                        Tooltip = $"Maintenance{(kind == BlockKind.MaintenanceLate ? " non validée" : "")} · {e.Task} · {Span(e.PlannedStart, e.ActualEnd)} · {PlanningContext.Duration((e.ActualEnd - e.PlannedStart).TotalMinutes)}",
                         Source = e,
                     });
                 }
@@ -633,7 +634,7 @@ public partial class BoardViewModel : ObservableObject
     private (double Start, double End) SlotFracs(MaintenanceEvent e)
     {
         var start = Frac(e.PlannedStart);
-        var end = Frac(e.PlannedEnd);
+        var end = Frac(e.ActualEnd);
         var min = Range == BoardRange.Day ? 0 : 0.02;
         return (start, Math.Min(1, Math.Max(end, start + min)));
     }
@@ -785,6 +786,12 @@ public partial class BoardViewModel : ObservableObject
                     DetailRows.Add(new DetailRow("Intervenant", e.Technician));
                 if (e.DoneAt is { } doneAt)
                     DetailRows.Add(new DetailRow("Réalisée le", When(doneAt)));
+                if (e.ActualEnd < e.PlannedEnd)
+                {
+                    DetailRows.Add(new DetailRow("Fin réelle", When(e.ActualEnd)));
+                    DetailNote = "Validée avant la fin prévue : le reste du créneau compte à nouveau dans le TRS.";
+                    DetailNoteBrush = green;
+                }
                 if (e.Status == PlanStatus.Planned && e.PlannedEnd < now)
                 {
                     DetailNote = "Le créneau est passé : validez-la si elle a été faite, sinon replanifiez-la.";
