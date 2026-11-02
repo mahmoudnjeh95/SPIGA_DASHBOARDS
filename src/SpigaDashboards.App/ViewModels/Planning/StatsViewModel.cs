@@ -22,18 +22,34 @@ public sealed record RepeatRow(string MachineName, string Component, int Count, 
 
 // "Statistiques" tab: the qualified stops of the last 7 / 30 / 90 days, by
 // cause, component, line, day and hour, poste and team, plus the components
-// that keep failing. Only stops given a cause count (Pannes tab).
+// that keep failing. Only stops given a cause count (Pannes tab). Can be
+// narrowed to one line and / or one team.
 public partial class StatsViewModel : ObservableObject
 {
     private readonly PlanningContext _ctx;
     private bool _refreshAgain;
 
     public event Action<string, string>? PreventiveRequested;
+    public event Action? QualifyRequested;
 
     public StatsViewModel(PlanningContext ctx) => _ctx = ctx;
 
+    private const string AllMachines = "Toutes les lignes";
+    private const string AllTeams = "Toutes les équipes";
+
     [ObservableProperty] private int periodDays = 30;
-    [ObservableProperty] private bool pannesOnly = true;
+    [ObservableProperty] private string selectedMachine = AllMachines;
+    [ObservableProperty] private string selectedTeam = AllTeams;
+    [ObservableProperty] private bool pannesOnly;
+
+    // "N arrêts sans cause…" from the Pannes tab, with a button to go there.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUnqualified))]
+    private string unqualifiedText = "";
+    public bool HasUnqualified => UnqualifiedText.Length > 0;
+
+    [RelayCommand]
+    private void GoQualify() => QualifyRequested?.Invoke();
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string paretoCaption = "";
@@ -41,6 +57,8 @@ public partial class StatsViewModel : ObservableObject
     [ObservableProperty] private string heatCaption = "";
     [ObservableProperty] private string groupCaption = "";
 
+    public ObservableCollection<string> MachineOptions { get; } = new() { AllMachines };
+    public ObservableCollection<string> TeamOptions { get; } = new() { AllTeams };
     public ObservableCollection<StatTile> Tiles { get; } = new();
     public ObservableCollection<StatBar> ByCause { get; } = new();
     public ObservableCollection<StatBar> ByComponent { get; } = new();
@@ -68,6 +86,19 @@ public partial class StatsViewModel : ObservableObject
         set => PeriodDays = int.Parse(value, CultureInfo.InvariantCulture);
     }
     partial void OnPannesOnlyChanged(bool value) => _ = RefreshAsync();
+    partial void OnSelectedMachineChanged(string value) => _ = RefreshAsync();
+    partial void OnSelectedTeamChanged(string value) => _ = RefreshAsync();
+
+    // The lines and teams to pick from, once the machines are known.
+    private void FillOptions()
+    {
+        if (MachineOptions.Count == 1)
+            foreach (var m in _ctx.Machines)
+                MachineOptions.Add(m.MachineName);
+        if (TeamOptions.Count == 1)
+            foreach (var team in _ctx.Teams.TeamNames)
+                TeamOptions.Add(team);
+    }
 
     private static bool Dark => ThemeService.CurrentTheme == AppTheme.Dark;
     private static Brush Blue => PlanningContext.Brush(Color.FromRgb(0x39, 0x87, 0xE5));
@@ -110,16 +141,22 @@ public partial class StatsViewModel : ObservableObject
         var now = DateTime.Now;
         var from = now.Date.AddDays(-PeriodDays + 1);
         var prevFrom = from.AddDays(-PeriodDays);
-        var ids = _ctx.Machines.Select(m => m.MachineId).ToHashSet();
+        FillOptions();
+        var machines = SelectedMachine is AllMachines or null
+            ? _ctx.Machines
+            : _ctx.Machines.Where(m => m.MachineName == SelectedMachine).ToList();
+        var ids = machines.Select(m => m.MachineId).ToHashSet();
+        var team = SelectedTeam is AllTeams or null ? null : SelectedTeam;
+        bool Keep(StopQualification q) => ids.Contains(q.MachineId) && (!PannesOnly || q.IsPanne) && (team == null || q.Team == team);
 
-        var all = (await _ctx.Planning.GetQualificationsAsync(prevFrom, now.AddDays(1)))
-            .Where(q => ids.Contains(q.MachineId) && (!PannesOnly || q.IsPanne)).ToList();
+        var all = (await _ctx.Planning.GetQualificationsAsync(prevFrom, now.AddDays(1))).Where(Keep).ToList();
         var cur = all.Where(q => q.StopStart >= from).ToList();
         var prev = all.Where(q => q.StopStart < from).ToList();
 
-        // Run hours for MTBF / lost availability: day buckets are light.
-        var buckets = await _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now, BucketSize.Day);
-        var runHours = buckets.Sum(b => b.RunMinutes) / 60;
+        // Run hours for MTBF / lost availability: day buckets are light; one
+        // team needs hour buckets (a day mixes the three postes).
+        var buckets = await _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now, team == null ? BucketSize.Day : BucketSize.Hour);
+        var runHours = buckets.Where(b => team == null || _ctx.Teams.TeamOf(b) == team).Sum(b => b.RunMinutes) / 60;
 
         var minutes = cur.Sum(q => q.Minutes);
         var prevMinutes = prev.Sum(q => q.Minutes);
@@ -145,7 +182,7 @@ public partial class StatsViewModel : ObservableObject
             : $"Les 3 premiers composants font {top3 / minutes * 100:0} % du temps d'arrêt";
 
         // By line
-        var perMachine = _ctx.Machines.Select(m => (m, list: cur.Where(q => q.MachineId == m.MachineId).ToList()))
+        var perMachine = machines.Select(m => (m, list: cur.Where(q => q.MachineId == m.MachineId).ToList()))
             .OrderByDescending(x => x.list.Sum(q => q.Minutes)).ToList();
         var maxMachine = Math.Max(1, perMachine.Max(x => x.list.Sum(q => q.Minutes)));
         ByMachine.Clear();
@@ -172,8 +209,7 @@ public partial class StatsViewModel : ObservableObject
 
         // 12-week trend (independent of the period)
         var weekStart = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
-        var trend = (await _ctx.Planning.GetQualificationsAsync(weekStart.AddDays(-77), now.AddDays(1)))
-            .Where(q => ids.Contains(q.MachineId) && (!PannesOnly || q.IsPanne)).ToList();
+        var trend = (await _ctx.Planning.GetQualificationsAsync(weekStart.AddDays(-77), now.AddDays(1))).Where(Keep).ToList();
         var weekly = Enumerable.Range(0, 12).Select(i =>
         {
             var ws = weekStart.AddDays(-7 * (11 - i));

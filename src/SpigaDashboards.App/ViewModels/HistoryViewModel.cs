@@ -167,7 +167,7 @@ public partial class HistoryViewModel : ObservableObject
                     TareGrams = _settings.FindTare(l.MachineId, l.TargetNetWeight),
                     AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
                     DeviationGrams = k.WeightDeviationGrams,
-                    ProductionKg = Math.Round(l.TotalBags * (avg ?? l.TargetNetWeight) / 1000.0, 1),
+                    ProductionKg = Math.Round(l.TotalBags * l.TargetNetWeight / 1000.0, 1),
                     TotalBags = l.TotalBags,
                     BagsInTolerance = l.BagsInTolerance,
                     BagsOverTolerance = l.BagsOverTolerance,

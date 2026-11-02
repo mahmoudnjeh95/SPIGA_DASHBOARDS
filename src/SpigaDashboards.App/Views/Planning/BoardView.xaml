@@ -3,7 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:SpigaDashboards.App.Views"
              xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels.Planning"
-             x:Name="Root" PreviewKeyDown="Root_PreviewKeyDown">
+             x:Name="Root" PreviewKeyDown="Root_PreviewKeyDown"
+             PreviewMouseLeftButtonDown="Root_PreviewMouseLeftButtonDown" PreviewMouseMove="Root_PreviewMouseMove"
+             PreviewMouseLeftButtonUp="Root_PreviewMouseLeftButtonUp" LostMouseCapture="Root_LostMouseCapture">
 
     <!-- Planification tab (BoardViewModel): the day, week or month of every
          line, with orders (and their real progress), maintenance and pannes;
@@ -44,11 +46,14 @@
 
             <!-- One block on the board -->
             <DataTemplate x:Key="Block" DataType="{x:Type vm:BoardBlock}">
-                <Button x:Name="Btn" Style="{StaticResource Bare}" Command="{Binding Select}" ToolTip="{Binding Tooltip}" Margin="1,8"
+                <!-- Planned slots can be dragged (BoardView.xaml.cs): the middle moves it, an edge moves its start / end. -->
+                <Button x:Name="Btn" Style="{StaticResource Bare}" Command="{Binding Select}" ToolTip="{Binding Tooltip}" Margin="1,5"
                         VerticalContentAlignment="Stretch"
                         AutomationProperties.Name="{Binding Tooltip}">
                     <Grid>
                         <Rectangle x:Name="Shape" RadiusX="7" RadiusY="7" Fill="{Binding Fill}" Stroke="{Binding Stroke}" StrokeThickness="1"/>
+                        <TextBlock Text="{Binding Icon}" FontFamily="Segoe MDL2 Assets" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{StaticResource StopInk}" Visibility="{Binding ShowIcon, Converter={StaticResource BoolToVisibility}}"/>
                         <StackPanel Margin="8,0" VerticalAlignment="Center" Visibility="{Binding ShowLabel, Converter={StaticResource BoolToVisibility}}">
                             <TextBlock x:Name="L1" Text="{Binding Label}" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource PrimaryTextBrush}"/>
@@ -82,8 +87,15 @@
                     <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:BlockKind.MaintenanceLate}">
                         <Setter TargetName="Shape" Property="Fill" Value="{StaticResource LateFill}"/>
                         <Setter TargetName="Shape" Property="Stroke" Value="{StaticResource LateStroke}"/>
-                        <Setter TargetName="Shape" Property="StrokeThickness" Value="1.5"/>
+                        <Setter TargetName="Shape" Property="StrokeThickness" Value="2"/>
                         <Setter TargetName="Shape" Property="StrokeDashArray" Value="3 2"/>
+                        <Setter TargetName="L1" Property="Foreground" Value="{StaticResource LateStroke}"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:BlockKind.PlannedStop}">
+                        <Setter TargetName="Shape" Property="Fill" Value="{StaticResource StopStripes}"/>
+                        <Setter TargetName="Shape" Property="Stroke" Value="#5F6B6D"/>
+                        <Setter TargetName="L1" Property="Foreground" Value="{StaticResource StopInk}"/>
+                        <Setter TargetName="L2" Property="Foreground" Value="{StaticResource StopInk}"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding Kind}" Value="{x:Static vm:BlockKind.Panne}">
                         <Setter TargetName="Shape" Property="Fill" Value="{StaticResource PanneBrush}"/>
@@ -106,6 +118,14 @@
                     <Button Content="Nuit · 22:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteCommand}" CommandParameter="2"/>
                 </WrapPanel>
             </ControlTemplate>
+            <!-- Under the end hour: one click for the end of the poste after the start. -->
+            <ControlTemplate x:Key="PosteEndChips" TargetType="ContentControl">
+                <WrapPanel>
+                    <Button Content="Fin Matin · 14:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteEndCommand}" CommandParameter="0"/>
+                    <Button Content="Fin Après-midi · 22:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteEndCommand}" CommandParameter="1"/>
+                    <Button Content="Fin Nuit · 06:00" Style="{StaticResource SuggestChip}" Command="{Binding PickPosteEndCommand}" CommandParameter="2"/>
+                </WrapPanel>
+            </ControlTemplate>
 
             <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
                 <Setter Property="Padding" Value="10,4"/>
@@ -124,14 +144,15 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Margin="0,0,0,14">
+        <Grid Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0">
+            <StackPanel VerticalAlignment="Bottom" Margin="0,0,16,0">
                 <TextBlock Text="PLANIFICATION" Style="{StaticResource Eyebrow}"/>
-                <TextBlock Text="{Binding RangeLabel}" Style="{StaticResource H1}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding RangeLabel}" Style="{StaticResource H1}" FontSize="22" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding RangeLabel}"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                 <Border Style="{StaticResource SegTrack}" Margin="0,0,12,0">
@@ -147,49 +168,52 @@
                 <Button Content="‹" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding PreviousCommand}" ToolTip="Précédent"/>
                 <Button Content="Aujourd'hui" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding TodayCommand}"/>
                 <Button Content="›" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding NextCommand}" ToolTip="Suivant"/>
-                <Button Content="+ Règle préventive" Style="{StaticResource BarButton}" Margin="16,0,0,0" Command="{Binding NewPlanCommand}"/>
-                <Button Content="Planifier une maintenance" Style="{StaticResource BarButton}" Margin="8,0,0,0" Background="#FAB219" Foreground="#1A1406"
-                        Command="{Binding NewEventCommand}"/>
-                <Button Content="+ Ordre de fabrication" Style="{StaticResource AccentBarButton}" Margin="8,0,0,0" Command="{Binding NewOrderCommand}"/>
+                <Button Content="+ Règle préventive" Style="{StaticResource BarButton}" Margin="12,0,0,0" Command="{Binding NewPlanCommand}"/>
+                <Button Content="+ Arrêt planifié" Style="{StaticResource BarButton}" Margin="6,0,0,0" Background="#7F8C8D" Foreground="White"
+                        ToolTip="Planifier un arrêt (pas de commande, jour férié…)" Command="{Binding NewStopCommand}"/>
+                <Button Content="+ Maintenance" Style="{StaticResource BarButton}" Margin="6,0,0,0" Background="#FAB219" Foreground="#1A1406"
+                        ToolTip="Planifier une maintenance" Command="{Binding NewEventCommand}"/>
+                <!-- Not in this version: greyed, a click says so. -->
+                <Button Content="+ Ordre de fab." Style="{StaticResource BarButton}" Margin="6,0,0,0" Opacity="0.5"
+                        ToolTip="Ordres de fabrication : non disponible dans cette version" Command="{Binding NewOrderCommand}"/>
             </StackPanel>
         </Grid>
 
         <!-- KPI strip -->
-        <UniformGrid Grid.Row="1" Rows="1" Margin="-7,0,-7,14">
-            <Border Style="{StaticResource Card}" Margin="7,0">
-                <StackPanel>
-                    <TextBlock Text="Charge planifiée" Style="{StaticResource Small}" FontSize="13"/>
-                    <TextBlock Text="{Binding ChargeText}" Style="{StaticResource BigValue}" Margin="0,4,0,8"/>
-                    <Grid Height="6">
-                        <Border Background="{DynamicResource HoverBackgroundBrush}" CornerRadius="3"/>
-                        <Border Background="{DynamicResource AccentBrush}" CornerRadius="3" RenderTransformOrigin="0,0.5">
-                            <Border.RenderTransform>
-                                <ScaleTransform ScaleX="{Binding ChargeRatio}"/>
-                            </Border.RenderTransform>
-                        </Border>
-                    </Grid>
-                </StackPanel>
+        <!-- KPI strip: one line per tile, so all the lines of the board fit under it. -->
+        <UniformGrid Grid.Row="1" Rows="1" Margin="-5,0,-5,10">
+            <UniformGrid.Resources>
+                <Style x:Key="KpiTile" TargetType="Border" BasedOn="{StaticResource Card}">
+                    <Setter Property="Margin" Value="5,0"/>
+                    <Setter Property="Padding" Value="16,8"/>
+                </Style>
+            </UniformGrid.Resources>
+            <Border Style="{StaticResource KpiTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding StopsText}" Style="{StaticResource BigValue}" FontSize="24" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PeriodSuffix, StringFormat='Arrêts planifiés {0}'}" Style="{StaticResource Small}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StopsSub}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="7,0">
-                <StackPanel>
-                    <TextBlock Text="Ordres de fabrication" Style="{StaticResource Small}" FontSize="13"/>
-                    <TextBlock Text="{Binding OrdersText}" Style="{StaticResource BigValue}" Margin="0,4,0,4"/>
-                    <TextBlock Text="{Binding OrdersSub}" Style="{StaticResource Small}"/>
-                </StackPanel>
+            <Border Style="{StaticResource KpiTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding MaintText}" Style="{StaticResource BigValue}" FontSize="24" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PeriodSuffix, StringFormat='Maintenances {0}'}" Style="{StaticResource Small}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding MaintSub}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="7,0">
-                <StackPanel>
-                    <TextBlock Text="{Binding PeriodSuffix, StringFormat='Maintenances {0}'}" Style="{StaticResource Small}" FontSize="13"/>
-                    <TextBlock Text="{Binding MaintText}" Style="{StaticResource BigValue}" Margin="0,4,0,4"/>
-                    <TextBlock Text="{Binding MaintSub}" Style="{StaticResource Small}"/>
-                </StackPanel>
-            </Border>
-            <Border Style="{StaticResource Card}" Margin="7,0">
-                <StackPanel>
-                    <TextBlock Text="{Binding PeriodSuffix, StringFormat='Pannes {0}'}" Style="{StaticResource Small}" FontSize="13"/>
-                    <TextBlock Text="{Binding PannesText}" Style="{StaticResource BigValue}" Margin="0,4,0,4"/>
-                    <TextBlock Text="{Binding PannesSub}" Style="{StaticResource Small}"/>
-                </StackPanel>
+            <Border Style="{StaticResource KpiTile}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding PannesText}" Style="{StaticResource BigValue}" FontSize="24" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding PeriodSuffix, StringFormat='Pannes {0}'}" Style="{StaticResource Small}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding PannesSub}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
         </UniformGrid>
 
@@ -214,14 +238,14 @@
                             <ItemsControl ItemsSource="{Binding Columns}" ItemsPanel="{StaticResource OneRow}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:ColumnHeader}">
-                                        <Border x:Name="Day" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0" Padding="0,9,0,0">
+                                        <Border x:Name="Day" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1,0,0,0" Padding="0,6,0,0">
                                             <StackPanel>
-                                                <TextBlock x:Name="Name" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Margin="6,0,0,6"
+                                                <TextBlock x:Name="Name" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Margin="6,0,0,3"
                                                            TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryTextBrush}"/>
                                                 <ItemsControl ItemsSource="{Binding Ticks}" ItemsPanel="{StaticResource OneRow}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type vm:ColumnTick}">
-                                                            <TextBlock Text="{Binding Label}" FontSize="10" HorizontalAlignment="Center" Margin="0,0,0,4"
+                                                            <TextBlock Text="{Binding Label}" FontSize="10" HorizontalAlignment="Center" Margin="0,0,0,3"
                                                                        Foreground="{DynamicResource SecondaryTextBrush}"/>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -245,7 +269,7 @@
                     </Grid>
 
                     <!-- Legend -->
-                    <WrapPanel DockPanel.Dock="Bottom" Margin="18,10" Orientation="Horizontal">
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="18,6" Orientation="Horizontal">
                         <WrapPanel.Resources>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontSize" Value="12"/>
@@ -259,6 +283,7 @@
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="#409085E9" Stroke="#9085E9"/><TextBlock Text="Pâte longue"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource MaintStripes}"/><TextBlock Text="Maintenance"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource LateFill}" Stroke="{StaticResource LateStroke}" StrokeDashArray="3 2"/><TextBlock Text="Non validée"/>
+                        <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource StopStripes}"/><TextBlock Text="Arrêt planifié"/>
                         <Rectangle Width="8" Height="14" RadiusX="2" RadiusY="2" Fill="{StaticResource PanneBrush}"/><TextBlock Text="Panne"/>
                         <Rectangle Width="18" Height="4" RadiusX="2" RadiusY="2" Fill="{DynamicResource SecondaryTextBrush}"/><TextBlock Text="Avancement réel (compteur)"/>
                         <Rectangle Width="2" Height="14" Fill="{DynamicResource PrimaryTextBrush}"/><TextBlock Text="Maintenant"/>
@@ -271,7 +296,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:SectorGroup}">
                                     <StackPanel>
-                                        <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,1,0,1" Padding="18,8">
+                                        <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,1,0,1" Padding="18,4">
                                             <StackPanel Orientation="Horizontal">
                                                 <Border Width="10" Height="10" CornerRadius="3" Background="{Binding Color}" Margin="0,0,9,0"/>
                                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"/>
@@ -281,7 +306,7 @@
                                         <ItemsControl ItemsSource="{Binding Rows}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:MachineRow}">
-                                                    <Grid Height="58">
+                                                    <Grid Height="40">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="170"/>
                                                             <ColumnDefinition Width="*"/>
@@ -289,7 +314,7 @@
                                                         <StackPanel Orientation="Horizontal" Margin="18,0,6,0" VerticalAlignment="Center" ToolTip="{Binding MachineName}">
                                                             <Ellipse Width="8" Height="8" Fill="{Binding StateBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
                                                             <StackPanel>
-                                                                <TextBlock Text="{Binding MachineName}" Style="{StaticResource Mono}" FontSize="14" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding MachineName}" Style="{StaticResource Mono}" FontSize="13" TextTrimming="CharacterEllipsis"/>
                                                                 <TextBlock Text="{Binding StateText}" Style="{StaticResource Small}" FontSize="11"/>
                                                             </StackPanel>
                                                         </StackPanel>
@@ -314,7 +339,7 @@
                                                             </ItemsControl>
                                                             <!-- Slot picked, or where the open form puts its block -->
                                                             <views:TimelinePanel IsHitTestVisible="False" Visibility="{Binding HasSlot, Converter={StaticResource BoolToVisibility}}">
-                                                                <Border Margin="1,6" CornerRadius="7" BorderThickness="2" Background="{DynamicResource AccentSoftBrush}"
+                                                                <Border Margin="1,3" CornerRadius="7" BorderThickness="2" Background="{DynamicResource AccentSoftBrush}"
                                                                         BorderBrush="{DynamicResource AccentBrush}"
                                                                         views:TimelinePanel.Start="{Binding SlotStartFrac}" views:TimelinePanel.End="{Binding SlotEndFrac}">
                                                                     <TextBlock Text="{Binding SlotText}" FontSize="11" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"
@@ -359,20 +384,41 @@
                             <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Fill="#EC835A" Margin="0,5,8,0" VerticalAlignment="Top"/>
                             <TextBlock Text="{Binding SlotWarning}" Style="{StaticResource Caption}" Foreground="{DynamicResource PrimaryTextBrush}"/>
                         </DockPanel>
-                        <Button Content="+ Ordre de fabrication" Style="{StaticResource AccentBarButton}" Margin="0,14,0,0" Command="{Binding OrderInSlotCommand}"/>
+                        <Button Content="Planifier un arrêt" Style="{StaticResource BarButton}" Margin="0,14,0,0" Background="#7F8C8D" Foreground="White"
+                                Command="{Binding StopInSlotCommand}"/>
                         <Button Content="Planifier une maintenance" Style="{StaticResource BarButton}" Margin="0,8,0,0" Background="#FAB219" Foreground="#1A1406"
                                 Command="{Binding EventInSlotCommand}"/>
+                        <Button Content="+ Ordre de fabrication" Style="{StaticResource BarButton}" Margin="0,8,0,0" Opacity="0.5"
+                                ToolTip="Non disponible dans cette version" Command="{Binding OrderInSlotCommand}"/>
                     </StackPanel>
                 </Border>
             </Popup>
 
-            <!-- Side panel -->
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+            <!-- Side panel: what is selected, or the open form, whose buttons stay
+                 in view at the bottom whatever its length. -->
+            <DockPanel Grid.Column="2">
+            <Border DockPanel.Dock="Bottom" Style="{StaticResource Card}" Padding="14,10" Margin="0,10,0,0"
+                    Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Padding="22,8" Command="{Binding SaveOrderCommand}"
+                            Visibility="{Binding IsEditingOrder, Converter={StaticResource BoolToVisibility}}"/>
+                    <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Padding="22,8" Command="{Binding SaveEventCommand}"
+                            Visibility="{Binding IsEditingEvent, Converter={StaticResource BoolToVisibility}}"/>
+                    <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Padding="22,8" Command="{Binding SavePlanCommand}"
+                            Visibility="{Binding IsEditingPlan, Converter={StaticResource BoolToVisibility}}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Annuler" Style="{StaticResource BarButton}" Command="{Binding CancelEditorCommand}" ToolTip="Fermer le formulaire sans enregistrer"/>
+                        <Button Content="Supprimer la règle" Style="{StaticResource BarButton}" Margin="6,0,0,0" Command="{Binding DeletePlanCommand}"
+                                Visibility="{Binding CanDeletePlan, Converter={StaticResource BoolToVisibility}}"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <ScrollViewer x:Name="SidePanel" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- Nothing selected -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14" Visibility="{Binding ShowEmptyDetail, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Style="{StaticResource Caption}" Margin="0,4"
-                                   Text="Cliquez un bloc du planning pour voir son détail : avancement réel d'un ordre, maintenance à valider, panne. Cliquez ou glissez sur une partie vide d'une ligne pour y planifier un ordre ou une maintenance."/>
+                                   Text="Cliquez un bloc pour voir son détail. Glissez un bloc pour le déplacer, ou son bord pour changer son début / sa fin. Cliquez ou glissez sur une partie vide d'une ligne pour y planifier une maintenance ou un arrêt."/>
                     </Border>
 
                     <!-- Selected block -->
@@ -435,7 +481,7 @@
                             <UniformGrid Rows="1" Margin="-4,16,-4,0">
                                 <Button Content="Modifier" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding EditSelectedCommand}"
                                         Visibility="{Binding CanEditSelected, Converter={StaticResource BoolToVisibility}}"/>
-                                <Button Content="Annuler" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding CancelSelectedCommand}"
+                                <Button Content="Supprimer" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding DeleteSelectedCommand}"
                                         Visibility="{Binding CanEditSelected, Converter={StaticResource BoolToVisibility}}"/>
                                 <Button Content="{Binding CloseSelectedText}" Style="{StaticResource AccentBarButton}" Margin="4,0" Command="{Binding CloseSelectedCommand}"
                                         Visibility="{Binding CanCloseSelected, Converter={StaticResource BoolToVisibility}}"/>
@@ -499,25 +545,36 @@
                                     <TextBox Style="{StaticResource Input}" Text="{Binding OrderEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
                                 </StackPanel>
                             </Grid>
+                            <ContentControl Template="{StaticResource PosteEndChips}" Focusable="False"/>
                             <Button Content="Fin à la cadence nominale" Style="{StaticResource SuggestChip}" HorizontalAlignment="Left"
                                     Command="{Binding OrderEndFromRateCommand}" ToolTip="Fin = quantité à la cadence nominale (Paramètres)"
                                     Visibility="{Binding CanOrderEndFromRate, Converter={StaticResource BoolToVisibility}}"/>
                             <TextBlock Text="{Binding OrderEstimate}" Style="{StaticResource Caption}" Margin="0,10,0,0"/>
-                            <DockPanel Margin="0,16,0,0">
-                                <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Command="{Binding SaveOrderCommand}"/>
-                                <Button Content="Annuler" Style="{StaticResource BarButton}" HorizontalAlignment="Left" Command="{Binding CancelEditorCommand}"/>
-                            </DockPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Maintenance slot form -->
+                    <!-- Maintenance / planned stop slot form -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14" Visibility="{Binding IsEditingEvent, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
                             <TextBlock Text="{Binding FormTitle}" Style="{StaticResource H2}" FontSize="18" Margin="0,0,0,12"/>
                             <TextBlock Text="Ligne" Style="{StaticResource FieldLabel}"/>
                             <ComboBox Style="{StaticResource DarkComboBox}" Height="40" FontSize="14" ItemsSource="{Binding MachineNames}" SelectedItem="{Binding EventMachine}"/>
-                            <TextBlock Text="Tâche" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
-                            <TextBox Style="{StaticResource Input}" Text="{Binding EventTask, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Tâche de maintenance"/>
+                            <TextBlock Text="{Binding EventTaskLabel}" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
+                            <TextBox Style="{StaticResource Input}" Text="{Binding EventTask, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="{Binding EventTaskLabel}"/>
+                            <ItemsControl ItemsSource="{Binding StopReasons}" Focusable="False"
+                                          Visibility="{Binding IsStopForm, Converter={StaticResource BoolToVisibility}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding}" Style="{StaticResource SuggestChip}" CommandParameter="{Binding}"
+                                                Command="{Binding DataContext.PickStopReasonCommand, ElementName=Root}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -549,13 +606,15 @@
                                     <TextBox Style="{StaticResource Input}" Text="{Binding EventEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
                                 </StackPanel>
                             </Grid>
+                            <ContentControl Template="{StaticResource PosteEndChips}" Focusable="False"/>
                             <TextBlock Text="{Binding EventLength}" Style="{StaticResource Caption}" Margin="0,10,0,0"/>
-                            <TextBlock Text="Intervenant" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
-                            <TextBox Style="{StaticResource Input}" Text="{Binding EventTechnician, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Intervenant"/>
-                            <DockPanel Margin="0,16,0,0">
-                                <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Command="{Binding SaveEventCommand}"/>
-                                <Button Content="Annuler" Style="{StaticResource BarButton}" HorizontalAlignment="Left" Command="{Binding CancelEditorCommand}"/>
-                            </DockPanel>
+                            <StackPanel Visibility="{Binding IsStopForm, Converter={StaticResource InverseBoolToVisibility}}">
+                                <TextBlock Text="Intervenant" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
+                                <TextBox Style="{StaticResource Input}" Text="{Binding EventTechnician, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Intervenant"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding IsStopForm, Converter={StaticResource BoolToVisibility}}"
+                                       Text="Hors TRS : le temps d'arrêt planifié n'est pas compté dans le temps requis de la ligne."/>
                         </StackPanel>
                     </Border>
 
@@ -588,18 +647,31 @@
                             <DatePicker SelectedDate="{Binding PlanLastDone}" Height="40" VerticalContentAlignment="Center"/>
                             <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0"
                                        Text="Usage : l'échéance avance avec les sacs comptés sur la ligne depuis la dernière réalisation."/>
-                            <DockPanel Margin="0,16,0,0">
-                                <Button DockPanel.Dock="Right" Content="Enregistrer" Style="{StaticResource AccentBarButton}" Command="{Binding SavePlanCommand}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Content="Annuler" Style="{StaticResource BarButton}" Command="{Binding CancelEditorCommand}"/>
-                                    <Button Content="Supprimer" Style="{StaticResource BarButton}" Margin="6,0,0,0" Command="{Binding DeletePlanCommand}"/>
-                                </StackPanel>
-                            </DockPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Preventive rules -->
+                    <!-- Alerts -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Alertes de planification" Style="{StaticResource H2}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Rien à signaler sur la période affichée." Style="{StaticResource Caption}"
+                                       Visibility="{Binding HasAlerts, Converter={StaticResource InverseBoolToVisibility}}"/>
+                            <ItemsControl ItemsSource="{Binding Alerts}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:AlertRow}">
+                                        <DockPanel Margin="0,5">
+                                            <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Fill="{Binding Brush}" Margin="0,5,10,0" VerticalAlignment="Top"/>
+                                            <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}">
+                                                <Run Text="{Binding Machine, Mode=OneWay}" FontWeight="Bold" FontFamily="Cascadia Mono, Consolas"/><Run Text=" — "/><Run Text="{Binding Text, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <!-- Preventive rules -->
+                    <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <DockPanel Margin="0,0,0,6">
                                 <TextBlock DockPanel.Dock="Right" Text="calendrier + usage" Style="{StaticResource Small}" VerticalAlignment="Center"/>
@@ -650,30 +722,49 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Alerts -->
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <TextBlock Text="Alertes de planification" Style="{StaticResource H2}" Margin="0,0,0,8"/>
-                            <TextBlock Text="Rien à signaler sur la période affichée." Style="{StaticResource Caption}"
-                                       Visibility="{Binding HasAlerts, Converter={StaticResource InverseBoolToVisibility}}"/>
-                            <ItemsControl ItemsSource="{Binding Alerts}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:AlertRow}">
-                                        <DockPanel Margin="0,5">
-                                            <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Fill="{Binding Brush}" Margin="0,5,10,0" VerticalAlignment="Top"/>
-                                            <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}">
-                                                <Run Text="{Binding Machine, Mode=OneWay}" FontWeight="Bold" FontFamily="Cascadia Mono, Consolas"/><Run Text=" — "/><Run Text="{Binding Text, Mode=OneWay}"/>
-                                            </TextBlock>
-                                        </DockPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
             </ScrollViewer>
+            </DockPanel>
         </Grid>
 
-        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Style="{StaticResource Caption}" Margin="2,10,0,0"/>
+        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Style="{StaticResource Caption}" FontSize="13" FontWeight="SemiBold" Margin="2,8,0,0"
+                   Foreground="{DynamicResource PrimaryTextBrush}"/>
+
+        <!-- Asked before what can't be undone (Supprimer, Réalisée) -->
+        <Border Grid.RowSpan="4" Background="#99000000" Visibility="{Binding IsConfirmOpen, Converter={StaticResource BoolToVisibility}}">
+            <Border Style="{StaticResource Card}" Width="480" Padding="24,20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.35"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="CONFIRMATION" Style="{StaticResource Eyebrow}"/>
+                    <TextBlock Text="{Binding ConfirmText}" TextWrapping="Wrap" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0"
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                        <Button Content="Non, garder" Style="{StaticResource BarButton}" Padding="18,6" Command="{Binding ConfirmNoCommand}" IsCancel="True"/>
+                        <Button Content="{Binding ConfirmYesText}" Style="{StaticResource AccentBarButton}" Padding="22,6" Margin="8,0,0,0"
+                                Command="{Binding ConfirmYesCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- Production orders clicked: not in this version -->
+        <Border Grid.RowSpan="4" Background="#99000000" MouseLeftButtonDown="Unavailable_MouseDown"
+                Visibility="{Binding IsUnavailableOpen, Converter={StaticResource BoolToVisibility}}">
+            <Border Style="{StaticResource Card}" Width="460" Padding="24,20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.35"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="ORDRES DE FABRICATION" Style="{StaticResource Eyebrow}"/>
+                    <TextBlock Text="Fonctionnalité non disponible" Style="{StaticResource H2}" FontSize="18" Margin="0,4,0,0"/>
+                    <TextBlock Text="{x:Static vm:BoardViewModel.OrdersUnavailableText}" TextWrapping="Wrap" FontSize="14" Margin="0,10,0,0"
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                    <Button Content="OK" Style="{StaticResource AccentBarButton}" HorizontalAlignment="Right" Margin="0,18,0,0" Padding="28,6"
+                            Command="{Binding CloseUnavailableCommand}"/>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

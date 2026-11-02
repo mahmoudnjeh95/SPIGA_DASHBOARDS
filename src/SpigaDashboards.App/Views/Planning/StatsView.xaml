@@ -79,7 +79,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0">
                     <TextBlock Text="STATISTIQUES" Style="{StaticResource Eyebrow}"/>
-                    <TextBlock Text="Où et quand tombent les pannes" Style="{StaticResource H1}" Margin="0,2,0,0"/>
+                    <TextBlock Text="Statistique des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
                     <TextBlock Text="Calculé sur les arrêts qualifiés (onglet Pannes)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
@@ -93,14 +93,30 @@
                                          IsChecked="{Binding PeriodKey, Converter={StaticResource ValueToBool}, ConverterParameter=90}"/>
                         </StackPanel>
                     </Border>
+                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="10,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                              ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}" AutomationProperties.Name="Ligne"/>
+                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="8,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                              ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}" AutomationProperties.Name="Équipe"/>
                     <CheckBox Content="Pannes seulement" IsChecked="{Binding PannesOnly}" Margin="14,0,0,0" VerticalAlignment="Center"
                               FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"
-                              ToolTip="Décoché : tous les arrêts qualifiés (format, nettoyage, manque matière…)"/>
+                              ToolTip="Coché : seulement les pannes (mécanique, électrique, pneumatique). Décoché : tous les arrêts qualifiés."/>
                     <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>
                 </StackPanel>
             </Grid>
 
             <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource Caption}" Margin="0,0,0,8"/>
+
+            <!-- Stops still without a cause: not counted here -->
+            <Border Style="{StaticResource Card}" Padding="16,10" Margin="0,0,0,12" Background="#14FAB219" BorderBrush="#66FAB219"
+                    Visibility="{Binding HasUnqualified, Converter={StaticResource BoolToVisibility}}">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Qualifier →" Style="{StaticResource BarButton}" Background="#FAB219" Foreground="#1A1406"
+                            Margin="12,0,0,0" Command="{Binding GoQualifyCommand}"/>
+                    <Ellipse DockPanel.Dock="Left" Width="9" Height="9" Fill="#FAB219" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding UnqualifiedText}" TextWrapping="Wrap" FontSize="13" VerticalAlignment="Center"
+                               Foreground="{DynamicResource PrimaryTextBrush}"/>
+                </DockPanel>
+            </Border>
 
             <!-- KPI tiles -->
             <ItemsControl ItemsSource="{Binding Tiles}" Margin="-7,0,-7,0">

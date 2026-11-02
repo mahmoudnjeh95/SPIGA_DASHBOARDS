@@ -2,13 +2,29 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Run state of one machine (DataContext: BeltRunning, RunStateLabel): the
-         machine photo in a bold red (stopped) / green (running) frame, over a
-         "conveyor" track whose dots flow in green while running and stand still
-         in red while stopped. A running machine's halo also pulses, so the
-         state reads from across the hall. Fixed 144 px wide (the dots run
+    <!-- Run state of one machine (DataContext: BeltRunning, IsMaintenance,
+         IsPlannedStop, PlannedLabel, RunStateLabel): the machine photo in a
+         bold red (stopped) / green (running) frame, over a "conveyor" track
+         whose dots flow in green while running and stand still in red while
+         stopped. A running machine's halo also pulses, so the state reads from
+         across the hall. In a slot of the Planification board the frame and
+         dots turn yellow (maintenance) or grey with a grey photo (planned
+         stop), under a banner saying so. Fixed 144 px wide (the dots run
          across that): wrap it in a Viewbox to draw it smaller. Shared by the
          machine header and the Cumul run-state slide. -->
+    <UserControl.Resources>
+        <!-- Same on both themes: the board's maintenance yellow, and a mid grey. -->
+        <SolidColorBrush x:Key="MaintenanceStateBrush" Color="#FAB219"/>
+        <SolidColorBrush x:Key="PlannedStopStateBrush" Color="#8E979F"/>
+        <FormatConvertedBitmap x:Key="GreyPhoto" DestinationFormat="Gray8">
+            <FormatConvertedBitmap.Source>
+                <BitmapImage UriSource="pack://application:,,,/Assets/machine-stopped.png"/>
+            </FormatConvertedBitmap.Source>
+        </FormatConvertedBitmap>
+        <!-- Keeps the transparent corners of the photo (Gray8 has no alpha). -->
+        <ImageBrush x:Key="PhotoMask" ImageSource="pack://application:,,,/Assets/machine-stopped.png"/>
+    </UserControl.Resources>
+
     <StackPanel Width="144"
                 ToolTip="{Binding RunStateLabel}" AutomationProperties.Name="{Binding RunStateLabel}">
         <Grid>
@@ -39,6 +55,12 @@
                                     <StopStoryboard BeginStoryboardName="RunningPulse"/>
                                 </DataTrigger.ExitActions>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMaintenance}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource MaintenanceStateBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource PlannedStopStateBrush}"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Rectangle.Style>
@@ -51,6 +73,12 @@
                             <DataTrigger Binding="{Binding BeltRunning}" Value="True">
                                 <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}"/>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMaintenance}" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource MaintenanceStateBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource PlannedStopStateBrush}"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
@@ -62,10 +90,43 @@
                                 <DataTrigger Binding="{Binding BeltRunning}" Value="True">
                                     <Setter Property="Source" Value="/Assets/machine-running.png"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                    <Setter Property="Source" Value="{StaticResource GreyPhoto}"/>
+                                    <Setter Property="OpacityMask" Value="{StaticResource PhotoMask}"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Image.Style>
                 </Image>
+            </Border>
+            <!-- Planned stop / maintenance banner across the photo -->
+            <Border VerticalAlignment="Center" Margin="-6,0" Padding="4,5" CornerRadius="6"
+                    Visibility="{Binding PlannedLabel, Converter={StaticResource NullToVisibility}}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{StaticResource MaintenanceStateBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                <Setter Property="Background" Value="#5F6B6D"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.4"/>
+                </Border.Effect>
+                <TextBlock Text="{Binding PlannedLabel}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="#1A1406"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </Border>
         </Grid>
 
@@ -78,6 +139,12 @@
                             <DataTrigger Binding="{Binding BeltRunning}" Value="True">
                                 <Setter Property="Fill" Value="{DynamicResource SuccessBrush}"/>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding IsMaintenance}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource MaintenanceStateBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource PlannedStopStateBrush}"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Rectangle.Style>
@@ -89,6 +156,9 @@
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding BeltRunning}" Value="True">
                                     <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding PlannedLabel, Converter={StaticResource NullToVisibility}}" Value="Visible">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -122,7 +192,7 @@
                         <Ellipse.RenderTransform><TranslateTransform X="-10"/></Ellipse.RenderTransform>
                     </Ellipse>
                 </Canvas>
-            <!-- Stopped: the same dots, frozen on the track. -->
+            <!-- Stopped (or in a planned slot): the same dots, frozen on the track. -->
             <Canvas>
                 <Canvas.Style>
                     <Style TargetType="Canvas">
@@ -131,13 +201,32 @@
                             <DataTrigger Binding="{Binding BeltRunning}" Value="False">
                                 <Setter Property="Visibility" Value="Visible"/>
                             </DataTrigger>
+                            <DataTrigger Binding="{Binding PlannedLabel, Converter={StaticResource NullToVisibility}}" Value="Visible">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </Canvas.Style>
-                <Ellipse Width="8" Height="8" Canvas.Left="12" Canvas.Top="2" Fill="{DynamicResource DangerBrush}"/>
-                <Ellipse Width="8" Height="8" Canvas.Left="50" Canvas.Top="2" Fill="{DynamicResource DangerBrush}"/>
-                <Ellipse Width="8" Height="8" Canvas.Left="89" Canvas.Top="2" Fill="{DynamicResource DangerBrush}"/>
-                <Ellipse Width="8" Height="8" Canvas.Left="127" Canvas.Top="2" Fill="{DynamicResource DangerBrush}"/>
+                <Canvas.Resources>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Width" Value="8"/>
+                        <Setter Property="Height" Value="8"/>
+                        <Setter Property="Canvas.Top" Value="2"/>
+                        <Setter Property="Fill" Value="{DynamicResource DangerBrush}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsMaintenance}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource MaintenanceStateBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPlannedStop}" Value="True">
+                                <Setter Property="Fill" Value="{StaticResource PlannedStopStateBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Canvas.Resources>
+                <Ellipse Canvas.Left="12"/>
+                <Ellipse Canvas.Left="50"/>
+                <Ellipse Canvas.Left="89"/>
+                <Ellipse Canvas.Left="127"/>
             </Canvas>
         </Grid>
     </StackPanel>

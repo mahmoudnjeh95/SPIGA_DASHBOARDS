@@ -92,7 +92,7 @@ public static class KpiCalculator
                     AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
                     DeviationGrams = k.WeightDeviationGrams,
                     DeviationPercent = k.WeightDeviationPercent,
-                    ProductionKg = Math.Round(k.TotalBags * (avg ?? g.Key) / 1000.0, 1),
+                    ProductionKg = Math.Round(k.TotalBags * g.Key / 1000.0, 1),
                     GiveawayKg = k.WeightDeviationGrams is { } dev ? Math.Round(k.TotalBags * dev / 1000.0, 1) : null,
                     QualityPercent = k.QualityPercent,
                     TrsPercent = k.TrsPercent,

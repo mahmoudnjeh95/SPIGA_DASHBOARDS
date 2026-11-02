@@ -17,7 +17,11 @@ public class MachineDaySlideViewModel
     public string PeriodLabel { get; init; } = "";
     public bool IsConnected { get; init; }
     public bool BeltRunning { get; init; }
-    public string RunStateLabel => BeltRunning ? "En marche" : "A l'arret";
+    public SlotKind? PlannedSlot { get; init; }
+    public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
+    public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
+    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "A l'arret");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
     public string FilterLabel { get; init; } = "";
@@ -69,6 +73,7 @@ public class MachineDaySlideViewModel
             PeriodLabel = previousShift ? "Poste precedent" : "",
             IsConnected = status?.IsConnected ?? false,
             BeltRunning = status?.BeltRunning ?? false,
+            PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),

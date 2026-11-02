@@ -32,6 +32,13 @@ public partial class PlanningViewModel : ObservableObject
         Board = new BoardViewModel(ctx);
         Pannes.PreventiveRequested += OpenPreventiveForm;
         Stats.PreventiveRequested += OpenPreventiveForm;
+        Stats.QualifyRequested += () => SelectedTab = PannesTab;
+        // What is left to qualify, shown over the statistics (they count qualified stops only).
+        Pannes.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PannesViewModel.OpenSummary))
+                Stats.UnqualifiedText = Pannes.OpenSummary;
+        };
     }
 
     public async Task InitializeAsync()

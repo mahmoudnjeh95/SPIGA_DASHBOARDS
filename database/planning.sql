@@ -47,7 +47,12 @@ CREATE TABLE dbo.PlanMaintenanceEvents (
     Status INT NOT NULL,              -- 0 planned, 1 done, 2 cancelled
     DoneAt DATETIME2(0) NULL,
     Technician NVARCHAR(100) NULL,
-    Comment NVARCHAR(1000) NULL);
+    Comment NVARCHAR(1000) NULL,
+    Kind INT NOT NULL CONSTRAINT DF_PlanMaintenanceEvents_Kind DEFAULT 0); -- 0 maintenance, 1 planned stop
+GO
+-- Tables made before v1.5.8 (planned stops).
+IF COL_LENGTH('dbo.PlanMaintenanceEvents', 'Kind') IS NULL
+ALTER TABLE dbo.PlanMaintenanceEvents ADD Kind INT NOT NULL CONSTRAINT DF_PlanMaintenanceEvents_Kind DEFAULT 0;
 GO
 IF OBJECT_ID('dbo.PlanProductionOrders') IS NULL
 CREATE TABLE dbo.PlanProductionOrders (

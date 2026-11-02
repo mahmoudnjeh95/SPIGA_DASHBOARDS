@@ -13,12 +13,14 @@ namespace SpigaDashboards.App.Services;
 // still writing snapshots).
 public static class StopDetector
 {
+    // thresholdMinutes: instead of the Parametres one (the Pannes tab counts
+    // the micro-stops below it with 1).
     public static List<ProductionStop> Detect(
         IEnumerable<LineSegment> segments, DateTime from, DateTime to, AppSettings settings,
-        TeamScheduleService teams, IReadOnlyDictionary<string, string> machineNames)
+        TeamScheduleService teams, IReadOnlyDictionary<string, string> machineNames, int? thresholdMinutes = null)
     {
         var windows = BreakSchedule.DayWindows(settings.PlannedBreaks);
-        var threshold = Math.Max(1, settings.StopThresholdMinutes);
+        var threshold = Math.Max(1, thresholdMinutes ?? settings.StopThresholdMinutes);
         var stops = new List<ProductionStop>();
 
         foreach (var line in segments.GroupBy(s => s.MachineId))

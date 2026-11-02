@@ -414,6 +414,24 @@ rz AS (
     public Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
         => _planning.FindQualificationsAsync(from, to);
 
+    // Lines in a maintenance slot or a planned stop right now (Planification),
+    // for the run-state photos; a planned stop wins over a maintenance. None
+    // if they can't be read, so a slide never fails on them.
+    public async Task<Dictionary<string, SlotKind>> GetActiveSlotKindsAsync()
+    {
+        try
+        {
+            return (await _planning.FindActiveSlotsAsync(DateTime.Now))
+                .GroupBy(e => e.MachineId)
+                .ToDictionary(g => g.Key, g => g.Max(e => e.Kind));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Creneaux planifies (Planification) illisibles : " + ex.Message);
+            return new();
+        }
+    }
+
     // Planned stops of the Planification window over the read range; none
     // (and a log line) if they can't be read, so the KPIs never fail on them.
     private async Task<List<(string MachineId, DateTime Start, DateTime End)>> LoadPlannedStopsAsync(DateTime from, DateTime to)
