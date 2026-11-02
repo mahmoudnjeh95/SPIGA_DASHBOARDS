@@ -11,7 +11,7 @@ public static class KpiCalculator
         { 3, "Nuit" },
     };
 
-    public static string ShiftName(int shiftId) => ShiftNames.GetValueOrDefault(shiftId, $"Shift {shiftId}");
+    public static string ShiftName(int shiftId) => ShiftNames.GetValueOrDefault(shiftId, $"Poste {shiftId}");
 
     public static int ShiftStartHour(int shiftId) => shiftId switch
     {
@@ -280,7 +280,7 @@ public static class KpiCalculator
             .ToList();
         var unassigned = byTeam.Where(kv => !teamNames.Contains(kv.Key)).Sum(kv => kv.Value);
         if (unassigned > 0)
-            result.Add(new TeamKpi { TeamName = "Sans equipe", TotalBags = unassigned });
+            result.Add(new TeamKpi { TeamName = "Sans équipe", TotalBags = unassigned });
         return result;
     }
 

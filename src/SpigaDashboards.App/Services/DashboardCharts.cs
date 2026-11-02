@@ -80,7 +80,7 @@ public static class DashboardCharts
                 DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
                 DataLabelsSize = LabelSize(steps.Count),
-                DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
             },
         };
         // Headroom above 100 % for the labels of full bars.
@@ -210,7 +210,7 @@ public static class DashboardCharts
             new LineSeries<double>
             {
                 Values = steps.Select(_ => target).ToArray(),
-                Name = $"Cible {target:0} %",
+                Name = $"Cible {target:0} %",
                 Stroke = new SolidColorPaint(Green, 2),
                 Fill = null,
                 GeometrySize = 0,
@@ -279,7 +279,7 @@ public static class DashboardCharts
             new LineSeries<double?>
             {
                 Values = values,
-                Name = "Ecart (%)",
+                Name = "Écart (%)",
                 Stroke = new SolidColorPaint(Red, 3),
                 GeometryStroke = new SolidColorPaint(Red, 2),
                 GeometrySize = 8,
@@ -389,7 +389,7 @@ public static class DashboardCharts
                 DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
                 DataLabelsSize = ChartHelpers.DataLabelTextSize,
-                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French) + " %",
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French) + " %",
                 MaxBarWidth = 60,
             },
         };
@@ -398,7 +398,7 @@ public static class DashboardCharts
             series.Add(new LineSeries<double>
             {
                 Values = labels.Select(_ => t).ToArray(),
-                Name = $"Cible {t:0} %",
+                Name = $"Cible {t:0} %",
                 Stroke = new SolidColorPaint(Green, 2),
                 Fill = null,
                 GeometrySize = 0,

@@ -91,12 +91,12 @@ public static class SlideDeck
     // Name of a slide in the Parametres list.
     public static string Label(SlideDescriptor slide, Func<string, string> machineName) => slide switch
     {
-        MachineSlideDescriptor m => $"Machine - {machineName(m.MachineId)} ({m.Sector})",
+        MachineSlideDescriptor m => $"Machine - {machineName(m.MachineId)} ({Machine.SectorLabel(m.Sector)})",
         PdfSlideDescriptor => "Document externe (PDF)",
-        SynthesisSlideDescriptor s => $"Synthese - {s.Sector}",
+        SynthesisSlideDescriptor s => $"Synthèse - {Machine.SectorLabel(s.Sector)}",
         PackagingSlideDescriptor { Trs: true } p => $"{p.Title} - TRS",
         PackagingSlideDescriptor p => $"{p.Title} - Production",
-        RunStateSlideDescriptor r => $"{r.Title} - Etat des machines",
+        RunStateSlideDescriptor r => $"{r.Title} - État des machines",
         _ => slide.Key,
     };
 }

@@ -8,4 +8,13 @@ public class Machine
     public string Sector { get; set; } = "";
     public string IPAddress { get; set; } = "";
     public bool IsActive { get; set; }
+
+    // Machines.Sector holds "Pate courte" / "Pate longue" without the accent
+    // (filters and slide keys compare on it); this is the text to show.
+    public static string SectorLabel(string sector) => sector switch
+    {
+        "Pate courte" => "Pâte courte",
+        "Pate longue" => "Pâte longue",
+        _ => sector,
+    };
 }

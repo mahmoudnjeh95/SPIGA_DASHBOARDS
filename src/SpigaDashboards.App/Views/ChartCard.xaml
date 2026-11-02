@@ -26,7 +26,7 @@
                         </Style>
                     </lvc:CartesianChart.Style>
                 </lvc:CartesianChart>
-                <TextBlock Text="Pas de donnees" FontSize="20" Foreground="{DynamicResource SubtleTextBrush}"
+                <TextBlock Text="Pas de données" FontSize="20" Foreground="{DynamicResource SubtleTextBrush}"
                            HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">

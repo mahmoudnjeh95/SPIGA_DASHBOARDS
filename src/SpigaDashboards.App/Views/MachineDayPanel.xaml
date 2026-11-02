@@ -59,24 +59,24 @@
                             <TextBlock Text="{Binding ProductionText}" Style="{StaticResource CardValue}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="3" Margin="0,0,24,0">
-                            <TextBlock Text="Conformite" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Conformité" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="4" Margin="0,0,24,0">
-                            <TextBlock Text="Vit. moy / max" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Vit. moy. / max" Style="{StaticResource CardLabel}"/>
                             <TextBlock Style="{StaticResource CardValue}">
                                 <Run Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                                 <Run Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ —', Mode=OneWay, ConverterCulture=fr-FR}" FontSize="18" Foreground="{DynamicResource SecondaryTextBrush}"/>
                             </TextBlock>
                         </StackPanel>
                         <StackPanel Grid.Column="5" Margin="0,0,24,0">
-                            <TextBlock Text="Disponibilite" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Disponibilité" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="6">
-                            <TextBlock Text="Ecart de poids" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Écart de poids" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </StackPanel>
@@ -161,7 +161,7 @@
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"/>
                         </Viewbox>
-                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
+                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
@@ -172,7 +172,7 @@
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabelCompact}"/>
+                        <TextBlock Text="Taux de conformité" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
@@ -185,7 +185,7 @@
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabelCompact}"/>
+                        <TextBlock Text="Écart de poids" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <!-- No weight data = "—" in grey, never a green 0.0 g. -->
                             <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
@@ -205,7 +205,7 @@
                     <ColumnDefinition Width="1.3*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <views:ChartCard Grid.Column="0" Title="Marche / arret par heure" Chart="{Binding OnOffChart}"/>
+                <views:ChartCard Grid.Column="0" Title="Marche / arrêt par heure" Chart="{Binding OnOffChart}"/>
                 <views:ChartCard Grid.Column="1" Title="Vitesse moy. / max par heure (sacs/min)" Chart="{Binding SpeedChart}" ShowLegend="True"/>
                 <views:ChartCard Grid.Column="2" Title="Poids moyen net vs cible" Chart="{Binding WeightChart}"/>
             </Grid>
@@ -229,7 +229,7 @@
                     </Style.Triggers>
                 </Style>
             </StackPanel.Style>
-            <TextBlock Text="Postes precedents (meme journee)" Margin="10,0,10,0" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
+            <TextBlock Text="Postes précédents (même journée)" Margin="10,0,10,0" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
             <ItemsControl ItemsSource="{Binding PreviousShifts}" ItemTemplate="{StaticResource PreviousShiftTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

@@ -151,7 +151,7 @@ public partial class PannesViewModel : ObservableObject
     public bool ShowTimeline => !IsManualMode && !IsBulk;
     public bool HasSelection => SelectedRow != null || IsManualMode || IsBulk;
     public bool CanDelete => !IsBulk && SelectedRow?.Qualification != null;
-    public string FormTitle => IsBulk ? $"{CheckedCount} arrêt{(CheckedCount > 1 ? "s" : "")} cochés · {PlanningContext.Duration(CheckedRows.Sum(r => r.Minutes))}"
+    public string FormTitle => IsBulk ? $"{CheckedCount} arrêt{(CheckedCount > 1 ? "s" : "")} coché{(CheckedCount > 1 ? "s" : "")} · {PlanningContext.Duration(CheckedRows.Sum(r => r.Minutes))}"
         : IsManualMode ? "Déclarer une panne"
         : SelectedRow == null ? "" : $"{SelectedRow.MachineName} · arrêt de {SelectedRow.DurationText}";
     public string FormSubtitle => IsBulk ? "La cause choisie sera donnée à chacun des arrêts cochés."
@@ -347,14 +347,14 @@ public partial class PannesViewModel : ObservableObject
                 ? "Tous les arrêts ont une cause"
                 : $"{open.Count} arrêt{(open.Count > 1 ? "s" : "")} sans cause · {PlanningContext.Duration(open.Sum(r => r.Minutes))}";
             var autoCount = rows.Count(r => r.IsAuto);
-            BannerDetail = $"Seuil de détection : {threshold} min (Paramètres) · pauses planifiées déjà retirées"
+            BannerDetail = $"Seuil de détection : {threshold} min (Paramètres) · pauses planifiées déjà retirées"
                 + (autoCount > 0 ? $" · {autoCount} arrêt{(autoCount > 1 ? "s" : "")} qualifié{(autoCount > 1 ? "s" : "")} par le calendrier" : "");
             BannerMicro = micro.Count == 0 ? ""
                 : $"+ {micro.Count} micro-arrêt{(micro.Count > 1 ? "s" : "")} de moins de {threshold} min ({PlanningContext.Duration(micro.Sum(s => s.NetMinutes))}), non listés";
             OpenSummary = open.Count == 0 ? ""
-                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}) : les statistiques ne comptent que les arrêts qualifiés.";
+                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}) : les statistiques ne comptent que les arrêts qualifiés.";
             if (auto > 0)
-                AppLogger.Log($"Pannes : {auto} arret(s) qualifie(s) par le calendrier");
+                AppLogger.Log($"Pannes : {auto} arrêt(s) qualifié(s) par le calendrier");
 
             var previous = SelectedRow;
             foreach (var row in Rows)
@@ -379,7 +379,7 @@ public partial class PannesViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - pannes : {ex}");
+            AppLogger.Log($"Planification - pannes : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
         finally
@@ -539,7 +539,7 @@ public partial class PannesViewModel : ObservableObject
         try
         {
             await _ctx.Planning.SaveQualificationAsync(q);
-            AppLogger.Log($"Panne qualifiee : {q.MachineId} {q.StopStart:g} {q.CauseCode} {q.Component}");
+            AppLogger.Log($"Panne qualifiée : {q.MachineId} {q.StopStart:g} {q.CauseCode} {q.Component}");
             var next = NextOpenRow();
             IsManualMode = false;
             if (SelectedRow != null)
@@ -547,11 +547,11 @@ public partial class PannesViewModel : ObservableObject
             await RefreshAsync();
             if (OnlyUnqualified && next != null)
                 SelectedRow = Rows.FirstOrDefault(r => r.MachineId == next.MachineId && r.Start == next.Start) ?? Rows.FirstOrDefault();
-            StatusMessage = $"Enregistré : {StopCauses.Label(q.CauseCode)} sur {_ctx.NameOf(q.MachineId)}.";
+            StatusMessage = $"Enregistré : {StopCauses.Label(q.CauseCode)} sur {_ctx.NameOf(q.MachineId)}.";
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - enregistrement panne : {ex}");
+            AppLogger.Log($"Planification - enregistrement panne : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
     }
@@ -576,14 +576,14 @@ public partial class PannesViewModel : ObservableObject
                 q.Comment = string.IsNullOrWhiteSpace(Comment) ? null : Comment.Trim();
                 await _ctx.Planning.SaveQualificationAsync(q);
             }
-            AppLogger.Log($"Pannes qualifiees en lot : {rows.Count} x {SelectedCauseCode}");
+            AppLogger.Log($"Pannes qualifiées en lot : {rows.Count} x {SelectedCauseCode}");
             var cause = StopCauses.Label(SelectedCauseCode);
             await RefreshAsync();
-            StatusMessage = $"Enregistré : {cause} sur {rows.Count} arrêt{(rows.Count > 1 ? "s" : "")}.";
+            StatusMessage = $"Enregistré : {cause} sur {rows.Count} arrêt{(rows.Count > 1 ? "s" : "")}.";
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - enregistrement en lot : {ex}");
+            AppLogger.Log($"Planification - enregistrement en lot : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
     }
@@ -627,7 +627,7 @@ public partial class PannesViewModel : ObservableObject
         var previous = _recent30.Count(q => q.Id != currentId && q.MachineId == machineId && q.IsPanne
             && string.Equals(q.Component, Component.Trim(), StringComparison.OrdinalIgnoreCase));
         RepeatWarning = previous >= 2
-            ? $"« {Component.Trim()} » sur {_ctx.NameOf(machineId)} : {previous + 1}e panne en 30 jours. Un préventif sur ce composant est conseillé."
+            ? $"« {Component.Trim()} » sur {_ctx.NameOf(machineId)} : {previous + 1}e panne en 30 jours. Un préventif sur ce composant est conseillé."
             : "";
     }
 
@@ -650,6 +650,6 @@ public static class PlanningErrors
         if (message.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase)
             || message.Contains("permission", StringComparison.OrdinalIgnoreCase))
             return "Les tables de planification n'ont pas pu être créées (droits SQL). Faites exécuter database\\planning.sql une fois sur la base, puis rouvrez cette fenêtre.";
-        return "Erreur : " + message;
+        return "Erreur : " + message;
     }
 }

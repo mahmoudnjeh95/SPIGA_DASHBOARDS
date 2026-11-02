@@ -118,7 +118,7 @@ public partial class MainViewModel : ObservableObject
     // "Dates..." button: shows the chosen range once that period is selected.
     public string CustomRangeLabel => SelectedPeriod == DashboardPeriod.Custom
         ? $"{CustomFrom:dd/MM} - {CustomTo:dd/MM}"
-        : "Dates...";
+        : "Dates…";
 
     public ObservableCollection<string> TeamOptions { get; } = new();
     public ObservableCollection<string> WeightOptions { get; } = new();
@@ -182,7 +182,7 @@ public partial class MainViewModel : ObservableObject
         if (_suspended || IsReconnecting)
             return;
 
-        AppLogger.Log("Verification periodique de la connexion a la base de donnees...");
+        AppLogger.Log("Vérification périodique de la connexion à la base de données…");
         try
         {
             await _repository.GetMachinesAsync();
@@ -213,7 +213,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Erreur non geree : {ex.Message}");
+            AppLogger.Log($"Erreur non gérée : {ex.Message}");
             SetConnectionState(healthy: false, ex.Message);
         }
     }
@@ -305,8 +305,8 @@ public partial class MainViewModel : ObservableObject
             return;
 
         IsReconnecting = true;
-        ReconnectStatus = "Reconnexion en cours...";
-        AppLogger.Log("Tentative de reconnexion a la base de donnees...");
+        ReconnectStatus = "Reconnexion en cours…";
+        AppLogger.Log("Tentative de reconnexion à la base de données…");
         try
         {
             _repository.ResetConnections();
@@ -317,7 +317,7 @@ public partial class MainViewModel : ObservableObject
             IsReconnecting = false;
             ReconnectStatus = IsConnectionHealthy
                 ? ""
-                : $"Echec a {DateTime.Now:HH:mm:ss} - nouvelle tentative automatique dans {(int)_reconnectTimer.Interval.TotalSeconds} s.";
+                : $"Échec à {DateTime.Now:HH:mm:ss} - nouvelle tentative automatique dans {(int)_reconnectTimer.Interval.TotalSeconds} s.";
         }
     }
 
@@ -327,11 +327,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await _repository.SetActiveNoteAsync(NoteText);
-            NoteSaveStatus = "Enregistre.";
+            NoteSaveStatus = "Enregistré.";
         }
         catch (Exception ex)
         {
-            NoteSaveStatus = $"Echec de l'enregistrement : {ex.Message}";
+            NoteSaveStatus = $"Échec de l'enregistrement : {ex.Message}";
         }
     }
 
@@ -388,7 +388,7 @@ public partial class MainViewModel : ObservableObject
             TargetWeight = FilterWeight == AllOption ? null : double.Parse(FilterWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
         };
         ActiveFilterLabel = _filter.Describe();
-        AppLogger.Log($"Filtres appliques : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
+        AppLogger.Log($"Filtres appliqués : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
 
         // Before the first load (or while disconnected) the deck is built later.
         if (_suspended)
@@ -716,7 +716,7 @@ public partial class MainViewModel : ObservableObject
         if (from < _settings.DataStartDate && to > _settings.DataStartDate)
         {
             from = _settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
         return MachinePeriodSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Sector,
             _machinesById[slide.MachineId], from, to, label, _filter);
@@ -741,7 +741,7 @@ public partial class MainViewModel : ObservableObject
         if (from < _settings.DataStartDate && to > _settings.DataStartDate)
         {
             from = _settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
         return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Title, slide.Trs, slide.Cumul,
             slide.MachineIds.Select(id => _machinesById[id]).ToList(), from, to, label, _filter);
@@ -750,7 +750,7 @@ public partial class MainViewModel : ObservableObject
     private void SetConnectionState(bool healthy, string errorMessage = "")
     {
         if (healthy != IsConnectionHealthy)
-            AppLogger.Log(healthy ? "Connexion a la base de donnees retablie." : $"Connexion perdue : {errorMessage}");
+            AppLogger.Log(healthy ? "Connexion à la base de données rétablie." : $"Connexion perdue : {errorMessage}");
 
         IsConnectionHealthy = healthy;
         ConnectionErrorMessage = healthy ? "" : errorMessage;

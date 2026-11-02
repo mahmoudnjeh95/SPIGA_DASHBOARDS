@@ -175,7 +175,7 @@
                         ToolTip="Planifier une maintenance" Command="{Binding NewEventCommand}"/>
                 <!-- Not in this version: greyed, a click says so. -->
                 <Button Content="+ Ordre de fab." Style="{StaticResource BarButton}" Margin="6,0,0,0" Opacity="0.5"
-                        ToolTip="Ordres de fabrication : non disponible dans cette version" Command="{Binding NewOrderCommand}"/>
+                        ToolTip="Ordres de fabrication : non disponible dans cette version" Command="{Binding NewOrderCommand}"/>
             </StackPanel>
         </Grid>
 
@@ -418,7 +418,7 @@
                     <!-- Nothing selected -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14" Visibility="{Binding ShowEmptyDetail, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Style="{StaticResource Caption}" Margin="0,4"
-                                   Text="Cliquez un bloc pour voir son détail. Glissez un bloc pour le déplacer, ou son bord pour changer son début / sa fin. Cliquez ou glissez sur une partie vide d'une ligne pour y planifier une maintenance ou un arrêt."/>
+                                   Text="Cliquez sur un bloc pour voir son détail. Glissez un bloc pour le déplacer, ou son bord pour changer son début / sa fin. Cliquez ou glissez sur une partie vide d'une ligne pour y planifier une maintenance ou un arrêt."/>
                     </Border>
 
                     <!-- Selected block -->
@@ -521,11 +521,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Début : jour" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : jour" Style="{StaticResource FieldLabel}"/>
                                     <DatePicker SelectedDate="{Binding OrderDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Style="{StaticResource Input}" Text="{Binding OrderTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de début"/>
                                 </StackPanel>
                             </Grid>
@@ -537,11 +537,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
                                     <DatePicker SelectedDate="{Binding OrderEndDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Style="{StaticResource Input}" Text="{Binding OrderEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
                                 </StackPanel>
                             </Grid>
@@ -582,11 +582,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Début : jour" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : jour" Style="{StaticResource FieldLabel}"/>
                                     <DatePicker SelectedDate="{Binding EventDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Début : heure" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Style="{StaticResource Input}" Text="{Binding EventTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de début"/>
                                 </StackPanel>
                             </Grid>
@@ -598,11 +598,11 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Fin : jour" Style="{StaticResource FieldLabel}"/>
                                     <DatePicker SelectedDate="{Binding EventEndDate}" Height="40" VerticalContentAlignment="Center"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="Fin : heure" Style="{StaticResource FieldLabel}"/>
                                     <TextBox Style="{StaticResource Input}" Text="{Binding EventEndTime, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Heure de fin"/>
                                 </StackPanel>
                             </Grid>
@@ -614,7 +614,7 @@
                             </StackPanel>
                             <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
                                        Visibility="{Binding IsStopForm, Converter={StaticResource BoolToVisibility}}"
-                                       Text="Hors TRS : le temps d'arrêt planifié n'est pas compté dans le temps requis de la ligne."/>
+                                       Text="Hors TRS : le temps d'arrêt planifié n'est pas compté dans le temps requis de la ligne."/>
                         </StackPanel>
                     </Border>
 
@@ -646,7 +646,7 @@
                             <TextBlock Text="Dernière réalisation" Style="{StaticResource FieldLabel}" Margin="0,10,0,5"/>
                             <DatePicker SelectedDate="{Binding PlanLastDone}" Height="40" VerticalContentAlignment="Center"/>
                             <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0"
-                                       Text="Usage : l'échéance avance avec les sacs comptés sur la ligne depuis la dernière réalisation."/>
+                                       Text="Usage : l'échéance avance avec les sacs comptés sur la ligne depuis la dernière réalisation."/>
                         </StackPanel>
                     </Border>
 
@@ -677,7 +677,7 @@
                                 <TextBlock DockPanel.Dock="Right" Text="calendrier + usage" Style="{StaticResource Small}" VerticalAlignment="Center"/>
                                 <TextBlock Text="Maintenance préventive" Style="{StaticResource H2}"/>
                             </DockPanel>
-                            <TextBlock Text="Aucune règle : « + Règle préventive » pour en créer une." Style="{StaticResource Caption}" Margin="0,6,0,0"
+                            <TextBlock Text="Aucune règle : cliquez sur « + Règle préventive » pour en créer une." Style="{StaticResource Caption}" Margin="0,6,0,0"
                                        Visibility="{Binding HasPreventives, Converter={StaticResource InverseBoolToVisibility}}"/>
                             <ItemsControl ItemsSource="{Binding Preventives}">
                                 <ItemsControl.ItemTemplate>
@@ -707,7 +707,7 @@
                                                 <DockPanel Margin="0,8,0,0">
                                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                                         <Button Content="Planifier" Style="{StaticResource SmallButton}" Command="{Binding Plan}"/>
-                                                        <Button Content="Fait" Style="{StaticResource SmallButton}" Command="{Binding Done}" ToolTip="Réalisée maintenant : l'échéance repart"/>
+                                                        <Button Content="Fait" Style="{StaticResource SmallButton}" Command="{Binding Done}" ToolTip="Réalisée maintenant : l'échéance repart"/>
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <Ellipse Width="7" Height="7" Fill="{Binding StatusBrush}" Margin="0,0,6,0"/>

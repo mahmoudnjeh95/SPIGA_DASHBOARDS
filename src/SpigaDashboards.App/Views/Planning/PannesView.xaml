@@ -33,7 +33,7 @@
                 <TextBlock Text="PANNES &amp; ARRÊTS" Style="{StaticResource Eyebrow}" Foreground="#E66767"/>
                 <TextBlock Text="Qualifier les arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
                 <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
-                           Text="Les arrêts sont détectés par le compteur de chaque ligne : la durée est déjà exacte, il ne reste qu'à donner la cause."/>
+                           Text="Les arrêts sont détectés par le compteur de chaque ligne : la durée est déjà exacte, il ne reste qu'à donner la cause."/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                 <Border Style="{StaticResource SegTrack}">
@@ -48,7 +48,7 @@
                 </Border>
                 <ComboBox Style="{StaticResource DarkComboBox}" Width="190" Margin="10,0,0,0" FontSize="14" VerticalContentAlignment="Center"
                           ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"/>
-                <CheckBox Content="Seulement sans cause" IsChecked="{Binding OnlyUnqualified}" Margin="14,0,0,0" VerticalAlignment="Center"
+                <CheckBox Content="Sans cause uniquement" IsChecked="{Binding OnlyUnqualified}" Margin="14,0,0,0" VerticalAlignment="Center"
                           FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"/>
                 <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>
                 <Button Content="+ Déclarer une panne" Style="{StaticResource AccentBarButton}" Margin="8,0,0,0" Command="{Binding StartManualCommand}"/>

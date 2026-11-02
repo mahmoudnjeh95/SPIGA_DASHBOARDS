@@ -40,17 +40,17 @@ public static class StopSheetPdf
         var document = new PdfDocument();
         document.Info.Title = "Fiche des arrêts de production";
         var logo = LoadLogo();
-        var settingsLine = $"Seuil : {settings.StopThresholdMinutes} min  -  Pauses planifiées déduites : "
+        var settingsLine = $"Seuil : {settings.StopThresholdMinutes} min  -  Pauses planifiées déduites : "
                            + BreakSchedule.Describe(settings.PlannedBreaks);
         var generated = DateTime.Now;
 
         foreach (var poste in stops.GroupBy(s => (s.ShiftDate, s.ShiftId, s.Team)))
         {
             var list = poste.ToList();
-            var posteLine = $"Date : {poste.Key.ShiftDate.ToString("dddd dd/MM/yyyy", French)}     "
-                            + $"Poste : {KpiCalculator.ShiftName(poste.Key.ShiftId)} ({KpiCalculator.ShiftTimeRange(poste.Key.ShiftId)})     "
-                            + $"Équipe : {poste.Key.Team}";
-            var summary = $"{list.Count} arrêt(s), durée totale hors pauses : {ProductionStop.FormatDuration(list.Sum(s => s.NetMinutes))}";
+            var posteLine = $"Date : {poste.Key.ShiftDate.ToString("dddd dd/MM/yyyy", French)}     "
+                            + $"Poste : {KpiCalculator.ShiftName(poste.Key.ShiftId)} ({KpiCalculator.ShiftTimeRange(poste.Key.ShiftId)})     "
+                            + $"Équipe : {poste.Key.Team}";
+            var summary = $"{list.Count} arrêt(s), durée totale hors pauses : {ProductionStop.FormatDuration(list.Sum(s => s.NetMinutes))}";
 
             XGraphics? gfx = null;
             double y = 0;
@@ -147,9 +147,9 @@ public static class StopSheetPdf
 
     private static void DrawFooter(XGraphics gfx)
     {
-        gfx.DrawString("« Sans données » : StatsViewer n'a rien enregistré (PC ou réseau arrêté), la machine a pu tourner ou non.",
+        gfx.DrawString("« Sans données » : StatsViewer n'a rien enregistré (PC ou réseau arrêté), la machine a pu tourner ou non.",
             SmallFont, XBrushes.DimGray, new XRect(Margin, FooterTop, PageWidth - 2 * Margin, 10), XStringFormats.TopLeft);
-        gfx.DrawString("Chef d'équipe : ______________________________          Signature : ______________________________",
+        gfx.DrawString("Chef d'équipe : ______________________________          Signature : ______________________________",
             FooterFont, XBrushes.Black, new XRect(Margin, FooterTop + 20, PageWidth - 2 * Margin, 14), XStringFormats.TopLeft);
     }
 
@@ -188,7 +188,7 @@ public static class StopSheetPdf
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Logo introuvable pour la fiche des arrets : {ex.Message}");
+            AppLogger.Log($"Logo introuvable pour la fiche des arrêts : {ex.Message}");
             return null;
         }
     }

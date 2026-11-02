@@ -51,7 +51,7 @@
             <TextBlock Grid.Row="0" Grid.Column="1" Text="Mahmoud Njeh" FontWeight="SemiBold" Style="{StaticResource FieldValue}"/>
 
             <TextBlock Grid.Row="1" Text="Éditeur" Style="{StaticResource FieldLabel}"/>
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="L2I - Leader de l'Innovation Industrielle" Style="{StaticResource FieldValue}"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="L2I - Leader de l'innovation industrielle" Style="{StaticResource FieldValue}"/>
 
             <TextBlock Grid.Row="2" Text="Environnement" Style="{StaticResource FieldLabel}"/>
             <TextBlock Grid.Row="2" Grid.Column="1" x:Name="RuntimeText" Style="{StaticResource FieldValue}"/>

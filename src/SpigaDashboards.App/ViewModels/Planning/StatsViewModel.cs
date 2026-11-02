@@ -122,7 +122,7 @@ public partial class StatsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - statistiques : {ex}");
+            AppLogger.Log($"Planification - statistiques : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
         finally
@@ -169,7 +169,7 @@ public partial class StatsViewModel : ObservableObject
             $"sur {runHours:N0} h de marche des lignes"));
         Tiles.Add(new StatTile("MTTR · temps moyen de réparation", cur.Count == 0 ? "—" : PlanningContext.Duration(minutes / cur.Count),
             prev.Count == 0 ? "par arrêt" : $"vs {PlanningContext.Duration(prevMinutes / prev.Count)} avant"));
-        Tiles.Add(new StatTile("Disponibilité perdue", runHours <= 0 ? "—" : (minutes / 60 / (runHours + minutes / 60) * 100).ToString("0.0", PlanningContext.French) + " %",
+        Tiles.Add(new StatTile("Disponibilité perdue", runHours <= 0 ? "—" : (minutes / 60 / (runHours + minutes / 60) * 100).ToString("0.0", PlanningContext.French) + " %",
             "du temps de marche + arrêts"));
 
         // Pareto by cause and by component
@@ -179,7 +179,7 @@ public partial class StatsViewModel : ObservableObject
         var top3 = cur.GroupBy(q => q.Component ?? StopCauses.Label(q.CauseCode)).Select(g => g.Sum(q => q.Minutes))
             .OrderByDescending(m => m).Take(3).Sum();
         ParetoCaption = minutes <= 0 ? "Aucun arrêt qualifié sur la période"
-            : $"Les 3 premiers composants font {top3 / minutes * 100:0} % du temps d'arrêt";
+            : $"Les 3 premiers composants représentent {top3 / minutes * 100:0} % du temps d'arrêt";
 
         // By line
         var perMachine = machines.Select(m => (m, list: cur.Where(q => q.MachineId == m.MachineId).ToList()))
@@ -192,11 +192,11 @@ public partial class StatsViewModel : ObservableObject
             var mins = list.Sum(q => q.Minutes);
             ByMachine.Add(new StatBar(m.MachineName, PlanningContext.Duration(mins), $"{list.Count} p.", mins / maxMachine,
                 i < 2 && mins > 0 ? Blue : BlueDim,
-                $"{m.MachineName} : {PlanningContext.Duration(mins)} · {list.Count} arrêts" + (list.Count > 0 ? $" · MTTR {PlanningContext.Duration(mins / list.Count)}" : ""),
+                $"{m.MachineName} : {PlanningContext.Duration(mins)} · {list.Count} arrêt{(list.Count > 1 ? "s" : "")}" + (list.Count > 0 ? $" · MTTR {PlanningContext.Duration(mins / list.Count)}" : ""),
                 Extra: m.MachineName));
         }
         var top2 = perMachine.Take(2).Sum(x => x.list.Sum(q => q.Minutes));
-        MachineCaption = minutes <= 0 || perMachine.Count < 2 ? "" : $"{perMachine[0].m.MachineName} et {perMachine[1].m.MachineName} : {top2 / minutes * 100:0} % du temps perdu";
+        MachineCaption = minutes <= 0 || perMachine.Count < 2 ? "" : $"{perMachine[0].m.MachineName} et {perMachine[1].m.MachineName} : {top2 / minutes * 100:0} % du temps perdu";
 
         // Heatmap: day of week x hour of the start
         BuildHeat(cur);
@@ -205,7 +205,7 @@ public partial class StatsViewModel : ObservableObject
         Fill(ByPoste, Groups(cur.GroupBy(q => KpiCalculator.ShiftName(q.ShiftId)), new[] { "Matin", "Après-midi", "Nuit" }));
         Fill(ByTeam, Groups(cur.GroupBy(q => q.Team), _ctx.Teams.TeamNames.ToArray()));
         var night = cur.Where(q => q.ShiftId == 3).Sum(q => q.Minutes);
-        GroupCaption = minutes <= 0 ? "" : $"Le poste de nuit concentre {night / minutes * 100:0} % du temps d'arrêt";
+        GroupCaption = minutes <= 0 ? "" : $"Le poste de nuit concentre {night / minutes * 100:0} % du temps d'arrêt";
 
         // 12-week trend (independent of the period)
         var weekStart = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
@@ -222,7 +222,7 @@ public partial class StatsViewModel : ObservableObject
             var week = ISOWeek.GetWeekOfYear(ws);
             var current = ws == weekStart;
             Weeks.Add(new StatBar("S" + week, PlanningContext.Duration(mins), "", mins / maxWeek,
-                current ? BlueDim : Blue, $"Semaine {week} : {PlanningContext.Duration(mins)}" + (current ? " (en cours)" : "")));
+                current ? BlueDim : Blue, $"Semaine {week} : {PlanningContext.Duration(mins)}" + (current ? " (en cours)" : "")));
         }
 
         // Components that keep failing on the same line
@@ -267,8 +267,8 @@ public partial class StatsViewModel : ObservableObject
             cum += x.mins;
             var cumPct = total > 0 ? cum / total * 100 : 0;
             return new StatBar(x.Key, PlanningContext.Duration(x.mins), $"{x.n}", x.mins / max, i < 3 ? Blue : BlueDim,
-                $"{x.Key} : {PlanningContext.Duration(x.mins)} · {x.n} arrêts · {(total > 0 ? x.mins / total * 100 : 0):0} % du total",
-                Extra: $"{cumPct:0} %");
+                $"{x.Key} : {PlanningContext.Duration(x.mins)} · {x.n} arrêt{(x.n > 1 ? "s" : "")} · {(total > 0 ? x.mins / total * 100 : 0):0} % du total",
+                Extra: $"{cumPct:0} %");
         }).ToList();
     }
 
@@ -280,7 +280,7 @@ public partial class StatsViewModel : ObservableObject
         return keys.Select(k =>
         {
             var (mins, n) = map.GetValueOrDefault(k);
-            return new StatBar(k, PlanningContext.Duration(mins), $"{n} p.", mins / max, Blue, $"{k} : {PlanningContext.Duration(mins)} · {n} arrêts");
+            return new StatBar(k, PlanningContext.Duration(mins), $"{n} p.", mins / max, Blue, $"{k} : {PlanningContext.Duration(mins)} · {n} arrêt{(n > 1 ? "s" : "")}");
         }).ToList();
     }
 
@@ -326,11 +326,11 @@ public partial class StatsViewModel : ObservableObject
 
         var peak = Enumerable.Range(0, 24).Select(h => (h, n: Enumerable.Range(0, 7).Sum(d => counts[d, h]))).OrderByDescending(x => x.n).First();
         HeatCaption = cur.Count == 0 ? "Heure de début de chaque arrêt"
-            : $"Heure de début de chaque arrêt · heure la plus chargée : {peak.h:00}h ({peak.n} arrêt{(peak.n > 1 ? "s" : "")})";
+            : $"Heure de début de chaque arrêt · heure la plus chargée : {peak.h:00}h ({peak.n} arrêt{(peak.n > 1 ? "s" : "")})";
     }
 
     private static string Delta(double cur, double prev)
-        => prev <= 0 ? "" : (cur >= prev ? "▲ " : "▼ ") + Math.Abs((cur - prev) / prev * 100).ToString("0", CultureInfo.InvariantCulture) + " %";
+        => prev <= 0 ? "" : (cur >= prev ? "▲ " : "▼ ") + Math.Abs((cur - prev) / prev * 100).ToString("0", CultureInfo.InvariantCulture) + " %";
 
     private static Brush? DeltaBrush(double cur, double prev)
         => prev <= 0 ? null : PlanningContext.Brush(cur > prev ? Color.FromRgb(0xE7, 0x4C, 0x3C) : Color.FromRgb(0x16, 0xA3, 0x4A));

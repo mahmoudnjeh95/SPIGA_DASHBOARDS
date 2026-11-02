@@ -147,11 +147,11 @@ public partial class SettingsViewModel : ObservableObject
     private void UpdatePdfDocumentStatus()
     {
         if (string.IsNullOrWhiteSpace(PdfDocumentPath))
-            PdfDocumentStatus = "Aucun document configure : la diapositive document sera ignoree.";
+            PdfDocumentStatus = "Aucun document configuré : la diapositive document sera ignorée.";
         else if (!File.Exists(PdfDocumentPath))
-            PdfDocumentStatus = "Fichier introuvable a ce chemin.";
+            PdfDocumentStatus = "Fichier introuvable à ce chemin.";
         else
-            PdfDocumentStatus = $"Mis a jour le {File.GetLastWriteTime(PdfDocumentPath):dd/MM/yyyy HH:mm}.";
+            PdfDocumentStatus = $"Mis à jour le {File.GetLastWriteTime(PdfDocumentPath):dd/MM/yyyy HH:mm}.";
     }
 
     [RelayCommand]
@@ -226,22 +226,22 @@ public partial class SettingsViewModel : ObservableObject
             var where = machine.Length == 0 ? "" : $" ({machine})";
             if (!NominalRateRowViewModel.TryParse(row.WeightText, out var weight) || weight <= 0)
             {
-                NominalRatesStatusMessage = $"Poids invalide{where} : \"{row.WeightText}\" (nombre de grammes attendu).";
+                NominalRatesStatusMessage = $"Poids invalide{where} : « {row.WeightText} » (nombre de grammes attendu).";
                 return null;
             }
             if (!NominalRateRowViewModel.TryParse(row.RateText, out var rate))
             {
-                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g{where} : \"{row.RateText}\".";
+                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g{where} : « {row.RateText} ».";
                 return null;
             }
             if (!NominalRateRowViewModel.TryParse(row.TareText, out var tare) || tare >= weight)
             {
-                NominalRatesStatusMessage = $"Poids du sachet vide invalide pour {row.WeightText} g{where} : \"{row.TareText}\".";
+                NominalRatesStatusMessage = $"Poids du sachet vide invalide pour {row.WeightText} g{where} : « {row.TareText} ».";
                 return null;
             }
             if (entries.Any(e => e.MachineId == machine && e.WeightGrams == weight))
             {
-                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparait deux fois pour {(machine.Length == 0 ? "Toutes" : machine)}.";
+                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparaît deux fois pour {(machine.Length == 0 ? "Toutes" : machine)}.";
                 return null;
             }
             entries.Add(new NominalRateEntry { MachineId = machine, WeightGrams = weight, RatePerMinute = rate, TareGrams = tare });
@@ -258,7 +258,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (!NominalRateRowViewModel.TryParse(machine.TrsTargetText, out var target) || target > 100)
             {
-                MachinesStatusMessage = $"TRS cible invalide pour {ChoiceLabel(machine)} :\"{machine.TrsTargetText}\" (0 a 100 %).";
+                MachinesStatusMessage = $"TRS cible invalide pour {ChoiceLabel(machine)}  : « {machine.TrsTargetText} » (0 à 100 %).";
                 return null;
             }
             if (target > 0)
@@ -283,12 +283,12 @@ public partial class SettingsViewModel : ObservableObject
                 continue;
             if (!PlannedBreakRowViewModel.TryParseStart(row.StartText, out var start))
             {
-                BreaksStatusMessage = $"Heure de pause invalide : \"{row.StartText}\" (format 10:00 attendu).";
+                BreaksStatusMessage = $"Heure de pause invalide : « {row.StartText} » (format 10:00 attendu).";
                 return null;
             }
             if (!int.TryParse(row.DurationText.Trim(), out var minutes) || minutes <= 0 || minutes > 480)
             {
-                BreaksStatusMessage = $"Duree invalide pour la pause de {row.StartText} : \"{row.DurationText}\" (1 a 480 min).";
+                BreaksStatusMessage = $"Durée invalide pour la pause de {row.StartText} : « {row.DurationText} » (1 à 480 min).";
                 return null;
             }
             breaks.Add(new PlannedBreak { Start = start, DurationMinutes = minutes });
@@ -301,7 +301,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (int.TryParse(StopThresholdText.Trim(), out var minutes) && minutes >= 1 && minutes <= 240)
             return minutes;
-        BreaksStatusMessage = $"Seuil d'arret invalide : \"{StopThresholdText}\" (1 a 240 min).";
+        BreaksStatusMessage = $"Seuil d'arrêt invalide : « {StopThresholdText} » (1 à 240 min).";
         return null;
     }
 
@@ -344,7 +344,7 @@ public partial class SettingsViewModel : ObservableObject
                         choice.Label = ChoiceLabel(option);
                 };
             }
-            MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvee." : "";
+            MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvée." : "";
 
             // "Actualiser la liste" keeps the slide edits not saved yet.
             _activeMachines = machines.Where(m => m.IsActive).ToList();
@@ -357,7 +357,7 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
+            MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
         }
     }
 
@@ -418,7 +418,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 if (!int.TryParse(row.DurationText.Trim(), out var value) || value < 1 || value > 3600)
                 {
-                    SlidesStatusMessage = $"Duree invalide pour \"{row.Label}\" : \"{row.DurationText}\" (1 a 3600 s, vide = duree par defaut).";
+                    SlidesStatusMessage = $"Durée invalide pour « {row.Label} » : « {row.DurationText} » (1 à 3600 s, vide = durée par défaut).";
                     return null;
                 }
                 seconds = value;
@@ -427,7 +427,7 @@ public partial class SettingsViewModel : ObservableObject
         }
         if (Slides.Count > 0 && !Slides.Any(r => r.IsEnabled))
         {
-            SlidesStatusMessage = "Au moins une diapositive doit etre affichee.";
+            SlidesStatusMessage = "Au moins une diapositive doit être affichée.";
             return null;
         }
         SlidesStatusMessage = "";
@@ -473,8 +473,8 @@ public partial class SettingsViewModel : ObservableObject
         TestResultSuccess = null;
 
         AppLogger.Log(Provider == DatabaseProvider.SqlServer
-            ? $"Cible : SQL Server {Host}/{Database} (auth {AuthMode})"
-            : "Cible : SQLite (dev)");
+            ? $"Cible : SQL Server {Host}/{Database} (auth {AuthMode})"
+            : "Cible : SQLite (dev)");
 
         var (success, message) = await ConnectionTester.TestAsync(BuildFactoryFromFields());
 
@@ -528,7 +528,7 @@ public partial class SettingsViewModel : ObservableObject
 
         _settingsService.Save(_settings);
         _activeFactory.SwitchTo(BuildFactoryFromFields());
-        AppLogger.Log("Parametres de connexion enregistres et appliques.");
+        AppLogger.Log("Paramètres de connexion enregistrés et appliqués.");
 
         foreach (var machine in Machines)
         {
@@ -541,7 +541,7 @@ public partial class SettingsViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    MachinesStatusMessage = $"Impossible de renommer {machine.OriginalMachineName} : {ex.Message}";
+                    MachinesStatusMessage = $"Impossible de renommer {machine.OriginalMachineName} : {ex.Message}";
                 }
             }
         }

@@ -63,7 +63,7 @@ public class SynthesisSlideViewModel
         if (from < settings.DataStartDate && to > settings.DataStartDate)
         {
             from = settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
 
         // Day buckets are enough unless postes / teams are filtered.
@@ -117,7 +117,7 @@ public class SynthesisSlideViewModel
 
         return new SynthesisSlideViewModel
         {
-            SectorLabel = sector,
+            SectorLabel = Machine.SectorLabel(sector),
             Period = period,
             PeriodLabel = label,
             FilterLabel = filter.Describe(),

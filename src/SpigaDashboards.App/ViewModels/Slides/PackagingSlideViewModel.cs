@@ -56,7 +56,7 @@ public class PackagingSlideViewModel
 
     public ChartParts TeamChart { get; init; } = ChartParts.Empty();
     public ChartParts MachineChart { get; init; } = ChartParts.Empty();
-    public string TeamChartTitle => IsTrs ? "TRS par equipe" : "Production par equipe";
+    public string TeamChartTitle => IsTrs ? "TRS par équipe" : "Production par équipe";
     public string MachineChartTitle => IsTrs ? "TRS par machine" : "Production par machine";
 
     // Ranges over a week are kept CacheDuration per group, as on the period slides.

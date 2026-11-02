@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using SpigaDashboards.App.Models;
+using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App.Data;
 
@@ -161,6 +162,9 @@ public class PlanningRepository
                      Technician, Comment, IsManual, CreatedAt
               FROM PlanStopQualifications WHERE StopStart >= @from AND StopStart < @to",
             new { from, to });
+        // Rows saved before v1.5.9 spelled the no-team value without the accent.
+        foreach (var q in rows.Where(q => q.Team == "Sans equipe"))
+            q.Team = TeamScheduleService.NoTeam;
         return rows.OrderBy(q => q.StopStart).ToList();
     }
 

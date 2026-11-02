@@ -28,8 +28,8 @@ public partial class App : Application
         ThemeService.Apply(settings.Theme);
 
         AppLogger.Log(settings.Provider == DatabaseProvider.SqlServer
-            ? $"Demarrage avec SQL Server {settings.SqlServer.Host}/{settings.SqlServer.Database}"
-            : "Demarrage avec SQLite (dev)");
+            ? $"Démarrage avec SQL Server {settings.SqlServer.Host}/{settings.SqlServer.Database}"
+            : "Démarrage avec SQLite (dev)");
 
         var activeFactory = new SwitchableConnectionFactory(BuildFactory(settings));
         var repository = new ProductionRepository(activeFactory, settings);

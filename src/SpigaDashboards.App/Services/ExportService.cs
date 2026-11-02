@@ -31,7 +31,7 @@ public static class ExportService
 
     private static string N0(double v) => v.ToString("N0", Numbers);
     private static string N1(double v) => v.ToString("N1", Numbers);
-    private static string Pct(double? v) => v is { } p ? p.ToString("0.0", Numbers) + " %" : "—";
+    private static string Pct(double? v) => v is { } p ? p.ToString("0.0", Numbers) + " %" : "—";
     private static string Grams(double? v) => v is { } g ? g.ToString("+0.0;-0.0;0.0", Numbers) + " g" : "—";
     private static string Speed(double? v) => v is { } s ? s.ToString("0.0", Numbers) : "—";
 
@@ -47,14 +47,14 @@ public static class ExportService
         var by = "par " + PeriodRanges.GrainName(report.Grain);
         return new List<ChartImage>
         {
-            new($"TRS {by} (cible {report.TrsTarget:0} %)", Render(DashboardCharts.Trs(steps, report.TrsTarget))),
+            new($"TRS {by} (cible {report.TrsTarget:0} %)", Render(DashboardCharts.Trs(steps, report.TrsTarget))),
             new($"Production nette {by}, par poids", Render(DashboardCharts.ProductionByWeight(steps))),
             new($"Vitesse moyenne / max {by} (sacs/min)", Render(DashboardCharts.Speed(steps))),
-            new($"Ecart de poids {by} (% de la cible)", Render(DashboardCharts.Deviation(steps))),
+            new($"Écart de poids {by} (% de la cible)", Render(DashboardCharts.Deviation(steps))),
             new("Production nette par machine (kg)", Render(DashboardCharts.Bars(
                 report.Machines.Select(m => m.MachineName).ToList(),
                 report.Machines.Select(m => m.Kpis.ProductionKg).ToList(), "Production", v => ChartHelpers.Compact(v)))),
-            new("TRS par equipe (%)", Render(DashboardCharts.Bars(
+            new("TRS par équipe (%)", Render(DashboardCharts.Bars(
                 report.Teams.Select(t => t.Label).ToList(),
                 report.Teams.Select(t => t.Kpis.TrsPercent ?? 0).ToList(), "TRS", v => $"{v:0.0}"))),
         };
@@ -91,20 +91,20 @@ public static class ExportService
         WriteDashboardSheet(workbook.Worksheets.Add("Tableau de bord"), report, charts);
 
         WriteTable(workbook.Worksheets.Add("Par machine"),
-            new[] { "Machine", "Secteur", "TRS cible %", "TRS %", "Disponibilite %", "Performance %", "Qualite %",
-                    "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Ecart (g)", "Ecart (%)",
-                    "Surpoids (kg)", "Conformes", "Sous tol.", "Sur tol.", "Rejets metal" },
+            new[] { "Machine", "Secteur", "TRS cible %", "TRS %", "Disponibilité %", "Performance %", "Qualité %",
+                    "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Écart (g)", "Écart (%)",
+                    "Surpoids (kg)", "Conformes", "Sous tol.", "Sur tol.", "Rejets métal" },
             report.Machines.Select(m => new object?[]
             {
-                m.MachineName, m.Sector, m.TrsTarget, m.Kpis.TrsPercent, m.Kpis.AvailabilityPercent, m.Kpis.PerformancePercent,
+                m.MachineName, Machine.SectorLabel(m.Sector), m.TrsTarget, m.Kpis.TrsPercent, m.Kpis.AvailabilityPercent, m.Kpis.PerformancePercent,
                 m.Kpis.QualityPercent, m.Kpis.SpeedBagsPerMinute, m.Kpis.MaxSpeedBagsPerMinute, m.Kpis.TotalBags, m.Kpis.ProductionKg,
                 m.Kpis.WeightDeviationGrams, m.Kpis.WeightDeviationPercent, m.Kpis.GiveawayKg, m.Kpis.BagsInTolerance,
                 m.Kpis.BagsUnderTolerance, m.Kpis.BagsOverTolerance, m.Kpis.MetalRejects,
             }));
 
         WriteTable(workbook.Worksheets.Add("Par poids"),
-            new[] { "Machine", "Poids cible (g)", "Produit", "Sachet vide (g)", "Cadence nominale (sacs/min)", "TRS %", "Sacs",
-                    "Production nette (kg)", "Poids moyen net (g)", "Ecart (g)", "Ecart (%)", "Surpoids (kg)", "Conformite %",
+            new[] { "Machine", "Poids cible (g)", "Produit", "Sachet vide (g)", "Cadence nominale (sacs/min)", "TRS %", "Sacs",
+                    "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Écart (%)", "Surpoids (kg)", "Conformité %",
                     "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)" },
             report.Weights.Select(w => new object?[]
             {
@@ -114,22 +114,22 @@ public static class ExportService
                 w.Weight.MaxSpeedBagsPerMinute,
             }));
 
-        var groupHeaders = new[] { "TRS %", "Disponibilite %", "Performance %", "Qualite %", "Vitesse moy. (sacs/min)",
-            "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Poids moyen net (g)", "Ecart (g)", "Surpoids (kg)" };
-        WriteTable(workbook.Worksheets.Add("Par equipe"), new[] { "Equipe" }.Concat(groupHeaders).ToArray(),
+        var groupHeaders = new[] { "TRS %", "Disponibilité %", "Performance %", "Qualité %", "Vitesse moy. (sacs/min)",
+            "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Surpoids (kg)" };
+        WriteTable(workbook.Worksheets.Add("Par équipe"), new[] { "Équipe" }.Concat(groupHeaders).ToArray(),
             report.Teams.Select(GroupCells));
         WriteTable(workbook.Worksheets.Add("Par " + PeriodRanges.GrainName(report.Grain)),
             new[] { char.ToUpper(PeriodRanges.GrainName(report.Grain)[0]) + PeriodRanges.GrainName(report.Grain)[1..] }.Concat(groupHeaders).ToArray(),
             report.Steps.Select(GroupCells));
 
-        var detail = workbook.Worksheets.Add("Detail horaire");
+        var detail = workbook.Worksheets.Add("Détail horaire");
         WriteTable(detail,
-            new[] { "Date/Heure", "Machine", "Secteur", "Poste", "Equipe", "Produit", "Poids cible (g)", "Sachet vide (g)",
-                    "Poids moyen net (g)", "Ecart (g)", "Sacs", "Production nette (kg)", "Conformes", "Sur tol.", "Sous tol.",
-                    "Vitesse moy.", "Vitesse max", "Disponibilite %", "TRS %", "Conforme" },
+            new[] { "Date/Heure", "Machine", "Secteur", "Poste", "Équipe", "Produit", "Poids cible (g)", "Sachet vide (g)",
+                    "Poids moyen net (g)", "Écart (g)", "Sacs", "Production nette (kg)", "Conformes", "Sur tol.", "Sous tol.",
+                    "Vitesse moy.", "Vitesse max", "Disponibilité %", "TRS %", "Conforme" },
             report.Detail.Select(r => new object?[]
             {
-                r.StartTime, r.MachineName, r.Sector, r.ShiftName, r.Team, r.ProductName, r.TargetNetWeight, r.TareGrams,
+                r.StartTime, r.MachineName, Machine.SectorLabel(r.Sector), r.ShiftName, r.Team, r.ProductName, r.TargetNetWeight, r.TareGrams,
                 r.AvgWeight, r.DeviationGrams, r.TotalBags, r.ProductionKg, r.BagsInTolerance, r.BagsOverTolerance,
                 r.BagsUnderTolerance, r.SpeedBagsPerMinute, r.MaxSpeedBagsPerMinute, r.AvailabilityPercent, r.TrsPercent,
                 r.IsConform ? "Oui" : "Non",
@@ -156,9 +156,9 @@ public static class ExportService
         sheet.Cell(1, 1).Value = "SPIGA - Rapport de production";
         sheet.Cell(1, 1).Style.Font.Bold = true;
         sheet.Cell(1, 1).Style.Font.FontSize = 16;
-        sheet.Cell(2, 1).Value = "Periode : " + report.PeriodText;
-        sheet.Cell(3, 1).Value = "Filtres : " + (report.FilterLabel.Length == 0 ? "aucun" : report.FilterLabel);
-        sheet.Cell(4, 1).Value = $"Genere le {report.GeneratedAt:dd/MM/yyyy HH:mm}";
+        sheet.Cell(2, 1).Value = "Période : " + report.PeriodText;
+        sheet.Cell(3, 1).Value = "Filtres : " + (report.FilterLabel.Length == 0 ? "aucun" : report.FilterLabel);
+        sheet.Cell(4, 1).Value = $"Généré le {report.GeneratedAt:dd/MM/yyyy HH:mm}";
 
         var row = 6;
         sheet.Cell(row, 1).Value = "Indicateur";
@@ -183,7 +183,7 @@ public static class ExportService
             sheet.Cell(anchorRow, anchorCol).Style.Font.Bold = true;
             if (charts[i].Png is not { } png)
             {
-                sheet.Cell(anchorRow + 1, anchorCol).Value = "Pas de donnees";
+                sheet.Cell(anchorRow + 1, anchorCol).Value = "Pas de données";
                 continue;
             }
             using var stream = new MemoryStream(png);
@@ -194,21 +194,21 @@ public static class ExportService
     private static IEnumerable<(string Label, string Value)> KpiLines(ProductionReport report)
     {
         var k = report.Summary;
-        yield return ("TRS", Pct(k.TrsPercent) + $" (cible {report.TrsTarget:0} %)");
-        yield return ("Disponibilite", Pct(k.AvailabilityPercent));
+        yield return ("TRS", Pct(k.TrsPercent) + $" (cible {report.TrsTarget:0} %)");
+        yield return ("Disponibilité", Pct(k.AvailabilityPercent));
         yield return ("Performance", Pct(k.PerformancePercent));
-        yield return ("Qualite (conformite)", Pct(k.QualityPercent));
+        yield return ("Qualité (conformité)", Pct(k.QualityPercent));
         yield return ("Vitesse moyenne", Speed(k.SpeedBagsPerMinute) + " sacs/min");
         yield return ("Vitesse max atteinte", Speed(k.MaxSpeedBagsPerMinute) + " sacs/min");
         yield return ("Sacs produits", N0(k.TotalBags));
         yield return ("Production nette", KpiCalculator.FormatMass(k.ProductionKg));
         yield return ("Poids moyen net", KpiCalculator.FormatAverages(k.Weights));
-        yield return ("Ecart de poids", Grams(k.WeightDeviationGrams) + (k.WeightDeviationPercent is { } p ? $" ({p.ToString("+0.00;-0.00;0.00", Numbers)} %)" : ""));
-        yield return ("Surpoids donne", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—");
+        yield return ("Écart de poids", Grams(k.WeightDeviationGrams) + (k.WeightDeviationPercent is { } p ? $" ({p.ToString("+0.00;-0.00;0.00", Numbers)} %)" : ""));
+        yield return ("Surpoids donné", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—");
         yield return ("Sacs conformes", N0(k.BagsInTolerance));
-        yield return ("Sacs sous tolerance", N0(k.BagsUnderTolerance));
-        yield return ("Sacs sur tolerance", N0(k.BagsOverTolerance));
-        yield return ("Rejets detecteur metal", N0(k.MetalRejects));
+        yield return ("Sacs sous tolérance", N0(k.BagsUnderTolerance));
+        yield return ("Sacs sur tolérance", N0(k.BagsOverTolerance));
+        yield return ("Rejets détecteur de métaux", N0(k.MetalRejects));
         yield return ("Poids produits", k.Weights.Count == 0 ? "—" : string.Join(", ", k.Weights.Select(w => $"{w.TargetWeight:0} g")));
     }
 
@@ -285,18 +285,18 @@ public static class ExportService
         var k = report.Summary;
         var boxes = new (string, string)[]
         {
-            ("TRS (cible " + report.TrsTarget.ToString("0", Numbers) + " %)", Pct(k.TrsPercent)),
-            ("Disponibilite", Pct(k.AvailabilityPercent)),
+            ("TRS (cible " + report.TrsTarget.ToString("0", Numbers) + " %)", Pct(k.TrsPercent)),
+            ("Disponibilité", Pct(k.AvailabilityPercent)),
             ("Performance", Pct(k.PerformancePercent)),
-            ("Qualite", Pct(k.QualityPercent)),
+            ("Qualité", Pct(k.QualityPercent)),
             ("Vitesse moy. / max", Speed(k.SpeedBagsPerMinute) + " / " + Speed(k.MaxSpeedBagsPerMinute)),
             ("Sacs produits", N0(k.TotalBags)),
             ("Production nette", KpiCalculator.FormatMass(k.ProductionKg)),
             ("Poids moyen net", KpiCalculator.FormatAverages(k.Weights)),
-            ("Ecart de poids", Grams(k.WeightDeviationGrams)),
-            ("Surpoids donne", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—"),
-            ("Sous / sur tolerance", N0(k.BagsUnderTolerance) + " / " + N0(k.BagsOverTolerance)),
-            ("Rejets metal", N0(k.MetalRejects)),
+            ("Écart de poids", Grams(k.WeightDeviationGrams)),
+            ("Surpoids donné", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—"),
+            ("Sous / sur tolérance", N0(k.BagsUnderTolerance) + " / " + N0(k.BagsOverTolerance)),
+            ("Rejets métal", N0(k.MetalRejects)),
         };
         pdf.Boxes(boxes, perRow: 6);
         pdf.ChartGrid(charts.Take(4).ToList(), columns: 2, height: 175);
@@ -305,17 +305,17 @@ public static class ExportService
         pdf.NewPage();
         pdf.ChartGrid(charts.Skip(4).ToList(), columns: 2, height: 165);
         pdf.Table("Par machine",
-            new[] { "Machine", "Secteur", "TRS", "Cible", "Dispo.", "Perf.", "Qualite", "Vit. moy", "Vit. max", "Sacs", "Production", "Ecart", "Surpoids" },
+            new[] { "Machine", "Secteur", "TRS", "Cible", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Surpoids" },
             new double[] { 85, 55, 50, 40, 50, 50, 50, 50, 50, 65, 70, 55, 60 },
             report.Machines.Select(m => new[]
             {
-                m.MachineName, m.Sector, Pct(m.Kpis.TrsPercent), m.TrsTarget.ToString("0", Numbers) + " %", Pct(m.Kpis.AvailabilityPercent),
+                m.MachineName, Machine.SectorLabel(m.Sector), Pct(m.Kpis.TrsPercent), m.TrsTarget.ToString("0", Numbers) + " %", Pct(m.Kpis.AvailabilityPercent),
                 Pct(m.Kpis.PerformancePercent), Pct(m.Kpis.QualityPercent), Speed(m.Kpis.SpeedBagsPerMinute),
                 Speed(m.Kpis.MaxSpeedBagsPerMinute), N0(m.Kpis.TotalBags), KpiCalculator.FormatMass(m.Kpis.ProductionKg),
                 Grams(m.Kpis.WeightDeviationGrams), m.Kpis.GiveawayKg is { } kg ? KpiCalculator.FormatMass(kg, signed: true) : "—",
             }));
-        pdf.Table("Par poids (sachet vide deduit)",
-            new[] { "Machine", "Poids", "Produit", "Sachet", "Cadence", "TRS", "Sacs", "Production", "Poids moyen", "Ecart", "Ecart %", "Surpoids", "Conformite" },
+        pdf.Table("Par poids (sachet vide déduit)",
+            new[] { "Machine", "Poids", "Produit", "Sachet", "Cadence", "TRS", "Sacs", "Production", "Poids moyen", "Écart", "Écart %", "Surpoids", "Conformité" },
             new double[] { 75, 45, 75, 45, 50, 50, 60, 65, 60, 50, 50, 60, 55 },
             report.Weights.Select(w => new[]
             {
@@ -323,20 +323,20 @@ public static class ExportService
                 w.TareGrams.ToString("0.#", Numbers) + " g", w.NominalRate > 0 ? w.NominalRate.ToString("0.#", Numbers) : "—",
                 Pct(w.Weight.TrsPercent), N0(w.Weight.TotalBags), w.Weight.ProductionText,
                 w.Weight.AvgWeight is { } a ? N1(a) + " g" : "—", Grams(w.Weight.DeviationGrams),
-                w.Weight.DeviationPercent is { } p ? p.ToString("+0.00;-0.00;0.00", Numbers) + " %" : "—",
+                w.Weight.DeviationPercent is { } p ? p.ToString("+0.00;-0.00;0.00", Numbers) + " %" : "—",
                 w.Weight.GiveawayText, Pct(w.Weight.QualityPercent),
             }));
-        var groupHeaders = new[] { "TRS", "Dispo.", "Perf.", "Qualite", "Vit. moy", "Vit. max", "Sacs", "Production", "Ecart", "Surpoids" };
+        var groupHeaders = new[] { "TRS", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Surpoids" };
         var groupWidths = new double[] { 110, 55, 55, 55, 55, 55, 55, 70, 75, 60, 65 };
-        pdf.Table("Par equipe", new[] { "Equipe" }.Concat(groupHeaders).ToArray(), groupWidths, report.Teams.Select(GroupRow));
-        pdf.Table("Par " + PeriodRanges.GrainName(report.Grain), new[] { "Periode" }.Concat(groupHeaders).ToArray(), groupWidths,
+        pdf.Table("Par équipe", new[] { "Équipe" }.Concat(groupHeaders).ToArray(), groupWidths, report.Teams.Select(GroupRow));
+        pdf.Table("Par " + PeriodRanges.GrainName(report.Grain), new[] { "Période" }.Concat(groupHeaders).ToArray(), groupWidths,
             report.Steps.Where(s => s.Kpis.TotalBags > 0).Select(GroupRow));
 
         // Detail: one row per machine, hour and production.
         pdf.NewPage();
-        pdf.Table($"Detail horaire ({N0(report.Detail.Count)} lignes : une par machine, heure et production)",
-            new[] { "Date/Heure", "Machine", "Poste", "Equipe", "Produit", "Cible", "Moyen net", "Ecart", "Sacs", "Prod. kg",
-                    "Vit. moy", "Vit. max", "Dispo.", "TRS", "Conf.", "Elev.", "Faib." },
+        pdf.Table($"Détail horaire ({N0(report.Detail.Count)} lignes : une par machine, heure et production)",
+            new[] { "Date/Heure", "Machine", "Poste", "Équipe", "Produit", "Cible", "Net moyen", "Écart", "Sacs", "Prod. kg",
+                    "Vit. moy.", "Vit. max", "Dispo.", "TRS", "Conf.", "Sur tol.", "Sous tol." },
             new double[] { 62, 60, 34, 42, 60, 34, 44, 38, 42, 46, 38, 38, 36, 38, 42, 36, 36 },
             report.Detail.Select(r => new[]
             {
@@ -382,8 +382,8 @@ public static class ExportService
             page.Height = XUnit.FromPoint(PageHeight);
             _gfx = XGraphics.FromPdfPage(page);
             _gfx.DrawString("SPIGA - Rapport de production", TitleFont, XBrushes.Black, new XRect(Margin, 18, 500, 20), XStringFormats.TopLeft);
-            var subtitle = $"Periode {_report.PeriodText}  -  Filtres : {(_report.FilterLabel.Length == 0 ? "aucun" : _report.FilterLabel)}"
-                           + $"  -  Genere le {_report.GeneratedAt:dd/MM/yyyy HH:mm}";
+            var subtitle = $"Période {_report.PeriodText}  -  Filtres : {(_report.FilterLabel.Length == 0 ? "aucun" : _report.FilterLabel)}"
+                           + $"  -  Généré le {_report.GeneratedAt:dd/MM/yyyy HH:mm}";
             _gfx.DrawString(subtitle, SubtitleFont, XBrushes.DimGray, new XRect(Margin, 38, PageWidth - 2 * Margin, 12), XStringFormats.TopLeft);
             _gfx.DrawLine(XPens.LightGray, Margin, 54, PageWidth - Margin, 54);
             _y = 62;
@@ -433,7 +433,7 @@ public static class ExportService
                     }
                     else
                     {
-                        _gfx.DrawString("Pas de donnees", CellFont, XBrushes.Gray, new XRect(x, _y + 12 + height / 2, width, 10), XStringFormats.TopCenter);
+                        _gfx.DrawString("Pas de données", CellFont, XBrushes.Gray, new XRect(x, _y + 12 + height / 2, width, 10), XStringFormats.TopCenter);
                     }
                 }
                 _y += height + 16;
@@ -483,7 +483,7 @@ public static class ExportService
             }
             if (!any)
             {
-                _gfx.DrawString("Aucune donnee", CellFont, XBrushes.Gray, new XRect(Margin + 2, _y + 2, 200, rowHeight), XStringFormats.TopLeft);
+                _gfx.DrawString("Aucune donnée", CellFont, XBrushes.Gray, new XRect(Margin + 2, _y + 2, 200, rowHeight), XStringFormats.TopLeft);
                 _y += rowHeight;
             }
             _y += 14;

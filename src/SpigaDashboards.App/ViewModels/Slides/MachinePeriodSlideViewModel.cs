@@ -30,7 +30,7 @@ public class MachinePeriodSlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
-    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "A l'arret");
+    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
     public KpiSummary Kpis { get; init; } = new();
@@ -39,7 +39,7 @@ public class MachinePeriodSlideViewModel
     public KpiSeverity WeightDeviationSeverity { get; init; }
     public string AvgWeightText => KpiCalculator.FormatAverages(Kpis.Weights);
     public string TargetWeightsText => Kpis.Weights.Count == 0
-        ? "Pas de donnees de poids"
+        ? "Pas de données de poids"
         : "Cible " + string.Join(" · ", Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"));
     public IReadOnlyList<TeamPeriodRow> Teams { get; init; } = Array.Empty<TeamPeriodRow>();
 
@@ -100,7 +100,7 @@ public class MachinePeriodSlideViewModel
 
         return new MachinePeriodSlideViewModel
         {
-            SectorLabel = sector,
+            SectorLabel = Machine.SectorLabel(sector),
             MachineName = machine.MachineName,
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),

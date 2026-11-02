@@ -5,7 +5,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
         mc:Ignorable="d"
-        Title="Parametres" Icon="/Assets/spiga-logo.png" Height="800" Width="720"
+        Title="Paramètres" Icon="/Assets/spiga-logo.png" Height="800" Width="720"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
         Language="fr-FR"
@@ -76,7 +76,7 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="Base de donnees" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                <TextBlock Text="Base de données" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
 
                 <StackPanel Orientation="Horizontal">
                     <RadioButton Content="SQL Server (production)" GroupName="Provider"
@@ -88,7 +88,7 @@
                 <TextBlock Text="Serveur (ex. NOM-DU-PC\SQLEXPRESS, ou adresse IP,port)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Nom de la base (Stiavelli : stats)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Nom de la base (Stiavelli : stats)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}"/>
 
                 <TextBlock Text="Authentification" Style="{StaticResource FieldLabel}"/>
@@ -114,16 +114,16 @@
 
                 <Button Content="Ouvrir la console de diagnostic" Style="{StaticResource SecondaryButton}"
                         HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding OpenConsoleCommand}"
-                        ToolTip="Ouvre une fenetre independante affichant le journal des tentatives de connexion. La fermer n'affecte pas l'application."/>
+                        ToolTip="Ouvre une fenêtre indépendante affichant le journal des tentatives de connexion. La fermer n'affecte pas l'application."/>
 
-                <TextBlock Text="Machines : nom affiche, visibilite et TRS cible" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="TRS cible (%) : objectif affiche a cote du TRS de chaque machine (vert si atteint, orange au-dessus de 75 % de la cible, rouge en dessous). Vide = 85 %."
+                <TextBlock Text="Machines : nom affiché, visibilité et TRS cible" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="TRS cible (%) : objectif affiché à côté du TRS de chaque machine (vert si atteint, orange au-dessus de 75 % de la cible, rouge en dessous). Vide = 85 %."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <Button Content="Actualiser la liste" Style="{StaticResource SecondaryButton}"
                         HorizontalAlignment="Left" Command="{Binding RefreshMachinesCommand}"/>
                 <TextBlock Text="{Binding MachinesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                 <StackPanel Orientation="Horizontal" Margin="28,6,0,0">
-                    <TextBlock Text="Nom affiche" Style="{StaticResource FieldLabel}" Width="250" Margin="0"/>
+                    <TextBlock Text="Nom affiché" Style="{StaticResource FieldLabel}" Width="250" Margin="0"/>
                     <TextBlock Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Margin="0"/>
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding Machines}">
@@ -134,20 +134,20 @@
                                           ToolTip="Afficher cette machine dans la rotation du tableau de bord"/>
                                 <TextBox Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" Width="240"/>
                                 <TextBox Text="{Binding TrsTargetText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
-                                         ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
+                                         ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <TextBlock Text="Affichage : rotation des diapositives" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Duree d'affichage par defaut d'une diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Affichage : rotation des diapositives" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Durée d'affichage par défaut d'une diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding SlideDurationSeconds, UpdateSourceTrigger=PropertyChanged}"/>
-                <TextBlock Text="Frequence d'actualisation des donnees (minutes)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Fréquence d'actualisation des données (minutes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Diapositives : ordre, affichage et duree" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
-                <TextBlock Text="Decocher une diapositive la retire de la rotation (tableau de bord et ecran TV). Les fleches changent sa place. Duree vide = duree par defaut ci-dessus. Une machine decochee dans la liste des machines n'apparait nulle part, quel que soit ce reglage ; une nouvelle machine prend sa place par defaut."
+                <TextBlock Text="Diapositives : ordre, affichage et durée" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
+                <TextBlock Text="Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <Grid Margin="0,0,0,2">
                     <Grid.ColumnDefinitions>
@@ -157,7 +157,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="1" Text="Diapositive" Style="{StaticResource FieldLabel}" Margin="28,0,0,0"/>
-                    <TextBlock Grid.Column="2" Text="Duree (s)" Style="{StaticResource FieldLabel}" Margin="8,0,0,0"/>
+                    <TextBlock Grid.Column="2" Text="Durée (s)" Style="{StaticResource FieldLabel}" Margin="8,0,0,0"/>
                 </Grid>
                 <ItemsControl ItemsSource="{Binding Slides}">
                     <ItemsControl.ItemTemplate>
@@ -187,10 +187,10 @@
                                     </TextBlock>
                                 </CheckBox>
                                 <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
-                                         IsEnabled="{Binding IsEnabled}" ToolTip="Duree de cette diapositive en secondes (vide = duree par defaut)"/>
+                                         IsEnabled="{Binding IsEnabled}" ToolTip="Durée de cette diapositive en secondes (vide = durée par défaut)"/>
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
                                     <Button Content="&#x25B2;" AutomationProperties.Name="Monter" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0,0,4,0"
-                                            ToolTip="Monter (passe plus tot dans la rotation)"
+                                            ToolTip="Monter (passe plus tôt dans la rotation)"
                                             Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}"/>
                                     <Button Content="&#x25BC;" AutomationProperties.Name="Descendre" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0"
@@ -202,13 +202,13 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <Button Content="Ordre par defaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
-                        ToolTip="Remet l'ordre d'origine, toutes les diapositives affichees, duree par defaut"
+                <Button Content="Ordre par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                        ToolTip="Rétablit l'ordre d'origine : toutes les diapositives affichées, durée par défaut"
                         Command="{Binding ResetSlidesCommand}"/>
                 <TextBlock Text="{Binding SlidesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                 <TextBlock Text="Cadence nominale et sachet vide, par machine et par poids" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Cadence : vitesse ideale (sacs/min) de la machine pour ce poids de sac, sert a la Performance et au TRS. Sachet vide : poids de l'emballage vide (g), deduit du poids mesure pour obtenir le poids net (poids moyen, ecart, surpoids). Une production est associee a la ligne de SA machine pour le poids le plus proche de son poids cible (a 5 % pres), sinon a la ligne &quot;Toutes&quot;. Cadence vide = TRS non calcule pour ce poids."
+                <TextBlock Text="Cadence : vitesse idéale (sacs/min) de la machine pour ce poids de sac, sert au calcul de la Performance et du TRS. Sachet vide : poids de l'emballage vide (g), déduit du poids mesuré pour obtenir le poids net (poids moyen, écart, surpoids). Une production est associée à la ligne de SA machine pour le poids le plus proche de son poids cible (à 5 % près), sinon à la ligne « Toutes ». Cadence vide = TRS non calculé pour ce poids."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
@@ -258,12 +258,12 @@
                         Command="{Binding AddNominalRateCommand}"/>
                 <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
-                <TextBlock Text="Pauses planifiees et arrets" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Pauses de tous les jours, sur toutes les machines. Le temps ou la ligne est a l'arret pendant une pause n'est pas compte dans la Disponibilite (ni le TRS), ni dans la liste des arrets ; une ligne qui tourne pendant la pause garde ce temps de marche. Meme regle pour les creneaux de maintenance et les arrets de cause « Planifie » saisis dans Planification."
+                <TextBlock Text="Pauses planifiées et arrêts" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Pauses quotidiennes, communes à toutes les machines. Le temps où la ligne est à l'arrêt pendant une pause n'est pas compté dans la Disponibilité (ni le TRS), ni dans la liste des arrêts ; une ligne qui tourne pendant la pause garde ce temps de marche. Même règle pour les créneaux de maintenance et les arrêts de cause « Planifié » saisis dans Planification."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                    <TextBlock Text="Debut (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>
-                    <TextBlock Text="Duree (min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                    <TextBlock Text="Début (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>
+                    <TextBlock Text="Durée (min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding PlannedBreaks}">
                     <ItemsControl.ItemTemplate>
@@ -280,23 +280,23 @@
                 </ItemsControl>
                 <Button Content="+ Pause" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
                         Command="{Binding AddPlannedBreakCommand}"/>
-                <TextBlock Text="Seuil d'arret (minutes) : un compteur immobile au moins aussi longtemps, hors pauses, est liste dans la fenetre Arrets et sur la fiche a imprimer"
+                <TextBlock Text="Seuil d'arrêt (minutes) : tout arrêt du compteur au moins égal à cette durée, hors pauses, apparaît dans la fenêtre Arrêts et sur la fiche à imprimer"
                            Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
                 <TextBox Text="{Binding StopThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left"/>
                 <TextBlock Text="{Binding BreaksStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
-                <TextBlock Text="Equipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Cycle par defaut (aucun planning client fourni) : chaque equipe travaille 3 jours de suite sur un poste different, puis se repose 1 jour. A ajuster une fois le vrai planning connu."
+                <TextBlock Text="Équipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Text="Cycle par défaut (aucun planning client fourni) : chaque équipe travaille 3 jours de suite sur un poste différent, puis se repose 1 jour. À ajuster une fois le vrai planning connu."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                <TextBlock Text="Nom des 4 equipes" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Noms des 4 équipes" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding Team1Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
                 <TextBox Text="{Binding Team2Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
                 <TextBox Text="{Binding Team3Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
                 <TextBox Text="{Binding Team4Name, UpdateSourceTrigger=PropertyChanged}"/>
-                <TextBlock Text="Date de reference du cycle (jour 1 de la ligne ci-dessous)" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Date de référence du cycle (jour 1 de la ligne ci-dessous)" Style="{StaticResource FieldLabel}"/>
                 <DatePicker SelectedDate="{Binding RotationStartDate}"/>
 
-                <TextBlock Text="Planning du cycle : equipe par jour et par poste" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Planning du cycle : équipe par jour et par poste" Style="{StaticResource FieldLabel}"/>
                 <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="70"/>
@@ -344,11 +344,11 @@
                 </StackPanel>
 
                 <TextBlock Text="Document externe (diapositive PDF)" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Consignes, instructions ou document qualite affiche en diapositive (sa place se regle dans Affichage ci-dessus). Laisser vide pour ne pas afficher cette diapositive."
+                <TextBlock Text="Consignes, instructions ou document qualité affiché en diapositive (sa place se règle dans Affichage ci-dessus). Laisser vide pour ne pas afficher cette diapositive."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                 <StackPanel Orientation="Horizontal">
                     <TextBox Text="{Binding PdfDocumentPath, UpdateSourceTrigger=PropertyChanged}" Width="360" IsReadOnly="True"/>
-                    <Button Content="Parcourir..." Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                    <Button Content="Parcourir…" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
                             Command="{Binding BrowsePdfDocumentCommand}"/>
                 </StackPanel>
                 <TextBlock Text="{Binding PdfDocumentStatus}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" Margin="0,4,0,0"/>

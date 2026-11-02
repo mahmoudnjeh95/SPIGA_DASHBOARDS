@@ -373,7 +373,7 @@ public partial class BoardViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - semaine : {ex}");
+            AppLogger.Log($"Planification - semaine : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
         finally
@@ -526,7 +526,7 @@ public partial class BoardViewModel : ObservableObject
                 allBlocks.AddRange(row.Blocks);
                 rows.Add(row);
             }
-            Sectors.Add(new SectorGroup(SectorLabel(sector.Key), PlanningContext.Brush(color),
+            Sectors.Add(new SectorGroup(Machine.SectorLabel(sector.Key), PlanningContext.Brush(color),
                 $"{rows.Count} ligne{(rows.Count > 1 ? "s" : "")}", rows));
         }
 
@@ -579,17 +579,17 @@ public partial class BoardViewModel : ObservableObject
         var orange = PlanningContext.Brush(Color.FromRgb(0xEC, 0x83, 0x5A));
         var amber = PlanningContext.Brush(Color.FromRgb(0xFA, 0xB2, 0x19));
         foreach (var (p, s) in overduePlans)
-            Alerts.Add(new AlertRow(_ctx.NameOf(p.MachineId), $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
+            Alerts.Add(new AlertRow(_ctx.NameOf(p.MachineId), $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
         foreach (var o in lateOrders)
         {
             var late = Behind(o, produced.GetValueOrDefault(o.Id), now);
             Alerts.Add(new AlertRow(_ctx.NameOf(o.MachineId), $"{o.OrderNo} en retard de {PlanningContext.Duration(late * 60)} au rythme actuel.", orange));
         }
         foreach (var e in maintenances.Where(e => e.Status == PlanStatus.Planned && e.PlannedEnd < now))
-            Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
+            Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
         foreach (var e in _events.Where(e => e.Status == PlanStatus.Planned))
             foreach (var o in _orders.Where(o => o.MachineId == e.MachineId && o.PlannedStart < e.PlannedEnd && o.PlannedEnd > e.PlannedStart))
-                Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
+                Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
         var planned = _orders.Where(o => o.Status == PlanStatus.Planned).OrderBy(o => o.PlannedStart).ToList();
         for (var i = 0; i < planned.Count; i++)
             foreach (var other in planned.Skip(i + 1).Where(x => x.MachineId == planned[i].MachineId && x.PlannedStart < planned[i].PlannedEnd))
@@ -647,13 +647,6 @@ public partial class BoardViewModel : ObservableObject
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpper(text[0]) + text[1..];
 
     private DateTime Clamp(DateTime t) => t < RangeStart ? RangeStart : t > RangeEnd ? RangeEnd : t;
-
-    private static string SectorLabel(string sector) => sector switch
-    {
-        "Pate courte" => "Pâte courte",
-        "Pate longue" => "Pâte longue",
-        _ => sector,
-    };
 
     public static string When(DateTime t) => PlanningContext.Day(t) + " · " + t.ToString("HH:mm");
 
@@ -731,7 +724,7 @@ public partial class BoardViewModel : ObservableObject
                     DetailHasProgress = true;
                     DetailProgress = block.Progress;
                     DetailExpected = Math.Clamp((now - o.PlannedStart).TotalHours / Math.Max(0.01, (o.PlannedEnd - o.PlannedStart).TotalHours), 0, 1);
-                    DetailProgressText = $"{PlanningContext.Bags(block.ProducedBags)} / {PlanningContext.Bags(o.QuantityBags)} sacs · trait = attendu maintenant ({DetailExpected * 100:0} %)";
+                    DetailProgressText = $"{PlanningContext.Bags(block.ProducedBags)} / {PlanningContext.Bags(o.QuantityBags)} sacs · trait = attendu maintenant ({DetailExpected * 100:0} %)";
                 }
                 if (running && block.ProducedBags > 0)
                 {
@@ -740,13 +733,13 @@ public partial class BoardViewModel : ObservableObject
                     var estimate = now.AddHours(elapsed * Math.Max(0, o.QuantityBags - block.ProducedBags) / block.ProducedBags);
                     DetailRows.Add(new DetailRow("Fin estimée", When(estimate)));
                     DetailNote = behind > 0.25
-                        ? $"Retard estimé de {PlanningContext.Duration(behind * 60)} au rythme actuel : l'ordre suivant sur cette ligne sera décalé."
+                        ? $"Retard estimé de {PlanningContext.Duration(behind * 60)} au rythme actuel : l'ordre suivant sur cette ligne sera décalé."
                         : "Dans les temps au rythme actuel.";
                     DetailNoteBrush = behind > 0.25 ? orange : green;
                 }
                 else if (running && (now - o.PlannedStart).TotalHours > 1)
                 {
-                    DetailNote = "Aucun sac compté depuis le début prévu : l'ordre a-t-il démarré ?";
+                    DetailNote = "Aucun sac compté depuis le début prévu : l'ordre a-t-il démarré ?";
                     DetailNoteBrush = orange;
                 }
                 CanEditSelected = o.Status == PlanStatus.Planned;
@@ -767,7 +760,7 @@ public partial class BoardViewModel : ObservableObject
                 DetailRows.Add(new DetailRow("Durée", PlanningContext.Duration(e.DurationMinutes)));
                 if (e.DoneAt is { } endedAt)
                     DetailRows.Add(new DetailRow("Terminé le", When(endedAt)));
-                DetailNote = "Hors TRS : ce temps n'est pas compté dans le temps requis de la ligne.";
+                DetailNote = "Hors TRS : ce temps n'est pas compté dans le temps requis de la ligne.";
                 DetailNoteBrush = grey;
                 CanEditSelected = e.Status == PlanStatus.Planned && e.PlannedEnd > now;
                 // Ends it now (the line restarts early).
@@ -794,12 +787,13 @@ public partial class BoardViewModel : ObservableObject
                     DetailRows.Add(new DetailRow("Réalisée le", When(doneAt)));
                 if (e.Status == PlanStatus.Planned && e.PlannedEnd < now)
                 {
-                    DetailNote = "Le créneau est passé : validez-la si elle a été faite, sinon replanifiez-la.";
+                    DetailNote = "Le créneau est passé : validez-la si elle a été faite, sinon replanifiez-la.";
                     DetailNoteBrush = red;
                 }
                 CanEditSelected = e.Status == PlanStatus.Planned;
                 CanCloseSelected = e.Status == PlanStatus.Planned;
-                CloseSelectedText = "Valider";
+                // In progress: ends it now, like a planned stop.
+                CloseSelectedText = e.IsActiveAt(now) ? "Terminer" : "Valider";
                 break;
 
             case StopQualification q:
@@ -852,6 +846,9 @@ public partial class BoardViewModel : ObservableObject
                     await _ctx.Planning.SaveEventAsync(e);
                     break;
                 case MaintenanceEvent e:
+                    // Ended early: the rest of the slot goes back to the TRS.
+                    if (e.IsActiveAt(now))
+                        e.DurationMinutes = Math.Max(1, (int)Math.Round((now - e.PlannedStart).TotalMinutes));
                     e.Status = PlanStatus.Done;
                     e.DoneAt = now;
                     await _ctx.Planning.SaveEventAsync(e);
@@ -877,12 +874,12 @@ public partial class BoardViewModel : ObservableObject
         var what = SelectedBlock?.Source switch
         {
             ProductionOrder o => $"l'ordre {o.OrderNo}",
-            MaintenanceEvent { IsStop: true } e => $"l'arrêt planifié « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
-            MaintenanceEvent e => $"la maintenance « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
+            MaintenanceEvent { IsStop: true } e => $"l'arrêt planifié « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
+            MaintenanceEvent e => $"la maintenance « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
             _ => null,
         };
         if (what != null)
-            Confirm($"Supprimer {what} ?", "Supprimer", DeleteSelectedNowAsync);
+            Confirm($"Supprimer {what} ?", "Supprimer", DeleteSelectedNowAsync);
     }
 
     private async Task DeleteSelectedNowAsync()
@@ -1098,7 +1095,7 @@ public partial class BoardViewModel : ObservableObject
         var end = StartAt(OrderEndDate, OrderEndTime);
         CanOrderEndFromRate = _orderEndManual && rateHours != null;
 
-        var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
+        var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
             : machine != null && ParseNumber(OrderQuantity) > 0 ? $"pas de cadence nominale pour {machine.MachineName} à {ParseNumber(OrderWeight):0.##} g (Paramètres)"
             : "";
         if (SpanError(start, end) is { } error)
@@ -1139,7 +1136,7 @@ public partial class BoardViewModel : ObservableObject
         try
         {
             await _ctx.Planning.SaveOrderAsync(o);
-            AppLogger.Log($"OF enregistre : {o.OrderNo} {o.MachineId} {o.PlannedStart:g}");
+            AppLogger.Log($"OF enregistré : {o.OrderNo} {o.MachineId} {o.PlannedStart:g}");
             Editor = EditorMode.None;
             await GoToAsync(o.PlannedStart, "O" + o.Id);
         }
@@ -1263,7 +1260,7 @@ public partial class BoardViewModel : ObservableObject
             await _ctx.Planning.SaveEventAsync(e);
             Editor = EditorMode.None;
             await GoToAsync(e.PlannedStart, "E" + e.Id);
-            StatusMessage = $"{(e.IsStop ? "Arrêt planifié enregistré" : "Maintenance enregistrée")} : {machine.MachineName} · {Span(e.PlannedStart, e.PlannedEnd)}.";
+            StatusMessage = $"{(e.IsStop ? "Arrêt planifié enregistré" : "Maintenance enregistrée")} : {machine.MachineName} · {Span(e.PlannedStart, e.PlannedEnd)}.";
         }
         catch (Exception ex)
         {
@@ -1329,7 +1326,7 @@ public partial class BoardViewModel : ObservableObject
             await _ctx.Planning.SavePlanAsync(p);
             Editor = EditorMode.None;
             await RefreshAsync();
-            StatusMessage = $"Règle enregistrée : {p.Task} sur {machine.MachineName}.";
+            StatusMessage = $"Règle enregistrée : {p.Task} sur {machine.MachineName}.";
         }
         catch (Exception ex)
         {
@@ -1345,7 +1342,7 @@ public partial class BoardViewModel : ObservableObject
             Editor = EditorMode.None;
             return;
         }
-        Confirm($"Supprimer la règle « {_editingPlan.Task} » ({_ctx.NameOf(_editingPlan.MachineId)}) ?", "Supprimer", DeletePlanNowAsync);
+        Confirm($"Supprimer la règle « {_editingPlan.Task} » ({_ctx.NameOf(_editingPlan.MachineId)}) ?", "Supprimer", DeletePlanNowAsync);
     }
 
     private async Task DeletePlanNowAsync()
@@ -1383,7 +1380,7 @@ public partial class BoardViewModel : ObservableObject
     }
 
     private void ConfirmPlanDone(MaintenancePlan p)
-        => Confirm($"« {p.Task} » ({_ctx.NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée",
+        => Confirm($"« {p.Task} » ({_ctx.NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée",
             () => MarkPlanDoneAsync(p));
 
     private async Task MarkPlanDoneAsync(MaintenancePlan p)
@@ -1400,7 +1397,7 @@ public partial class BoardViewModel : ObservableObject
                 await _ctx.Planning.SaveEventAsync(e);
             }
             await RefreshAsync();
-            StatusMessage = $"« {p.Task} » réalisée : prochaine échéance recalculée.";
+            StatusMessage = $"« {p.Task} » réalisée : prochaine échéance recalculée.";
         }
         catch (Exception ex)
         {
@@ -1484,9 +1481,9 @@ public partial class BoardViewModel : ObservableObject
         var busy = _orders.Where(o => o.MachineId == id && o.Status == PlanStatus.Planned && o.PlannedStart < _slotEnd && o.PlannedEnd > _slotStart)
             .Select(o => o.OrderNo)
             .Concat(_events.Where(e => e.MachineId == id && e.Status == PlanStatus.Planned && e.PlannedStart < _slotEnd && e.PlannedEnd > _slotStart)
-                .Select(e => $"« {e.Task} »"))
+                .Select(e => $"« {e.Task} »"))
             .ToList();
-        SlotWarning = busy.Count == 0 ? "" : "Déjà occupé : " + string.Join(", ", busy);
+        SlotWarning = busy.Count == 0 ? "" : "Déjà occupé : " + string.Join(", ", busy);
         _slotTaken = false;
         IsSlotMenuOpen = true;
     }
@@ -1660,7 +1657,7 @@ public partial class BoardViewModel : ObservableObject
             await _ctx.Planning.SaveEventAsync(e);
             await RefreshAsync();
             SelectedBlock = Sectors.SelectMany(s => s.Rows).SelectMany(r => r.Blocks).FirstOrDefault(b => b.Key == "E" + e.Id);
-            StatusMessage = $"« {e.Task} » replanifié : {Span(e.PlannedStart, e.PlannedEnd)} ({PlanningContext.Duration(e.DurationMinutes)}).";
+            StatusMessage = $"« {e.Task} » replanifié : {Span(e.PlannedStart, e.PlannedEnd)} ({PlanningContext.Duration(e.DurationMinutes)}).";
         }
         catch (Exception ex)
         {

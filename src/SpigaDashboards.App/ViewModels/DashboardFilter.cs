@@ -64,7 +64,7 @@ public sealed record DashboardFilter
     {
         var parts = new List<string>();
         if (Sector != null)
-            parts.Add(Sector);
+            parts.Add(Machine.SectorLabel(Sector));
         if (MachineIds.Count > 0)
             parts.Add(MachinesLabel);
         if (ShiftId is { } shift)
@@ -120,7 +120,7 @@ public static class PeriodRanges
     public static string Label(DashboardPeriod period, DateTime from, DateTime to) => period switch
     {
         DashboardPeriod.Day => "Aujourd'hui",
-        DashboardPeriod.PreviousShift => "Poste precedent",
+        DashboardPeriod.PreviousShift => "Poste précédent",
         DashboardPeriod.Yesterday => $"Hier ({from:dd/MM})",
         DashboardPeriod.Week => "Cette semaine",
         DashboardPeriod.Month => "Ce mois",
@@ -137,7 +137,7 @@ public static class PeriodRanges
             SynthesisPeriod.Month => (month, today.AddDays(1), month.ToString("MMMM yyyy", French)),
             SynthesisPeriod.ThreeMonths => (month.AddMonths(-2), today.AddDays(1),
                 "3 derniers mois (" + month.AddMonths(-2).ToString("MMM", French) + " - " + month.ToString("MMM yyyy", French) + ")"),
-            _ => (new DateTime(today.Year, 1, 1), today.AddDays(1), $"Annee {today.Year}"),
+            _ => (new DateTime(today.Year, 1, 1), today.AddDays(1), $"Année {today.Year}"),
         };
     }
 

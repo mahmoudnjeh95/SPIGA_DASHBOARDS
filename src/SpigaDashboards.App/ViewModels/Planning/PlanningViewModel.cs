@@ -52,7 +52,7 @@ public partial class PlanningViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - ouverture : {ex}");
+            AppLogger.Log($"Planification - ouverture : {ex}");
             LoadError = PlanningErrors.Describe(ex);
         }
     }

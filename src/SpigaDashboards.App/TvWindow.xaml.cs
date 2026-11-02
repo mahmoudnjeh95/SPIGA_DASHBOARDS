@@ -118,7 +118,7 @@ public partial class TvWindow : Window
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Ecran TV : position non enregistree ({ex.Message})");
+            AppLogger.Log($"Écran TV : position non enregistrée ({ex.Message})");
         }
     }
 
@@ -137,7 +137,7 @@ public partial class TvWindow : Window
     {
         var fullScreen = IsFullScreen;
         PlacementHint.Visibility = fullScreen ? Visibility.Collapsed : Visibility.Visible;
-        FullScreenMenuItem.Header = fullScreen ? "Quitter le plein ecran" : "Plein ecran";
+        FullScreenMenuItem.Header = fullScreen ? "Quitter le plein écran" : "Plein écran";
     }
 
     private void UpdateClock() => ClockText.Text = DateTime.Now.ToString("dd/MM/yyyy  HH:mm");

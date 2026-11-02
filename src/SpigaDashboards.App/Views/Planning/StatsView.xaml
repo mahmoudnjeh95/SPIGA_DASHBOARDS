@@ -79,7 +79,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0">
                     <TextBlock Text="STATISTIQUES" Style="{StaticResource Eyebrow}"/>
-                    <TextBlock Text="Statistique des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
+                    <TextBlock Text="Statistiques des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
                     <TextBlock Text="Calculé sur les arrêts qualifiés (onglet Pannes)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
@@ -99,7 +99,7 @@
                               ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}" AutomationProperties.Name="Équipe"/>
                     <CheckBox Content="Pannes seulement" IsChecked="{Binding PannesOnly}" Margin="14,0,0,0" VerticalAlignment="Center"
                               FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"
-                              ToolTip="Coché : seulement les pannes (mécanique, électrique, pneumatique). Décoché : tous les arrêts qualifiés."/>
+                              ToolTip="Coché : seulement les pannes (mécanique, électrique, pneumatique). Décoché : tous les arrêts qualifiés."/>
                     <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>
                 </StackPanel>
             </Grid>

@@ -14,7 +14,7 @@ public class MachineRunTile
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
-    public string RunStateLabel => PlannedLabel ?? (!IsConnected ? "Pas de donnees" : BeltRunning ? "En marche" : "A l'arret");
+    public string RunStateLabel => PlannedLabel ?? (!IsConnected ? "Pas de données" : BeltRunning ? "En marche" : "À l'arrêt");
 }
 
 // Banner of a run-state photo while the line is in a slot of the

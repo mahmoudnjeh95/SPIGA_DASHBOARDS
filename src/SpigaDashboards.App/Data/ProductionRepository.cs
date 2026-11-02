@@ -427,7 +427,7 @@ rz AS (
         }
         catch (Exception ex)
         {
-            AppLogger.Log("Creneaux planifies (Planification) illisibles : " + ex.Message);
+            AppLogger.Log("Créneaux planifiés (Planification) illisibles : " + ex.Message);
             return new();
         }
     }
@@ -442,7 +442,7 @@ rz AS (
         }
         catch (Exception ex)
         {
-            AppLogger.Log("Arrets planifies (Planification) illisibles, non deduits du TRS : " + ex.Message);
+            AppLogger.Log("Arrêts planifiés (Planification) illisibles, non déduits du TRS : " + ex.Message);
             return new();
         }
     }
@@ -887,7 +887,7 @@ GROUP BY p.ID_produzione", parameters))
             return known;
         var exists = await connection.ExecuteScalarAsync<int>(d.LotTableExists) > 0;
         if (!exists)
-            AppLogger.Log("Table lotto introuvable : poids calcules depuis media_totale (filtre).");
+            AppLogger.Log("Table lotto introuvable : poids calculés depuis media_totale (filtre).");
         _hasLotTable = exists;
         return exists;
     }

@@ -39,7 +39,7 @@ public class TeamScheduleService
         return string.IsNullOrEmpty(team) ? NoTeam : team;
     }
 
-    public const string NoTeam = "Sans equipe";
+    public const string NoTeam = "Sans équipe";
 
     public string GetTeamForShift(DateTime shiftDate, int shiftId)
     {

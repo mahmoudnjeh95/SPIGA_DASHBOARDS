@@ -43,7 +43,7 @@
             <TextBlock Grid.Column="1" Text="Sacs" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="2" Text="Production" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="3" Text="Poids moyen" Style="{StaticResource Head}"/>
-            <TextBlock Grid.Column="4" Text="Ecart" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="4" Text="Écart" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="5" Text="Surpoids" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="6" Text="TRS" Style="{StaticResource Head}"/>
         </Grid>
@@ -82,7 +82,7 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <TextBlock Text="Pas de production sur la periode" Foreground="{DynamicResource SubtleTextBrush}"
+        <TextBlock Text="Pas de production sur la période" Foreground="{DynamicResource SubtleTextBrush}"
                    FontSize="{Binding HeaderFontSize, ElementName=Root}" Margin="0,4,0,0">
             <TextBlock.Style>
                 <Style TargetType="TextBlock">

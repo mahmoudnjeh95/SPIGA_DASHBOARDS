@@ -42,7 +42,7 @@ public class TeamRosterEntry
 
 public class TeamRotationSettings
 {
-    public string[] TeamNames { get; set; } = { "Equipe A", "Equipe B", "Equipe C", "Equipe D" };
+    public string[] TeamNames { get; set; } = { "Équipe A", "Équipe B", "Équipe C", "Équipe D" };
 
     // Anchor date for CycleDay 0. Nudge this to realign the cycle once the
     // client's real roster is known.

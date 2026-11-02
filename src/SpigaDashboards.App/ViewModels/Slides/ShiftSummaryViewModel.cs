@@ -13,7 +13,7 @@ public class ShiftSummaryViewModel
     public string TimeRange { get; init; } = "";
     public string TeamName { get; init; } = "";
     public bool IsRunning { get; init; }
-    public string StateLabel => IsRunning ? "EN COURS" : "TERMINE";
+    public string StateLabel => IsRunning ? "EN COURS" : "TERMINÉ";
     public KpiSummary Kpis { get; init; } = new();
     public double TrsTarget { get; init; }
     public KpiSeverity TrsSeverity { get; init; }
@@ -22,7 +22,7 @@ public class ShiftSummaryViewModel
     // "Poids moyen" replaces the bag count: one value per target weight.
     public string AvgWeightText => KpiCalculator.FormatAverages(Kpis.Weights);
     public string TargetWeightsText => Kpis.Weights.Count == 0
-        ? "Pas de donnees de poids"
+        ? "Pas de données de poids"
         : "Cible " + string.Join(" · ", Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"));
     // Net weight produced by the team over the poste, all weights together.
     public string ProductionText => KpiCalculator.FormatMass(Kpis.ProductionKg);

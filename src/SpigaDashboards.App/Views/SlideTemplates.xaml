@@ -57,7 +57,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                    <Run Text="Synthese - "/><Run Text="{Binding SectorLabel, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
+                    <Run Text="Synthèse - "/><Run Text="{Binding SectorLabel, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/>
                     <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
                     <Run Text="  ·  TRS secteur " FontSize="18"/><Run Text="{Binding SectorKpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
                     <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding SectorProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
@@ -87,7 +87,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button Content="Annee" Tag="Year">
+                    <Button Content="Année" Tag="Year">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource PeriodButton}">
                                 <Style.Triggers>
@@ -148,7 +148,7 @@
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Margin="16,6,16,0" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis">
                 <Run Text="{Binding Title, Mode=OneWay}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="Bold"/><Run
-                     Text=" · Etat des machines"/><Run Text="  ·  En marche " FontSize="18"/><Run
+                     Text=" · État des machines"/><Run Text="  ·  En marche " FontSize="18"/><Run
                      Text="{Binding RunningCount, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}"/><Run
                      Text="{Binding Tiles.Count, StringFormat={}/{0}, Mode=OneWay}"/>
             </TextBlock>

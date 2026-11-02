@@ -21,7 +21,7 @@ public class MachineDaySlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
-    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "A l'arret");
+    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
     public string FilterLabel { get; init; } = "";
@@ -56,7 +56,7 @@ public class MachineDaySlideViewModel
         if (postes.Count == 0)
         {
             return await MachinePeriodSlideViewModel.LoadAsync(repository, teamSchedule, settings, sector, machine,
-                date, date.AddDays(1), previousShift ? "Poste precedent" : "Aujourd'hui", filter);
+                date, date.AddDays(1), previousShift ? "Poste précédent" : "Aujourd'hui", filter);
         }
 
         var status = await repository.GetLatestStatusAsync(machine.MachineId);
@@ -68,9 +68,9 @@ public class MachineDaySlideViewModel
         var mainId = postes[^1];
         return new MachineDaySlideViewModel
         {
-            SectorLabel = sector,
+            SectorLabel = Machine.SectorLabel(sector),
             MachineName = machine.MachineName,
-            PeriodLabel = previousShift ? "Poste precedent" : "",
+            PeriodLabel = previousShift ? "Poste précédent" : "",
             IsConnected = status?.IsConnected ?? false,
             BeltRunning = status?.BeltRunning ?? false,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
@@ -91,18 +91,18 @@ public class MachineDaySlideViewModel
     internal static string FormatProduction(ProductionInfo? production, IReadOnlyCollection<ProductionBucket> lots)
     {
         if (production == null)
-            return "Aucune donnee recue de StatsViewer depuis 6 h";
+            return "Aucune donnée reçue de StatsViewer depuis 6 h";
 
-        var state = production.IsTerminated ? "Terminee" : "En cours";
+        var state = production.IsTerminated ? "Terminée" : "En cours";
         // Lots of this production in the loaded period first (real lot
         // averages); otherwise Stiavelli's running average, if it looks sane.
         var avgWeight = KpiCalculator.ProductionAverageWeight(lots, production.ProductionId, production.TargetNetWeight) ?? production.AvgWeight;
         var weight = avgWeight is { } avg ? string.Create(French, $"  ·  moyen {avg:0.0} g") : "";
-        var quality = production.TotalBags > 0 ? string.Create(French, $"{production.QualityPercent:0.0} %") : "— %";
+        var quality = production.TotalBags > 0 ? string.Create(French, $"{production.QualityPercent:0.0} %") : "— %";
         var since = production.StartTime.Date == DateTime.Now.Date
             ? $"depuis {production.StartTime:HH:mm}"
             : $"depuis le {production.StartTime:dd/MM HH:mm}";
-        return string.Create(French, $"{state} : {production.ProductName} {production.TargetNetWeight:0} g  ·  {since}  ·  ") +
+        return string.Create(French, $"{state} : {production.ProductName} {production.TargetNetWeight:0} g  ·  {since}  ·  ") +
                string.Create(French, $"{production.TotalBags:N0} sacs  ·  {quality} conformes{weight}").Replace(' ', ' ');
     }
 }

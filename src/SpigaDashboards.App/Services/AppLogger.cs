@@ -39,7 +39,7 @@ public static class AppLogger
 
         var psCommand =
             "$host.UI.RawUI.WindowTitle = 'SPIGA Dashboards - Journal de connexion'; " +
-            $"Get-Content -Path '{LogPath}' -Wait -Tail 100";
+            $"Get-Content -Path '{LogPath}' -Encoding UTF8 -Wait -Tail 100";
 
         Process.Start(new ProcessStartInfo
         {

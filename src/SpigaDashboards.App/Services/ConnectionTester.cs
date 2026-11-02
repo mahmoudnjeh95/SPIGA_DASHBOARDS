@@ -8,7 +8,7 @@ public static class ConnectionTester
 {
     public static async Task<(bool Success, string Message)> TestAsync(IDbConnectionFactory factory)
     {
-        AppLogger.Log("Test de connexion en cours...");
+        AppLogger.Log("Test de connexion en cours…");
         try
         {
             using var connection = factory.CreateConnection();
@@ -22,7 +22,7 @@ public static class ConnectionTester
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Echec de connexion : {ex.Message}");
+            AppLogger.Log($"Échec de connexion : {ex.Message}");
             return (false, ex.Message);
         }
 
@@ -41,16 +41,16 @@ public static class ConnectionTester
             Scalar(connection, "SELECT COUNT(*) FROM Products WHERE 1 = 0");
 
             var latestText = latest is null or DBNull
-                ? "aucun releve dans produzione"
-                : $"dernier releve Stiavelli : {Convert.ToDateTime(latest):dd/MM/yyyy HH:mm}";
-            var message = $"Connexion reussie - {machines} machine(s), {latestText}.";
+                ? "aucun relevé dans produzione"
+                : $"dernier relevé Stiavelli : {Convert.ToDateTime(latest):dd/MM/yyyy HH:mm}";
+            var message = $"Connexion réussie - {machines} machine(s), {latestText}.";
             AppLogger.Log(message);
             return (true, message);
         }
         catch (Exception ex)
         {
-            var message = "Connexion reussie, mais la base n'est pas preparee pour le tableau de bord " +
-                          $"(executez database/stiavelli_compat.sql sur le serveur) : {ex.Message}";
+            var message = "Connexion réussie, mais la base n'est pas préparée pour le tableau de bord " +
+                          $"(exécutez database/stiavelli_compat.sql sur le serveur) : {ex.Message}";
             AppLogger.Log(message);
             return (false, message);
         }

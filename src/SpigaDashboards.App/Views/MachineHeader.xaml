@@ -27,7 +27,7 @@
             <TextBlock Text="{Binding PeriodLabel}" FontSize="22" FontWeight="SemiBold" Margin="16,0,0,0"
                        Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
             <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3" Margin="16,0,0,0" VerticalAlignment="Center"
-                    ToolTip="Aucune donnee recue de StatsViewer pour cette ligne">
+                    ToolTip="Aucune donnée reçue de StatsViewer pour cette ligne">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -38,13 +38,13 @@
                         </Style.Triggers>
                     </Style>
                 </Border.Style>
-                <TextBlock Text="PAS DE DONNEES" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                <TextBlock Text="PAS DE DONNÉES" FontSize="18" FontWeight="Bold" Foreground="White"/>
             </Border>
         </StackPanel>
 
         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding IsConnected, Converter={StaticResource BoolToStatusBrush}}"/>
-            <TextBlock Text="Connecte" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+            <TextBlock Text="Connecté" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
         </StackPanel>
 
         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Top" Text="{Binding CurrentProductionLabel}" FontSize="16"
