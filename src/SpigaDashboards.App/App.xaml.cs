@@ -34,9 +34,10 @@ public partial class App : Application
         var activeFactory = new SwitchableConnectionFactory(BuildFactory(settings));
         var repository = new ProductionRepository(activeFactory, settings);
         var teamSchedule = new TeamScheduleService(settings);
-        var mainViewModel = new MainViewModel(repository, settings, teamSchedule);
+        var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(activeFactory), settings, settingsService);
+        var mainViewModel = new MainViewModel(repository, settings, teamSchedule, sharedSettings);
 
-        var window = new MainWindow(mainViewModel, settingsService, settings, activeFactory, repository);
+        var window = new MainWindow(mainViewModel, settingsService, settings, activeFactory, repository, sharedSettings);
         window.Show();
     }
 

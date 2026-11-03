@@ -17,6 +17,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
     private readonly ProductionRepository _repository;
+    private readonly SharedSettingsSync _sharedSettings;
+    // Shared part as it was when the window opened (see SharedSettingsSync.PushAsync).
+    private string _sharedAtOpen;
     private readonly Action _onApplied;
 
     [ObservableProperty] private DatabaseProvider provider;
@@ -31,6 +34,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool? testResultSuccess;
 
     [ObservableProperty] private string machinesStatusMessage = "";
+
+    // Set when Enregistrer could not share the shared settings: the window stays open.
+    [ObservableProperty] private string sharedSettingsMessage = "";
 
     [ObservableProperty] private int slideDurationSeconds;
     [ObservableProperty] private int dataRefreshIntervalMinutes;
@@ -69,12 +75,15 @@ public partial class SettingsViewModel : ObservableObject
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
         ProductionRepository repository,
+        SharedSettingsSync sharedSettings,
         Action onApplied)
     {
         _settingsService = settingsService;
         _settings = settings;
         _activeFactory = activeFactory;
         _repository = repository;
+        _sharedSettings = sharedSettings;
+        _sharedAtOpen = SharedSettings.Serialize(settings);
         _onApplied = onApplied;
 
         Provider = settings.Provider;
@@ -526,8 +535,17 @@ public partial class SettingsViewModel : ObservableObject
             _settings.Slides = ParseSlides() ?? _settings.Slides;
         }
 
-        _settingsService.Save(_settings);
+        // The shared part goes to the base chosen above (a new PC's first
+        // save only sets its connection: nothing shared is sent).
         _activeFactory.SwitchTo(BuildFactoryFromFields());
+        _sharedSettings.Reset();
+        var shared = await _sharedSettings.PushAsync(_sharedAtOpen);
+        SharedSettingsMessage = shared.Message;
+        // Saved: a second Enregistrer compares with what is now in the base.
+        if (shared.Outcome == SharedSaveOutcome.Saved)
+            _sharedAtOpen = SharedSettings.Serialize(_settings);
+
+        _settingsService.Save(_settings);
         AppLogger.Log("Paramètres de connexion enregistrés et appliqués.");
 
         foreach (var machine in Machines)

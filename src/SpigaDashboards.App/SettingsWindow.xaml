@@ -76,6 +76,8 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
+                <TextBlock Text="Les cadences, pauses, seuil d'arrêt, équipes et TRS cibles sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
+                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
                 <TextBlock Text="Base de données" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
 
                 <StackPanel Orientation="Horizontal">
@@ -355,9 +357,13 @@
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Annuler" Style="{StaticResource SecondaryButton}" Click="CancelButton_Click"/>
-            <Button Content="Enregistrer" Style="{StaticResource PrimaryButton}" Click="SaveButton_Click"/>
-        </StackPanel>
+        <DockPanel Grid.Row="1" Margin="0,16,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button Content="Annuler" Style="{StaticResource SecondaryButton}" Click="CancelButton_Click"/>
+                <Button Content="Enregistrer" Style="{StaticResource PrimaryButton}" Click="SaveButton_Click"/>
+            </StackPanel>
+            <TextBlock Text="{Binding SharedSettingsMessage}" Foreground="{DynamicResource WarningBrush}"
+                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0"/>
+        </DockPanel>
     </Grid>
 </Window>

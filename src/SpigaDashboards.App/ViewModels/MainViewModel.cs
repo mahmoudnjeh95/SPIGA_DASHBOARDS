@@ -18,6 +18,10 @@ public partial class MainViewModel : ObservableObject
     private readonly ProductionRepository _repository;
     private readonly AppSettings _settings;
     private readonly TeamScheduleService _teamSchedule;
+    private readonly SharedSettingsSync _sharedSettings;
+    // Shared settings version this deck was built with: another PC's save
+    // (or this deck's twin pulling it first) rebuilds it from scratch.
+    private int _sharedVersionBuilt;
     private readonly DispatcherTimer _rotationTimer;
     private readonly DispatcherTimer _noteTimer;
     private readonly DispatcherTimer _refreshTimer;
@@ -134,11 +138,13 @@ public partial class MainViewModel : ObservableObject
             ? PeriodRanges.Get(DashboardPeriod.Day, DateTime.Now)
             : PeriodRanges.Get(SelectedPeriod, DateTime.Now, CustomFrom, CustomTo);
 
-    public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule)
+    public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule,
+        SharedSettingsSync sharedSettings)
     {
         _repository = repository;
         _settings = settings;
         _teamSchedule = teamSchedule;
+        _sharedSettings = sharedSettings;
 
         _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _filterTimer.Tick += async (_, _) =>
@@ -163,7 +169,7 @@ public partial class MainViewModel : ObservableObject
         });
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
-        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RebuildSlidesAsync);
+        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RefreshAsync);
 
         // Only runs while the DB is unreachable (see SetConnectionState).
         _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
@@ -224,6 +230,10 @@ public partial class MainViewModel : ObservableObject
         _rotationTimer.Stop();
         _noteTimer.Stop();
         _refreshTimer.Stop();
+
+        // Another PC may have changed the cadences, pauses, teams... meanwhile.
+        await _sharedSettings.PullAsync();
+        _sharedVersionBuilt = _settings.SharedSettingsVersion;
 
         // Settings (slide duration / refresh interval) may have changed since construction.
         // Set before resetting IsRotationPaused below, since that setter can restart
@@ -558,6 +568,17 @@ public partial class MainViewModel : ObservableObject
 
         _currentIndex = (_currentIndex + 1) % _slides.Count;
         await ShowSlideAsync(_currentIndex);
+    }
+
+    // Data refresh tick. New shared settings change every number (and the
+    // slide caches), so they rebuild the deck from scratch, as Enregistrer does.
+    private async Task RefreshAsync()
+    {
+        await _sharedSettings.PullAsync();
+        if (_settings.SharedSettingsVersion != _sharedVersionBuilt)
+            await InitializeAsync();
+        else
+            await RebuildSlidesAsync();
     }
 
     // Rebuilds the slide deck in place (machines dis/reconnecting, admin

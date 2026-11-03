@@ -27,6 +27,9 @@ public partial class SettingsWindow : Window
         if (!_viewModel.Validate())
             return;
         await _viewModel.SaveCommand.ExecuteAsync(null);
+        // The shared settings did not reach the base: the message says what to do.
+        if (_viewModel.SharedSettingsMessage.Length > 0)
+            return;
         Close();
     }
 

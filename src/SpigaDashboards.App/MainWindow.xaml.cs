@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
     private readonly ProductionRepository _repository;
+    private readonly SharedSettingsSync _sharedSettings;
     private TvWindow? _tvWindow;
 
     public MainWindow(
@@ -22,7 +23,8 @@ public partial class MainWindow : Window
         SettingsService settingsService,
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
-        ProductionRepository repository)
+        ProductionRepository repository,
+        SharedSettingsSync sharedSettings)
     {
         InitializeComponent();
         _viewModel = viewModel;
@@ -30,6 +32,7 @@ public partial class MainWindow : Window
         _settings = settings;
         _activeFactory = activeFactory;
         _repository = repository;
+        _sharedSettings = sharedSettings;
 
         DataContext = viewModel;
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
@@ -52,10 +55,12 @@ public partial class MainWindow : Window
         ThemeToggleButton.Content = ThemeService.CurrentTheme == AppTheme.Dark ? "Mode clair" : "Mode sombre";
     }
 
-    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        // Edit the shared settings as the other PCs last saved them.
+        await _sharedSettings.PullAsync();
         var settingsViewModel = new SettingsViewModel(
-            _settingsService, _settings, _activeFactory, _repository,
+            _settingsService, _settings, _activeFactory, _repository, _sharedSettings,
             onApplied: () =>
             {
                 _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
@@ -79,7 +84,7 @@ public partial class MainWindow : Window
         }
 
         // Its own deck, not this window's: filters set here stay off the TV.
-        var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings));
+        var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings), _sharedSettings);
         _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService) { ShowActivated = activate };
         _tvWindow.Closed += (_, _) => _tvWindow = null;
         _tvWindow.Show();

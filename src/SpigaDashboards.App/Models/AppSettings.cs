@@ -199,6 +199,10 @@ public class AppSettings
     // minutes is listed as a stop (Arrets window / printed sheet).
     public int StopThresholdMinutes { get; set; } = 5;
 
+    // Version of the shared settings (see SharedSettings) last received from
+    // the base; 0 = never received.
+    public int SharedSettingsVersion { get; set; }
+
     public double TrsTarget(string machineId)
         => MachineTrsTargets.TryGetValue(machineId, out var target) && target > 0 ? target : DefaultTrsTarget;
 
