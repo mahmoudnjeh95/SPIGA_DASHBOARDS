@@ -76,7 +76,7 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="Les cadences, pauses, seuil d'arrêt, équipes et TRS cibles sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
+                <TextBlock Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
                 <TextBlock Text="Base de données" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
 
@@ -149,7 +149,7 @@
                 <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
 
                 <TextBlock Text="Diapositives : ordre, affichage et durée" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
-                <TextBlock Text="Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
+                <TextBlock Text="Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <Grid Margin="0,0,0,2">
                     <Grid.ColumnDefinitions>

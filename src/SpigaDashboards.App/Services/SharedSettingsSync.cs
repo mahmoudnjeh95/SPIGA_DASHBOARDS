@@ -12,7 +12,7 @@ public record SharedSaveResult(SharedSaveOutcome Outcome, string Message = "");
 // settings.json keeps the last copy received, for a start without the base.
 public class SharedSettingsSync
 {
-    private const string SharedPart = "les cadences, pauses, seuil d'arrêt, équipes et TRS cibles";
+    private const string SharedPart = "les cadences, pauses, seuil d'arrêt, équipes, TRS cibles et diapositives";
 
     private readonly SharedSettingsRepository _repository;
     private readonly AppSettings _settings;
@@ -60,7 +60,7 @@ public class SharedSettingsSync
     public async Task<SharedSaveResult> PushAsync(string snapshotAtOpen)
     {
         var json = SharedSettings.Serialize(_settings);
-        if (json == snapshotAtOpen)
+        if (json == snapshotAtOpen && !await BaseLacksSlidesAsync())
             return new(SharedSaveOutcome.Unchanged);
 
         await _gate.WaitAsync();
@@ -108,6 +108,23 @@ public class SharedSettingsSync
         _settings.SharedSettingsVersion = row.Version;
         _settingsService.Save(_settings);
         AppLogger.Log($"Paramètres partagés appliqués (version {row.Version}, enregistrés par {row.UpdatedBy} le {row.UpdatedAt:dd/MM HH:mm}).");
+    }
+
+    // The base copy was saved by a version before 1.5.13, without the slide
+    // rotation: Enregistrer then sends this PC's even unchanged, so the
+    // others get it. Only when this PC is up to date, so it can't overwrite.
+    private async Task<bool> BaseLacksSlidesAsync()
+    {
+        try
+        {
+            var row = await _repository.GetAsync();
+            return row != null && row.Version == _settings.SharedSettingsVersion
+                && SharedSettings.Deserialize(row.Json) is { Slides: null };
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private void Restore(string snapshot) => SharedSettings.Deserialize(snapshot)?.ApplyTo(_settings);

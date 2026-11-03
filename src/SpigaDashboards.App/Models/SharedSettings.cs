@@ -3,11 +3,11 @@ using System.Text.Json;
 namespace SpigaDashboards.App.Models;
 
 // The part of AppSettings every PC must agree on, because it changes the
-// numbers (TRS, speeds, stops, teams): kept in the shared database
-// (dbo.AppSharedSettings) so a change made on one PC reaches the others.
-// The rest (DB connection, slides, PDF path, theme, TV screen, hidden
-// machines, refresh cadences) belongs to each screen and stays in its
-// settings.json.
+// numbers (TRS, speeds, stops, teams) or what every screen shows (slide
+// rotation): kept in the shared database (dbo.AppSharedSettings) so a change
+// made on one PC reaches the others. The rest (DB connection, PDF path,
+// theme, TV screen, hidden machines, refresh cadences) belongs to each
+// screen and stays in its settings.json.
 public class SharedSettings
 {
     public List<NominalRateEntry> NominalRates { get; set; } = new();
@@ -16,6 +16,10 @@ public class SharedSettings
     public int StopThresholdMinutes { get; set; }
     public TeamRotationSettings TeamRotation { get; set; } = new();
     public DateTime DataStartDate { get; set; }
+    // Slide rotation (Parametres > Affichage). null = saved by a version
+    // before 1.5.13, which didn't share it: each PC keeps its own.
+    public List<SlideSetting>? Slides { get; set; }
+    public int? SlideDurationSeconds { get; set; }
 
     public static SharedSettings From(AppSettings settings) => new()
     {
@@ -25,6 +29,8 @@ public class SharedSettings
         StopThresholdMinutes = settings.StopThresholdMinutes,
         TeamRotation = settings.TeamRotation,
         DataStartDate = settings.DataStartDate,
+        Slides = settings.Slides,
+        SlideDurationSeconds = settings.SlideDurationSeconds,
     };
 
     public void ApplyTo(AppSettings settings)
@@ -35,6 +41,10 @@ public class SharedSettings
         settings.StopThresholdMinutes = StopThresholdMinutes;
         settings.TeamRotation = TeamRotation;
         settings.DataStartDate = DataStartDate;
+        if (Slides != null)
+            settings.Slides = Slides;
+        if (SlideDurationSeconds is int seconds)
+            settings.SlideDurationSeconds = seconds;
     }
 
     public static string Serialize(AppSettings settings) => JsonSerializer.Serialize(From(settings));
