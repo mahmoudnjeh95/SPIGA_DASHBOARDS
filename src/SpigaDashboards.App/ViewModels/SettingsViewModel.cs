@@ -175,6 +175,10 @@ public partial class SettingsViewModel : ObservableObject
             PdfDocumentPath = dialog.FileName;
     }
 
+    // No document: the PDF slide is skipped (applied on Enregistrer).
+    [RelayCommand]
+    private void ClearPdfDocument() => PdfDocumentPath = "";
+
     private void LoadRosterDays(List<TeamRosterEntry> pattern)
     {
         RosterDays.Clear();

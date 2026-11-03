@@ -352,6 +352,8 @@
                     <TextBox Text="{Binding PdfDocumentPath, UpdateSourceTrigger=PropertyChanged}" Width="360" IsReadOnly="True"/>
                     <Button Content="Parcourir…" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
                             Command="{Binding BrowsePdfDocumentCommand}"/>
+                    <Button Content="Effacer" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                            ToolTip="Ne plus afficher de document" Command="{Binding ClearPdfDocumentCommand}"/>
                 </StackPanel>
                 <TextBlock Text="{Binding PdfDocumentStatus}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" Margin="0,4,0,0"/>
             </StackPanel>
