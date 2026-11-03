@@ -71,6 +71,7 @@ public partial class CauseOption : ObservableObject
 public partial class PannesViewModel : ObservableObject
 {
     private const string AllMachines = "Toutes les lignes";
+    private const string AllTeams = "Toutes les équipes";
 
     // Start of the comment of a cause given from the calendar.
     public const string AutoComment = "Auto (calendrier) : ";
@@ -98,6 +99,7 @@ public partial class PannesViewModel : ObservableObject
 
     public List<string> PeriodOptions { get; } = new() { "Aujourd'hui", "7 jours", "30 jours" };
     public ObservableCollection<string> MachineOptions { get; } = new() { AllMachines };
+    public ObservableCollection<string> TeamOptions { get; } = new() { AllTeams };
     public ObservableCollection<StopRow> Rows { get; } = new();
     public ObservableCollection<StopRow> Recent { get; } = new();
     public IReadOnlyList<CauseOptionGroup> CauseGroups { get; }
@@ -106,6 +108,8 @@ public partial class PannesViewModel : ObservableObject
 
     [ObservableProperty] private int periodIndex = 1;
     [ObservableProperty] private string selectedMachine = AllMachines;
+    // Team that worked the poste of the stop (Parametres > Équipes).
+    [ObservableProperty] private string selectedTeam = AllTeams;
     [ObservableProperty] private bool onlyUnqualified = true;
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string statusMessage = "";
@@ -174,6 +178,7 @@ public partial class PannesViewModel : ObservableObject
         set => PeriodIndex = int.Parse(value, CultureInfo.InvariantCulture);
     }
     partial void OnSelectedMachineChanged(string value) => _ = RefreshAsync();
+    partial void OnSelectedTeamChanged(string value) => _ = RefreshAsync();
     partial void OnOnlyUnqualifiedChanged(bool value) => _ = RefreshAsync();
     partial void OnRepeatWarningChanged(string value) => OnPropertyChanged(nameof(HasRepeatWarning));
     partial void OnComponentChanged(string value) => UpdateRepeatWarning();
@@ -272,6 +277,8 @@ public partial class PannesViewModel : ObservableObject
         foreach (var m in _ctx.Machines)
             MachineOptions.Add(m.MachineName);
         ManualMachine = _ctx.Machines.FirstOrDefault()?.MachineName ?? "";
+        foreach (var team in _ctx.Teams.TeamNames)
+            TeamOptions.Add(team);
         await RefreshAsync();
     }
 
@@ -338,7 +345,13 @@ public partial class PannesViewModel : ObservableObject
                 });
             }
 
+            // Every team's stops get their calendar cause; the list and the banner show the chosen team's.
             var auto = await QualifyFromCalendarAsync(rows, from, to);
+            if (SelectedTeam != AllTeams)
+            {
+                rows = rows.Where(r => r.Team == SelectedTeam).ToList();
+                micro = micro.Where(s => s.Team == SelectedTeam).ToList();
+            }
 
             var detected = rows.Where(r => !r.IsManual && !r.IsLive).ToList();
             var open = rows.Where(r => !r.HasCause).ToList();
@@ -352,7 +365,7 @@ public partial class PannesViewModel : ObservableObject
             BannerMicro = micro.Count == 0 ? ""
                 : $"+ {micro.Count} micro-arrêt{(micro.Count > 1 ? "s" : "")} de moins de {threshold} min ({PlanningContext.Duration(micro.Sum(s => s.NetMinutes))}), non listés";
             OpenSummary = open.Count == 0 ? ""
-                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}) : les statistiques ne comptent que les arrêts qualifiés.";
+                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}{(SelectedTeam != AllTeams ? ", " + SelectedTeam : "")}) : les statistiques ne comptent que les arrêts qualifiés.";
             if (auto > 0)
                 AppLogger.Log($"Pannes : {auto} arrêt(s) qualifié(s) par le calendrier");
 

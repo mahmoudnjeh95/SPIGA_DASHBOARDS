@@ -107,7 +107,8 @@ public partial class MainWindow : Window
 
     private void PlanningButton_Click(object sender, RoutedEventArgs e)
     {
-        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, new TeamScheduleService(_settings));
+        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
+            new TeamScheduleService(_settings));
         new PlanningWindow(new PlanningViewModel(context)) { Owner = this }.ShowDialog();
     }
 

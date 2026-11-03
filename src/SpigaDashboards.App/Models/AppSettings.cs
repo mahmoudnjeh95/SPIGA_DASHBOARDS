@@ -126,6 +126,10 @@ public class AppSettings
     public SqlServerSettings SqlServer { get; set; } = new();
     public List<string> HiddenMachineIds { get; set; } = new();
 
+    // Lines left out of the Planification calendar on this PC (its "Lignes"
+    // list); the alerts and preventive lists still show them.
+    public List<string> PlanningHiddenMachineIds { get; set; } = new();
+
     // How long each slide (sector pair, PDF, annual summary) stays on screen.
     public int SlideDurationSeconds { get; set; } = 15;
 

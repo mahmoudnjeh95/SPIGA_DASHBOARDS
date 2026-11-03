@@ -48,6 +48,8 @@
                 </Border>
                 <ComboBox Style="{StaticResource DarkComboBox}" Width="190" Margin="10,0,0,0" FontSize="14" VerticalContentAlignment="Center"
                           ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="8,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                          ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
                 <CheckBox Content="Sans cause uniquement" IsChecked="{Binding OnlyUnqualified}" Margin="14,0,0,0" VerticalAlignment="Center"
                           FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"/>
                 <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>

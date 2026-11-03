@@ -127,6 +127,31 @@
                 </WrapPanel>
             </ControlTemplate>
 
+            <!-- "Lignes" drop-down: looks like a BarButton. -->
+            <Style x:Key="LinesToggle" TargetType="ToggleButton">
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Grid>
+                                <Border Background="{DynamicResource SecondaryButtonBrush}" CornerRadius="8"/>
+                                <Border x:Name="Veil" Background="{DynamicResource HoverOverlayBrush}" CornerRadius="8" Opacity="0"/>
+                                <ContentPresenter Margin="14,7" VerticalAlignment="Center"/>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Veil" Property="Opacity" Value="1"/>
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="Veil" Property="Opacity" Value="1"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
                 <Setter Property="Padding" Value="10,4"/>
                 <Setter Property="FontSize" Value="12"/>
@@ -155,6 +180,46 @@
                            ToolTip="{Binding RangeLabel}"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <!-- Lines shown on the calendar (this PC only, BoardViewModel.LineGroups). -->
+                <ToggleButton x:Name="LinesToggle" Style="{StaticResource LinesToggle}" Margin="0,0,12,0"
+                              IsHitTestVisible="{Binding IsOpen, ElementName=LinesPopup, Converter={StaticResource InverseBool}}">
+                    <TextBlock>
+                        <Run Text="{Binding LinesLabel, Mode=OneWay}"/><Run Text="  &#x25BE;"/>
+                    </TextBlock>
+                </ToggleButton>
+                <Popup x:Name="LinesPopup" IsOpen="{Binding IsChecked, ElementName=LinesToggle}"
+                       PlacementTarget="{Binding ElementName=LinesToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                    <Border Background="{DynamicResource TileBackgroundBrush}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1"
+                            CornerRadius="8" Padding="14,10" Margin="0,4,0,0" MinWidth="230">
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding LineGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:LineChoiceGroup}">
+                                        <StackPanel Margin="0,0,0,8">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <Border Width="10" Height="10" CornerRadius="3" Background="{Binding Color}" Margin="0,0,8,0"/>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                            </StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Lines}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type vm:LineChoice}">
+                                                        <CheckBox IsChecked="{Binding IsShown}" Margin="18,3,0,3" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}">
+                                                            <TextBlock Text="{Binding MachineName, Mode=OneWay}" FontWeight="SemiBold"/>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="Toutes" Style="{StaticResource SmallButton}" Margin="0" Command="{Binding ShowAllLinesCommand}"/>
+                                <Button Content="Aucune" Style="{StaticResource SmallButton}" Command="{Binding HideAllLinesCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
                 <Border Style="{StaticResource SegTrack}" Margin="0,0,12,0">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton GroupName="BoardRange" Content="Jour" Style="{StaticResource Seg}"

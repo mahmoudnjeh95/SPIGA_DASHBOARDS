@@ -70,6 +70,18 @@ public sealed partial class MachineRow : ObservableObject
 }
 
 public sealed record SectorGroup(string Name, Brush Color, string Caption, IReadOnlyList<MachineRow> Rows);
+
+// One line of the "Lignes" list: shown on the calendar or not (this PC only).
+public sealed partial class LineChoice : ObservableObject
+{
+    public string MachineId { get; init; } = "";
+    public string MachineName { get; init; } = "";
+    [ObservableProperty] private bool isShown = true;
+    public Action? Changed { get; set; }
+    partial void OnIsShownChanged(bool value) => Changed?.Invoke();
+}
+
+public sealed record LineChoiceGroup(string Name, Brush Color, IReadOnlyList<LineChoice> Lines);
 // A column of the board (a poste, or a day) and its ticks (hours, postes, or the weekday).
 public sealed record ColumnTick(string Label, bool IsFirst);
 public sealed record ColumnHeader(string Name, IReadOnlyList<ColumnTick> Ticks, bool IsToday);
@@ -138,6 +150,10 @@ public partial class BoardViewModel : ObservableObject
     public ObservableCollection<AlertRow> Alerts { get; } = new();
     public ObservableCollection<DetailRow> DetailRows { get; } = new();
     public ObservableCollection<string> MachineNames { get; } = new();
+    public ObservableCollection<LineChoiceGroup> LineGroups { get; } = new();
+    [ObservableProperty] private string linesLabel = "Lignes";
+    // Toutes / Aucune tick every box: one save and one rebuild, not one per line.
+    private bool _settingAllLines;
     public List<string> PlanKindOptions { get; } = new() { "Calendaire (jours)", "Usage (sacs produits)" };
 
     [ObservableProperty] private BoardRange range = BoardRange.Week;
@@ -324,8 +340,65 @@ public partial class BoardViewModel : ObservableObject
         MachineNames.Clear();
         foreach (var m in _ctx.Machines)
             MachineNames.Add(m.MachineName);
+        LineGroups.Clear();
+        var hidden = _ctx.Settings.PlanningHiddenMachineIds;
+        foreach (var sector in _ctx.Machines.GroupBy(m => m.Sector))
+            LineGroups.Add(new LineChoiceGroup(Machine.SectorLabel(sector.Key), PlanningContext.Brush(PlanningContext.SectorColor(sector.Key)),
+                sector.Select(m => new LineChoice
+                {
+                    MachineId = m.MachineId, MachineName = m.MachineName, IsShown = !hidden.Contains(m.MachineId),
+                    Changed = OnLineChoiceChanged,
+                }).ToList()));
+        UpdateLinesLabel();
         await RefreshAsync();
     }
+
+    private IEnumerable<LineChoice> AllLineChoices => LineGroups.SelectMany(g => g.Lines);
+
+    private void OnLineChoiceChanged()
+    {
+        if (_settingAllLines)
+            return;
+        SaveLineChoices();
+        _ = RefreshAsync();
+    }
+
+    [RelayCommand]
+    private Task ShowAllLinesAsync() => SetAllLinesAsync(true);
+
+    [RelayCommand]
+    private Task HideAllLinesAsync() => SetAllLinesAsync(false);
+
+    private async Task SetAllLinesAsync(bool shown)
+    {
+        _settingAllLines = true;
+        foreach (var line in AllLineChoices)
+            line.IsShown = shown;
+        _settingAllLines = false;
+        SaveLineChoices();
+        await RefreshAsync();
+    }
+
+    // Kept in settings.json; lines hidden in Parametres (not listed here) keep their entry.
+    private void SaveLineChoices()
+    {
+        var listed = AllLineChoices.Select(l => l.MachineId).ToHashSet();
+        _ctx.Settings.PlanningHiddenMachineIds = _ctx.Settings.PlanningHiddenMachineIds
+            .Where(id => !listed.Contains(id))
+            .Concat(AllLineChoices.Where(l => !l.IsShown).Select(l => l.MachineId))
+            .ToList();
+        _ctx.SettingsService.Save(_ctx.Settings);
+        UpdateLinesLabel();
+    }
+
+    private void UpdateLinesLabel()
+    {
+        var all = AllLineChoices.ToList();
+        LinesLabel = $"Lignes ({all.Count(l => l.IsShown)}/{all.Count})";
+    }
+
+    private List<Machine> ShownMachines()
+        => _ctx.Machines.Where(m => !_ctx.Settings.PlanningHiddenMachineIds.Contains(m.MachineId)).ToList();
 
     [RelayCommand]
     private async Task PreviousAsync()
@@ -369,7 +442,9 @@ public partial class BoardViewModel : ObservableObject
         try
         {
             await BuildAsync();
-            StatusMessage = "";
+            StatusMessage = ShownMachines().Count == 0 && _ctx.Machines.Count > 0
+                ? "Aucune ligne affichée : les choisir avec le bouton Lignes."
+                : "";
         }
         catch (Exception ex)
         {
@@ -433,7 +508,9 @@ public partial class BoardViewModel : ObservableObject
 
         // Live state of each line.
         var states = new Dictionary<string, MachineStatusSnapshot?>();
-        foreach (var m in _ctx.Machines)
+        // Only the lines shown (Lignes); the alerts and preventive lists keep every line.
+        var shown = ShownMachines();
+        foreach (var m in shown)
         {
             try { states[m.MachineId] = await _ctx.Production.GetLatestStatusAsync(m.MachineId); }
             catch { states[m.MachineId] = null; }
@@ -442,7 +519,7 @@ public partial class BoardViewModel : ObservableObject
         var selectedKey = SelectedBlock?.Key;
         Sectors.Clear();
         var allBlocks = new List<BoardBlock>();
-        foreach (var sector in _ctx.Machines.GroupBy(m => m.Sector))
+        foreach (var sector in shown.GroupBy(m => m.Sector))
         {
             var color = PlanningContext.SectorColor(sector.Key);
             var rows = new List<MachineRow>();
