@@ -12,7 +12,7 @@ public record SharedSaveResult(SharedSaveOutcome Outcome, string Message = "");
 // settings.json keeps the last copy received, for a start without the base.
 public class SharedSettingsSync
 {
-    private const string SharedPart = "les cadences, pauses, seuil d'arrêt, équipes, TRS cibles et diapositives";
+    private const string SharedPart = "les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, diapositives et couleurs";
 
     private readonly SharedSettingsRepository _repository;
     private readonly AppSettings _settings;

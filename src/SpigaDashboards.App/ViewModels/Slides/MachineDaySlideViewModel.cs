@@ -68,7 +68,7 @@ public class MachineDaySlideViewModel
         // The Nuit poste ends at 06:00 the next calendar day.
         var allLots = await repository.GetLotsAsync(machine.MachineId, date, date.AddDays(1).AddHours(6));
         var lots = filter.Apply(allLots, teamSchedule);
-        var trsTarget = settings.TrsTarget(machine.MachineId);
+        var trsBand = settings.TrsBandFor(machine.MachineId);
 
         var mainId = postes[^1];
         var mainStart = date.AddHours(KpiCalculator.ShiftStartHour(mainId));
@@ -76,14 +76,6 @@ public class MachineDaySlideViewModel
         // (see DashboardCharts.GroupLots); the chart clips them at the end.
         var lotSpans = (await repository.GetLotSpansAsync(machine.MachineId, mainStart, mainStart.AddHours(10)))
             ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
-        // Stops of the poste, as listed in Arrêts: drawn red on the lots.
-        var stops = new List<(DateTime Start, DateTime End)>();
-        if (lotSpans is { Count: > 0 })
-        {
-            var segments = await repository.GetLineSegmentsAsync(new[] { machine.MachineId }, mainStart, mainStart.AddHours(8));
-            stops = StopDetector.Detect(segments, mainStart, mainStart.AddHours(8), settings, teamSchedule, new Dictionary<string, string>())
-                .Select(s => (s.Start, s.End)).ToList();
-        }
         return new MachineDaySlideViewModel
         {
             SectorLabel = Machine.SectorLabel(sector),
@@ -97,9 +89,9 @@ public class MachineDaySlideViewModel
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),
             Main = ShiftSummaryViewModel.Build(mainId, date, withCharts: true,
-                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsTarget, lotSpans, stops),
+                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsBand, lotSpans),
             PreviousShifts = postes.Take(postes.Count - 1)
-                .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsTarget))
+                .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsBand))
                 .ToList(),
         };
     }

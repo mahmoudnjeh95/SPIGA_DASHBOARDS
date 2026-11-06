@@ -80,15 +80,15 @@ public class SynthesisSlideViewModel
         var lines = machines.Select(m =>
         {
             var machineLots = byMachine[m.MachineId].ToList();
-            var target = settings.TrsTarget(m.MachineId);
-            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), target);
+            var band = settings.TrsBandFor(m.MachineId);
+            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band);
             return new SynthesisLineRow
             {
                 MachineId = m.MachineId,
                 MachineName = m.MachineName,
                 Kpis = k,
-                TrsTarget = target,
-                TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, target),
+                TrsTarget = band.Target,
+                TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, band),
                 WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
             };
         }).ToList();

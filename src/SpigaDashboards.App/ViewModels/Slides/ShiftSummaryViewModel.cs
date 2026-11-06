@@ -40,16 +40,15 @@ public class ShiftSummaryViewModel
         IReadOnlyCollection<ProductionBucket> dayLots,
         TeamScheduleService teamSchedule,
         DateTime now,
-        double trsTarget,
-        IReadOnlyList<LotSpan>? lotSpans = null,
-        IReadOnlyList<(DateTime Start, DateTime End)>? stops = null)
+        TrsBand trsBand,
+        IReadOnlyList<LotSpan>? lotSpans = null)
     {
         // A Nuit bucket after midnight belongs to the shift date it started on.
         var lots = dayLots
             .Where(l => l.ShiftId == shiftId && TeamScheduleService.GetShiftDate(l.StartTime, shiftId) == shiftDate)
             .ToList();
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsTarget);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand);
         var team = teamSchedule.GetTeamForShift(shiftDate, shiftId);
 
         ChartParts onOff = ChartParts.Empty(), speed = ChartParts.Empty(), weight = ChartParts.Empty();
@@ -68,8 +67,7 @@ public class ShiftSummaryViewModel
             // the poste; otherwise the hourly chart (running average fallback).
             var end = start.AddHours(8);
             weight = lotSpans is { Count: > 0 }
-                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end,
-                    stops ?? Array.Empty<(DateTime, DateTime)>(), live: now < end)
+                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end, live: now < end)
                 : DashboardCharts.Weight(steps);
         }
 
@@ -80,8 +78,8 @@ public class ShiftSummaryViewModel
             TeamName = string.IsNullOrEmpty(team) ? TeamScheduleService.NoTeam : team,
             IsRunning = isRunning,
             Kpis = kpis,
-            TrsTarget = trsTarget,
-            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
+            TrsTarget = trsBand.Target,
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
             WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
             OnOffChart = onOff,
             SpeedChart = speed,

@@ -248,19 +248,18 @@ public static class DashboardCharts
         return groups;
     }
 
-    // Net average weight vs target over time, one flat segment per Stiavelli
-    // lot from its first to its last bag (instead of the whole lot counted in
-    // the hour it ends in). X = hours since start, labelled with the clock
-    // hour like the hourly charts. Lots are clipped to [start, end); the lot
-    // in progress isn't in lotto yet, so the line stops at the last closed
-    // lot. Values printed at each lot's middle while they stay readable.
-    // A lot's bags keep being counted through a stop (one lasted 20 h on
-    // PC02): the part of a lot inside a stop (same stops as the Arrêts
-    // window) is drawn red, so a flat line over a stop isn't read as running.
+    // Net average weight vs target over time: a smooth curve through one
+    // point per Stiavelli lot, at the middle of its span from its first to
+    // its last bag (instead of the whole lot counted in the hour it ends in).
+    // X = hours since start, labelled with the clock hour like the hourly
+    // charts. Lots are clipped to [start, end); the lot in progress isn't in
+    // lotto yet, so the line stops at the last closed lot. Values printed at
+    // each lot's middle while they stay readable. Stops aren't marked: they
+    // have their own panel and pop-up (a lot interrupted by a stop still has
+    // a real average, of the bags weighed before and after it).
     // live = poste in progress: the last group still below 1000 bags is
     // hidden, like a lot in progress on the 1000-bag lines.
-    public static ChartParts WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end,
-        IReadOnlyList<(DateTime Start, DateTime End)> stops, bool live)
+    public static ChartParts WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end, bool live)
     {
         var hours = Math.Max(1, (end - start).TotalHours);
         var spans = GroupLots(lots, live)
@@ -274,36 +273,21 @@ public static class DashboardCharts
         if (spans.Count == 0)
             return ChartParts.Empty();
 
-        var stopHours = stops
-            .Select(s => (From: (s.Start - start).TotalHours, To: (s.End - start).TotalHours))
-            .Where(s => s.To > s.From)
-            .ToList();
+        // Smooth curve through the lot middles; two lots more than 2 min
+        // apart aren't joined (null point = gap).
+        const double gapHours = 2.0 / 60;
+        var curve = new List<ObservablePoint>();
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (i > 0 && spans[i].From - spans[i - 1].To > gapHours)
+                curve.Add(new ObservablePoint(curve[^1].X, null));
+            curve.Add(new ObservablePoint((spans[i].From + spans[i].To) / 2, spans[i].Avg));
+        }
 
-        // Each lot cut at the stop edges: running pieces on the green line,
-        // stopped pieces on the red one. A gap of more than 2 min between two
-        // pieces of the same line breaks it.
-        var running = new Track();
-        var stopped = new Track();
+        // The target stays flat: it only moves on a production change.
         var target = new Track();
         foreach (var s in spans)
-        {
-            var cuts = new SortedSet<double> { s.From, s.To };
-            foreach (var st in stopHours)
-            {
-                if (st.From > s.From && st.From < s.To)
-                    cuts.Add(st.From);
-                if (st.To > s.From && st.To < s.To)
-                    cuts.Add(st.To);
-            }
-            var xs = cuts.ToList();
-            for (var i = 0; i < xs.Count - 1; i++)
-            {
-                var middle = (xs[i] + xs[i + 1]) / 2;
-                var inStop = stopHours.Any(st => st.From <= middle && middle < st.To);
-                (inStop ? stopped : running).Add(xs[i], xs[i + 1], s.Avg);
-            }
             target.Add(s.From, s.To, s.Lot.Target);
-        }
 
         // Readable labels on the TV: a value only when its lot's middle is far
         // enough from the last labelled one (about a label's width), none at
@@ -313,38 +297,28 @@ public static class DashboardCharts
         var labelled = new List<ObservablePoint>();
         var unlabelled = new List<ObservablePoint>();
         double? lastLabel = null;
-        foreach (var s in spans)
+        foreach (var point in curve.Where(p => p.Y != null))
         {
-            var point = new ObservablePoint((s.From + s.To) / 2, s.Avg);
-            if (showLabels && (lastLabel is not { } l || point.X - l >= minLabelGap))
+            var dot = new ObservablePoint(point.X, point.Y);
+            if (showLabels && (lastLabel is not { } l || dot.X - l >= minLabelGap))
             {
-                labelled.Add(point);
-                lastLabel = point.X;
+                labelled.Add(dot);
+                lastLabel = dot.X;
             }
             else
-                unlabelled.Add(point);
+                unlabelled.Add(dot);
         }
 
         var series = new ISeries[]
         {
             new LineSeries<ObservablePoint>
             {
-                Values = running.Points,
+                Values = curve,
                 Name = "Poids moyen (lot)",
                 Stroke = new SolidColorPaint(Green, 3),
                 Fill = null,
                 GeometrySize = 0,
-                LineSmoothness = 0,
-            },
-            new LineSeries<ObservablePoint>
-            {
-                Values = stopped.Points,
-                Name = "Arrêt",
-                Stroke = new SolidColorPaint(Red, 3),
-                Fill = null,
-                GeometrySize = 0,
-                LineSmoothness = 0,
-                IsVisibleAtLegend = stopped.Points.Count > 0,
+                LineSmoothness = 0.6,
             },
             new LineSeries<ObservablePoint>
             {

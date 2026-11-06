@@ -195,9 +195,9 @@
                                        Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </Viewbox>
                         <TextBlock Style="{StaticResource KpiSubtextCompact}">
-                            <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
+                            <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                            <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{Binding Kpis.PerformancePercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Performance}"/>
+                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}" Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>

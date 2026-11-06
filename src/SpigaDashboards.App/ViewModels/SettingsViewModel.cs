@@ -11,6 +11,9 @@ using SpigaDashboards.App.ViewModels.Slides;
 
 namespace SpigaDashboards.App.ViewModels;
 
+// Tabs of the Parametres window, in order (SettingsViewModel.SelectedTab).
+public enum SettingsTab { Connexion, Machines, Affichage, Cadences, Pauses, Equipes, Couleurs }
+
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _settingsService;
@@ -70,6 +73,24 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<SlideRowViewModel> Slides { get; } = new();
     [ObservableProperty] private string slidesStatusMessage = "";
     private List<Machine> _activeMachines = new();
+
+    // Tab shown (SettingsTab); Enregistrer moves to the tab with the bad cell.
+    [ObservableProperty] private int selectedTab;
+
+    // Couleurs: the limits of ColorThresholds, as typed.
+    [ObservableProperty] private string trsWarningText = "";
+    [ObservableProperty] private string availabilityGoodText = "";
+    [ObservableProperty] private string availabilityWarningText = "";
+    [ObservableProperty] private string performanceGoodText = "";
+    [ObservableProperty] private string performanceWarningText = "";
+    [ObservableProperty] private string performanceHighText = "";
+    [ObservableProperty] private string qualityGoodText = "";
+    [ObservableProperty] private string qualityWarningText = "";
+    [ObservableProperty] private string weightOverGoodText = "";
+    [ObservableProperty] private string weightOverWarningText = "";
+    [ObservableProperty] private string weightUnderWarningText = "";
+    [ObservableProperty] private string weightUnderBadText = "";
+    [ObservableProperty] private string colorsStatusMessage = "";
 
     public event EventHandler? SettingsApplied;
 
@@ -145,6 +166,8 @@ public partial class SettingsViewModel : ObservableObject
                 DurationText = b.DurationMinutes.ToString(CultureInfo.InvariantCulture),
             });
         StopThresholdText = settings.StopThresholdMinutes.ToString(CultureInfo.InvariantCulture);
+
+        LoadColors(settings.Colors);
 
         _ = LoadMachinesAsync();
     }
@@ -284,6 +307,25 @@ public partial class SettingsViewModel : ObservableObject
         return targets;
     }
 
+    // TRS tolerance per machine, in points; blank = Couleurs default (not
+    // stored). Null (message shown) on a bad cell.
+    private Dictionary<string, double>? ParseTrsTolerances()
+    {
+        var tolerances = new Dictionary<string, double>();
+        foreach (var machine in Machines)
+        {
+            if (machine.TrsToleranceText.Trim().Length == 0)
+                continue;
+            if (!NominalRateRowViewModel.TryParse(machine.TrsToleranceText, out var tolerance) || tolerance > 100)
+            {
+                MachinesStatusMessage = $"Tolérance invalide pour {ChoiceLabel(machine)} : « {machine.TrsToleranceText} » (0 à 100 points, vide = règle de l'onglet Couleurs).";
+                return null;
+            }
+            tolerances[machine.MachineId] = tolerance;
+        }
+        return tolerances;
+    }
+
     [RelayCommand]
     private void AddPlannedBreak() => PlannedBreaks.Add(new PlannedBreakRowViewModel { DurationText = "20" });
 
@@ -322,10 +364,99 @@ public partial class SettingsViewModel : ObservableObject
         return null;
     }
 
-    // Every table cell checked before saving; false = a message says which one.
+    // Every table cell checked before saving; false = a message says which
+    // one, on the tab brought to the front.
     public bool Validate()
-        => ParseNominalRates() != null && ParseTrsTargets() != null && ParsePlannedBreaks() != null && ParseStopThreshold() != null
-           && ParseSlides() != null;
+    {
+        SettingsTab? bad = ParseTrsTargets() == null || ParseTrsTolerances() == null ? SettingsTab.Machines
+            : ParseSlides() == null ? SettingsTab.Affichage
+            : ParseNominalRates() == null ? SettingsTab.Cadences
+            : ParsePlannedBreaks() == null || ParseStopThreshold() == null ? SettingsTab.Pauses
+            : ParseColors() == null ? SettingsTab.Couleurs
+            : null;
+        if (bad is { } tab)
+            SelectedTab = (int)tab;
+        return bad == null;
+    }
+
+    private void LoadColors(ColorThresholds c)
+    {
+        TrsWarningText = NominalRateRowViewModel.Format(c.TrsWarningPercentOfTarget);
+        AvailabilityGoodText = NominalRateRowViewModel.Format(c.AvailabilityGood);
+        AvailabilityWarningText = NominalRateRowViewModel.Format(c.AvailabilityWarning);
+        PerformanceGoodText = NominalRateRowViewModel.Format(c.PerformanceGood);
+        PerformanceWarningText = NominalRateRowViewModel.Format(c.PerformanceWarning);
+        PerformanceHighText = NominalRateRowViewModel.Format(c.PerformanceHigh);
+        QualityGoodText = NominalRateRowViewModel.Format(c.QualityGood);
+        QualityWarningText = NominalRateRowViewModel.Format(c.QualityWarning);
+        WeightOverGoodText = NominalRateRowViewModel.Format(c.WeightOverGood);
+        WeightOverWarningText = NominalRateRowViewModel.Format(c.WeightOverWarning);
+        WeightUnderWarningText = NominalRateRowViewModel.Format(c.WeightUnderWarning);
+        WeightUnderBadText = NominalRateRowViewModel.Format(c.WeightUnderBad);
+        ColorsStatusMessage = "";
+    }
+
+    // Back to the bands the app shipped with (applied on Enregistrer).
+    [RelayCommand]
+    private void ResetColors() => LoadColors(new ColorThresholds());
+
+    // Couleurs tab; null (message shown) on a blank, bad or inconsistent value.
+    private ColorThresholds? ParseColors()
+    {
+        double? Read(string text, string what, double max)
+        {
+            if (text.Trim().Length > 0 && NominalRateRowViewModel.TryParse(text, out var value) && value <= max)
+                return value;
+            ColorsStatusMessage = $"{what} invalide : « {text} » (nombre de 0 à {max:0} attendu).";
+            return null;
+        }
+        bool Ordered(double low, double high, string message)
+        {
+            if (low <= high)
+                return true;
+            ColorsStatusMessage = message;
+            return false;
+        }
+
+        if (Read(TrsWarningText, "TRS : seuil orange", 100) is not { } trsWarning
+            || Read(AvailabilityGoodText, "Disponibilité : seuil vert", 100) is not { } availabilityGood
+            || Read(AvailabilityWarningText, "Disponibilité : seuil orange", 100) is not { } availabilityWarning
+            || Read(PerformanceGoodText, "Performance : seuil vert", 200) is not { } performanceGood
+            || Read(PerformanceWarningText, "Performance : seuil orange", 200) is not { } performanceWarning
+            || Read(PerformanceHighText, "Performance : seuil haut", 200) is not { } performanceHigh
+            || Read(QualityGoodText, "Conformité : seuil vert", 100) is not { } qualityGood
+            || Read(QualityWarningText, "Conformité : seuil orange", 100) is not { } qualityWarning
+            || Read(WeightOverGoodText, "Écart de poids au-dessus de la cible : limite verte", 100) is not { } overGood
+            || Read(WeightOverWarningText, "Écart de poids au-dessus de la cible : limite orange", 100) is not { } overWarning
+            || Read(WeightUnderWarningText, "Écart de poids en dessous de la cible : limite verte", 100) is not { } underWarning
+            || Read(WeightUnderBadText, "Écart de poids en dessous de la cible : limite orange", 100) is not { } underBad)
+            return null;
+
+        if (!Ordered(availabilityWarning, availabilityGood, "Disponibilité : le seuil orange doit être inférieur ou égal au seuil vert.")
+            || !Ordered(performanceWarning, performanceGood, "Performance : le seuil orange doit être inférieur ou égal au seuil vert.")
+            || !Ordered(performanceGood, performanceHigh, "Performance : le seuil haut doit être supérieur ou égal au seuil vert.")
+            || !Ordered(qualityWarning, qualityGood, "Conformité : le seuil orange doit être inférieur ou égal au seuil vert.")
+            || !Ordered(overGood, overWarning, "Écart de poids au-dessus de la cible : la limite orange doit être supérieure ou égale à la limite verte.")
+            || !Ordered(underWarning, underBad, "Écart de poids en dessous de la cible : la limite orange doit être supérieure ou égale à la limite verte."))
+            return null;
+
+        ColorsStatusMessage = "";
+        return new ColorThresholds
+        {
+            TrsWarningPercentOfTarget = trsWarning,
+            AvailabilityGood = availabilityGood,
+            AvailabilityWarning = availabilityWarning,
+            PerformanceGood = performanceGood,
+            PerformanceWarning = performanceWarning,
+            PerformanceHigh = performanceHigh,
+            QualityGood = qualityGood,
+            QualityWarning = qualityWarning,
+            WeightOverGood = overGood,
+            WeightOverWarning = overWarning,
+            WeightUnderWarning = underWarning,
+            WeightUnderBad = underBad,
+        };
+    }
 
     private async Task LoadMachinesAsync()
     {
@@ -343,6 +474,9 @@ public partial class SettingsViewModel : ObservableObject
                     IsVisible = !_settings.HiddenMachineIds.Contains(machine.MachineId),
                     TrsTargetText = _settings.MachineTrsTargets.TryGetValue(machine.MachineId, out var target)
                         ? NominalRateRowViewModel.Format(target)
+                        : "",
+                    TrsToleranceText = _settings.MachineTrsTolerances.TryGetValue(machine.MachineId, out var tolerance)
+                        ? NominalRateRowViewModel.Format(tolerance)
                         : "",
                 };
                 Machines.Add(option);
@@ -542,10 +676,12 @@ public partial class SettingsViewModel : ObservableObject
         _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
         _settings.PlannedBreaks = ParsePlannedBreaks() ?? _settings.PlannedBreaks;
         _settings.StopThresholdMinutes = ParseStopThreshold() ?? _settings.StopThresholdMinutes;
+        _settings.Colors = ParseColors() ?? _settings.Colors;
         // Machine list not loaded (DB down): keep the targets and slides already saved.
         if (Machines.Count > 0)
         {
             _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;
+            _settings.MachineTrsTolerances = ParseTrsTolerances() ?? _settings.MachineTrsTolerances;
             _settings.Slides = ParseSlides() ?? _settings.Slides;
         }
 

@@ -74,9 +74,10 @@ public class MachinePeriodSlideViewModel
         var status = await repository.GetLatestStatusAsync(machine.MachineId);
         var allLots = await LoadLotsAsync(repository, machine.MachineId, from, to, now);
         var lots = filter.Apply(allLots, teamSchedule);
-        var trsTarget = settings.TrsTarget(machine.MachineId);
+        var trsBand = settings.TrsBandFor(machine.MachineId);
+        var trsTarget = trsBand.Target;
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsTarget);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand);
 
         // Teams, best TRS first; teams that did not produce go last.
         var teams = lots
@@ -84,12 +85,12 @@ public class MachinePeriodSlideViewModel
             .Select(g =>
             {
                 var teamLots = g.ToList();
-                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsTarget);
+                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsBand);
                 return new TeamPeriodRow
                 {
                     TeamName = g.Key,
                     Kpis = k,
-                    TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, trsTarget),
+                    TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, trsBand),
                     WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
                 };
             })
@@ -114,7 +115,7 @@ public class MachinePeriodSlideViewModel
             CurrentProductionLabel = MachineDaySlideViewModel.FormatProduction(status?.CurrentProduction, allLots),
             Kpis = kpis,
             TrsTarget = trsTarget,
-            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
             WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
             Teams = teams,
             GrainLabel = "par " + PeriodRanges.GrainName(grain),

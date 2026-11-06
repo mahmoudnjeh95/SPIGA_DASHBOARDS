@@ -12,6 +12,8 @@ public class SharedSettings
 {
     public List<NominalRateEntry> NominalRates { get; set; } = new();
     public Dictionary<string, double> MachineTrsTargets { get; set; } = new();
+    // null = saved by a version before per-machine tolerances: kept as is.
+    public Dictionary<string, double>? MachineTrsTolerances { get; set; }
     public List<PlannedBreak> PlannedBreaks { get; set; } = new();
     public int StopThresholdMinutes { get; set; }
     public TeamRotationSettings TeamRotation { get; set; } = new();
@@ -20,23 +22,30 @@ public class SharedSettings
     // before 1.5.13, which didn't share it: each PC keeps its own.
     public List<SlideSetting>? Slides { get; set; }
     public int? SlideDurationSeconds { get; set; }
+    // Colour limits (Parametres > Couleurs). null = saved by a version
+    // before they could be set: each PC keeps its own.
+    public ColorThresholds? Colors { get; set; }
 
     public static SharedSettings From(AppSettings settings) => new()
     {
         NominalRates = settings.NominalRates,
         MachineTrsTargets = settings.MachineTrsTargets,
+        MachineTrsTolerances = settings.MachineTrsTolerances,
         PlannedBreaks = settings.PlannedBreaks,
         StopThresholdMinutes = settings.StopThresholdMinutes,
         TeamRotation = settings.TeamRotation,
         DataStartDate = settings.DataStartDate,
         Slides = settings.Slides,
         SlideDurationSeconds = settings.SlideDurationSeconds,
+        Colors = settings.Colors,
     };
 
     public void ApplyTo(AppSettings settings)
     {
         settings.NominalRates = NominalRates;
         settings.MachineTrsTargets = MachineTrsTargets;
+        if (MachineTrsTolerances != null)
+            settings.MachineTrsTolerances = MachineTrsTolerances;
         settings.PlannedBreaks = PlannedBreaks;
         settings.StopThresholdMinutes = StopThresholdMinutes;
         settings.TeamRotation = TeamRotation;
@@ -45,6 +54,8 @@ public class SharedSettings
             settings.Slides = Slides;
         if (SlideDurationSeconds is int seconds)
             settings.SlideDurationSeconds = seconds;
+        if (Colors != null)
+            settings.Colors = Colors;
     }
 
     public static string Serialize(AppSettings settings) => JsonSerializer.Serialize(From(settings));

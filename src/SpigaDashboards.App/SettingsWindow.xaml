@@ -5,7 +5,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
         mc:Ignorable="d"
-        Title="Paramètres" Icon="/Assets/spiga-logo.png" Height="800" Width="720"
+        Title="Paramètres" Icon="/Assets/spiga-logo.png" Height="720" Width="780"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
         Language="fr-FR"
@@ -59,6 +59,55 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Margin" Value="0,0,8,0"/>
         </Style>
+        <Style x:Key="TabHeader" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="12,7" Margin="0,0,2,0">
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverOverlayBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Each tab scrolls on its own. -->
+        <Style x:Key="TabPage" TargetType="ScrollViewer">
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Padding" Value="0,0,8,0"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="ColorCell" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,6,12,6"/>
+        </Style>
+        <Style x:Key="ColorText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+        <Style x:Key="ColorBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Width" Value="56"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+        </Style>
         <Style x:Key="SecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
@@ -72,301 +121,474 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <TextBlock Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
-                <TextBlock Text="Base de données" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+        <TabControl SelectedIndex="{Binding SelectedTab}" Background="Transparent" BorderThickness="0" Padding="0">
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Background="{DynamicResource TileBackgroundBrush}" CornerRadius="10" Padding="4"
+                                HorizontalAlignment="Left" Margin="0,0,0,14">
+                            <TabPanel IsItemsHost="True"/>
+                        </Border>
+                        <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+                    </DockPanel>
+                </ControlTemplate>
+            </TabControl.Template>
+            <!-- Order = SettingsTab (SettingsViewModel). -->
+            <TabItem Header="Connexion" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Base de données" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
 
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton Content="SQL Server (production)" GroupName="Provider"
-                                 IsChecked="{Binding Provider, Converter={StaticResource EnumToBool}, ConverterParameter=SqlServer}"/>
-                    <RadioButton Content="SQLite (dev)" GroupName="Provider"
-                                 IsChecked="{Binding Provider, Converter={StaticResource EnumToBool}, ConverterParameter=Sqlite}"/>
-                </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Content="SQL Server (production)" GroupName="Provider"
+                                         IsChecked="{Binding Provider, Converter={StaticResource EnumToBool}, ConverterParameter=SqlServer}"/>
+                            <RadioButton Content="SQLite (dev)" GroupName="Provider"
+                                         IsChecked="{Binding Provider, Converter={StaticResource EnumToBool}, ConverterParameter=Sqlite}"/>
+                        </StackPanel>
 
-                <TextBlock Text="Serveur (ex. NOM-DU-PC\SQLEXPRESS, ou adresse IP,port)" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Serveur (ex. NOM-DU-PC\SQLEXPRESS, ou adresse IP,port)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Nom de la base (Stiavelli : stats)" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Nom de la base (Stiavelli : stats)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding Database, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Authentification" Style="{StaticResource FieldLabel}"/>
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton Content="Windows" GroupName="Auth"
-                                 IsChecked="{Binding AuthMode, Converter={StaticResource EnumToBool}, ConverterParameter=Windows}"/>
-                    <RadioButton Content="Login SQL" GroupName="Auth"
-                                 IsChecked="{Binding AuthMode, Converter={StaticResource EnumToBool}, ConverterParameter=SqlLogin}"/>
-                </StackPanel>
+                        <TextBlock Text="Authentification" Style="{StaticResource FieldLabel}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Content="Windows" GroupName="Auth"
+                                         IsChecked="{Binding AuthMode, Converter={StaticResource EnumToBool}, ConverterParameter=Windows}"/>
+                            <RadioButton Content="Login SQL" GroupName="Auth"
+                                         IsChecked="{Binding AuthMode, Converter={StaticResource EnumToBool}, ConverterParameter=SqlLogin}"/>
+                        </StackPanel>
 
-                <StackPanel Visibility="{Binding AuthMode, Converter={StaticResource SqlLoginVisibility}}">
-                    <TextBlock Text="Utilisateur" Style="{StaticResource FieldLabel}"/>
-                    <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
+                        <StackPanel Visibility="{Binding AuthMode, Converter={StaticResource SqlLoginVisibility}}">
+                            <TextBlock Text="Utilisateur" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
 
-                    <TextBlock Text="Mot de passe (laisser vide pour conserver l'actuel)" Style="{StaticResource FieldLabel}"/>
-                    <PasswordBox x:Name="PasswordBox" PasswordChanged="PasswordBox_PasswordChanged"/>
-                </StackPanel>
+                            <TextBlock Text="Mot de passe (laisser vide pour conserver l'actuel)" Style="{StaticResource FieldLabel}"/>
+                            <PasswordBox x:Name="PasswordBox" PasswordChanged="PasswordBox_PasswordChanged"/>
+                        </StackPanel>
 
-                <Button Content="Tester la connexion" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
-                        Command="{Binding TestConnectionCommand}" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBool}}"/>
-                <TextBlock Text="{Binding TestResultMessage}" Margin="0,6,0,0"
-                           TextWrapping="Wrap" Foreground="{Binding TestResultSuccess, Converter={StaticResource TestResultBrush}}"/>
+                        <Button Content="Tester la connexion" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                                Command="{Binding TestConnectionCommand}" IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBool}}"/>
+                        <TextBlock Text="{Binding TestResultMessage}" Margin="0,6,0,0"
+                                   TextWrapping="Wrap" Foreground="{Binding TestResultSuccess, Converter={StaticResource TestResultBrush}}"/>
 
-                <Button Content="Ouvrir la console de diagnostic" Style="{StaticResource SecondaryButton}"
-                        HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding OpenConsoleCommand}"
-                        ToolTip="Ouvre une fenêtre indépendante affichant le journal des tentatives de connexion. La fermer n'affecte pas l'application."/>
+                        <Button Content="Ouvrir la console de diagnostic" Style="{StaticResource SecondaryButton}"
+                                HorizontalAlignment="Left" Margin="0,8,0,0" Command="{Binding OpenConsoleCommand}"
+                                ToolTip="Ouvre une fenêtre indépendante affichant le journal des tentatives de connexion. La fermer n'affecte pas l'application."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Machines" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Machines : nom affiché, visibilité et TRS cible" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="TRS cible (%) : objectif de chaque machine, le TRS est vert quand il l'atteint. Vide = 85 %. Tolérance (points) : orange entre la cible moins la tolérance et la cible, rouge en dessous (ex. cible 50, tolérance 5 : orange de 45 à 50 %, rouge sous 45 %). Vide = règle de l'onglet Couleurs (orange à partir d'une part de la cible)."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <Button Content="Actualiser la liste" Style="{StaticResource SecondaryButton}"
+                                HorizontalAlignment="Left" Command="{Binding RefreshMachinesCommand}"/>
+                        <TextBlock Text="{Binding MachinesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="28,6,0,0">
+                            <TextBlock Text="Nom affiché" Style="{StaticResource FieldLabel}" Width="250" Margin="0"/>
+                            <TextBlock Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Width="90" Margin="0"/>
+                            <TextBlock Text="Tolérance (points)" Style="{StaticResource FieldLabel}" Margin="0"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding Machines}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:MachineVisibilityOption}">
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                                        <CheckBox IsChecked="{Binding IsVisible}" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                  ToolTip="Afficher cette machine dans la rotation du tableau de bord"/>
+                                        <TextBox Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" Width="240"/>
+                                        <TextBox Text="{Binding TrsTargetText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
+                                                 ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
+                                        <TextBox Text="{Binding TrsToleranceText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
+                                                 ToolTip="Orange entre la cible moins cette tolérance et la cible, rouge en dessous (vide = règle de l'onglet Couleurs)"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Affichage" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Affichage : rotation des diapositives" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Durée d'affichage par défaut d'une diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding SlideDurationSeconds, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Fréquence d'actualisation des données (minutes)" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
 
-                <TextBlock Text="Machines : nom affiché, visibilité et TRS cible" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="TRS cible (%) : objectif affiché à côté du TRS de chaque machine (vert si atteint, orange au-dessus de 75 % de la cible, rouge en dessous). Vide = 85 %."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <Button Content="Actualiser la liste" Style="{StaticResource SecondaryButton}"
-                        HorizontalAlignment="Left" Command="{Binding RefreshMachinesCommand}"/>
-                <TextBlock Text="{Binding MachinesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                <StackPanel Orientation="Horizontal" Margin="28,6,0,0">
-                    <TextBlock Text="Nom affiché" Style="{StaticResource FieldLabel}" Width="250" Margin="0"/>
-                    <TextBlock Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Margin="0"/>
-                </StackPanel>
-                <ItemsControl ItemsSource="{Binding Machines}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:MachineVisibilityOption}">
-                            <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
-                                <CheckBox IsChecked="{Binding IsVisible}" VerticalAlignment="Center" Margin="0,0,10,0"
-                                          ToolTip="Afficher cette machine dans la rotation du tableau de bord"/>
-                                <TextBox Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" Width="240"/>
-                                <TextBox Text="{Binding TrsTargetText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
-                                         ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
+                        <TextBlock Text="Alerte des arrêts" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
+                        <CheckBox IsChecked="{Binding ShowStopAlerts}" Content="Afficher l'alerte des arrêts non qualifiés (fenêtre rouge) sur ce PC"/>
+                        <CheckBox IsChecked="{Binding ResetStopAlertPosition}" Content="Remettre l'alerte à sa place (en haut à droite)" Margin="0,4,0,0"
+                                  IsEnabled="{Binding ShowStopAlerts}"/>
+                        <TextBlock Text="Propre à ce PC (l'écran TV peut la garder, un bureau la couper). L'alerte se déplace à la souris et garde sa place ; elle se ferme seule après 20 s ou avec sa croix, et revient pour un nouvel arrêt ou toutes les 30 min tant qu'un arrêt reste sans cause."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                        <TextBlock Text="Diapositives : ordre, affichage et durée" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
+                        <TextBlock Text="Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" Text="Diapositive" Style="{StaticResource FieldLabel}" Margin="28,0,0,0"/>
+                            <TextBlock Grid.Column="2" Text="Durée (s)" Style="{StaticResource FieldLabel}" Margin="8,0,0,0"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Slides}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:SlideRowViewModel}">
+                                    <Grid Margin="0,2,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="36"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Position}" Foreground="{DynamicResource SubtleTextBrush}"
+                                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                                        <CheckBox Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
+                                                  ToolTip="Afficher cette diapositive dans la rotation">
+                                            <TextBlock Text="{Binding Label}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                <Setter Property="Opacity" Value="0.45"/>
+                                                                <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </CheckBox>
+                                        <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
+                                                 IsEnabled="{Binding IsEnabled}" ToolTip="Durée de cette diapositive en secondes (vide = durée par défaut)"/>
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
+                                            <Button Content="&#x25B2;" AutomationProperties.Name="Monter" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0,0,4,0"
+                                                    ToolTip="Monter (passe plus tôt dans la rotation)"
+                                                    Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="&#x25BC;" AutomationProperties.Name="Descendre" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0"
+                                                    ToolTip="Descendre (passe plus tard dans la rotation)"
+                                                    Command="{Binding DataContext.MoveSlideDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="Ordre par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                ToolTip="Rétablit l'ordre d'origine : toutes les diapositives affichées, durée par défaut"
+                                Command="{Binding ResetSlidesCommand}"/>
+                        <TextBlock Text="{Binding SlidesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+
+                        <TextBlock Text="Document externe (diapositive PDF)" Style="{StaticResource SectionTitle}"/>
+                        <TextBlock Text="Consignes, instructions ou document qualité affiché en diapositive (sa place se règle dans la liste des diapositives ci-dessus). Laisser vide pour ne pas afficher cette diapositive."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Text="{Binding PdfDocumentPath, UpdateSourceTrigger=PropertyChanged}" Width="360" IsReadOnly="True"/>
+                            <Button Content="Parcourir…" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                                    Command="{Binding BrowsePdfDocumentCommand}"/>
+                            <Button Content="Effacer" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                                    ToolTip="Ne plus afficher de document" Command="{Binding ClearPdfDocumentCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding PdfDocumentStatus}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Cadences" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Cadence nominale et sachet vide, par machine et par poids" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Cadence : vitesse idéale (sacs/min) de la machine pour ce poids de sac, sert au calcul de la Performance et du TRS. Sachet vide : poids de l'emballage vide (g), déduit du poids mesuré pour obtenir le poids net (poids moyen, écart, surpoids). Une production est associée à la ligne de SA machine pour le poids le plus proche de son poids cible (à 5 % près), sinon à la ligne « Toutes ». Cadence vide = TRS non calculé pour ce poids."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Machine" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Column="1" Text="Poids (g)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                            <TextBlock Grid.Column="2" Text="Cadence (sacs/min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                            <TextBlock Grid.Column="3" Text="Sachet vide (g)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding NominalRates}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:NominalRateRowViewModel}">
+                                    <Grid Margin="0,3,0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0" Style="{StaticResource DarkComboBox}"
+                                                  ItemsSource="{Binding DataContext.MachineChoices, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedValuePath="Id" ItemTemplate="{StaticResource MachineChoiceTemplate}"
+                                                  SelectedValue="{Binding MachineId}"/>
+                                        <TextBox Grid.Column="1" Margin="8,0,0,0" Text="{Binding WeightText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding RateText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Grid.Column="3" Margin="8,0,0,0" Text="{Binding TareText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="8,0,0,0">
+                                            <Button Content="Dupliquer" Style="{StaticResource SecondaryButton}" Padding="10,4"
+                                                    ToolTip="Copier cette ligne (par exemple pour une autre machine)"
+                                                    Command="{Binding DataContext.DuplicateNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4"
+                                                    Command="{Binding DataContext.RemoveNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+ Ligne" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                Command="{Binding AddNominalRateCommand}"/>
+                        <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Pauses &amp; arrêts" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Pauses planifiées et arrêts" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Pauses quotidiennes, communes à toutes les machines. Le temps où la ligne est à l'arrêt pendant une pause n'est pas compté dans la Disponibilité (ni le TRS), ni dans la liste des arrêts ; une ligne qui tourne pendant la pause garde ce temps de marche. Même règle pour les créneaux de maintenance et les arrêts de cause « Planifié » saisis dans Planification."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Début (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>
+                            <TextBlock Text="Durée (min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding PlannedBreaks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:PlannedBreakRowViewModel}">
+                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
+                                        <TextBox Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
+                                        <TextBox Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="8,0,0,0"/>
+                                        <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="8,0,0,0"
+                                                Command="{Binding DataContext.RemovePlannedBreakCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="+ Pause" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                Command="{Binding AddPlannedBreakCommand}"/>
+                        <TextBlock Text="Seuil d'arrêt (minutes) : tout arrêt du compteur au moins égal à cette durée, hors pauses, apparaît dans la fenêtre Arrêts et sur la fiche à imprimer"
+                                   Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding StopThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left"/>
+                        <TextBlock Text="{Binding BreaksStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Équipes" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Équipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Cycle par défaut : celui du site (8 jours : chaque équipe fait 2 jours sur chaque poste, Matin puis Après-midi puis Nuit, puis 2 jours de repos). Modifiable ci-dessous."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                        <TextBlock Text="Noms des 4 équipes" Style="{StaticResource FieldLabel}"/>
+                        <TextBox Text="{Binding Team1Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Team2Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Team3Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Team4Name, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Date de référence du cycle (jour 1 de la ligne ci-dessous)" Style="{StaticResource FieldLabel}"/>
+                        <DatePicker SelectedDate="{Binding RotationStartDate}"/>
+
+                        <TextBlock Text="Planning du cycle : équipe par jour et par poste" Style="{StaticResource FieldLabel}"/>
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" Text="Matin (06-14)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
+                            <TextBlock Grid.Column="2" Text="Après-midi (14-22)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
+                            <TextBlock Grid.Column="3" Text="Nuit (22-06)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding RosterDays}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:TeamRosterDayViewModel}">
+                                    <Grid Margin="0,3,0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center">
+                                            <Run Text="Jour "/>
+                                            <Run Text="{Binding CycleDay, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <ComboBox Grid.Column="1" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
+                                                  SelectedValue="{Binding MatinTeamIndex}"/>
+                                        <ComboBox Grid.Column="2" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
+                                                  SelectedValue="{Binding SoirTeamIndex}"/>
+                                        <ComboBox Grid.Column="3" Style="{StaticResource DarkComboBox}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
+                                                  SelectedValue="{Binding NuitTeamIndex}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="+ Jour" Style="{StaticResource SecondaryButton}" Command="{Binding AddRosterDayCommand}"/>
+                            <Button Content="- Jour" Style="{StaticResource SecondaryButton}" Command="{Binding RemoveRosterDayCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Couleurs" Style="{StaticResource TabHeader}">
+                <ScrollViewer Style="{StaticResource TabPage}">
+                    <StackPanel>
+                        <TextBlock Text="Couleurs des indicateurs" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8"
+                                   Text="Limites entre vert, orange et rouge des chiffres colorés du tableau de bord, de l'écran TV et de l'historique. Commun à tous les postes. Une valeur égale à une limite prend la meilleure des deux couleurs."/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="190"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Indicateur" Style="{StaticResource FieldLabel}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Vert" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}" Margin="0,8,12,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Orange" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" Margin="0,8,12,2"/>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="Rouge" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" Margin="0,8,0,2"/>
+
+                            <!-- TRS -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="TRS (machines sans tolérance)" TextWrapping="Wrap" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥ cible de la machine" Style="{StaticResource ColorText}"/>
                             </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Text="Affichage : rotation des diapositives" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Durée d'affichage par défaut d'une diapositive (secondes)" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding SlideDurationSeconds, UpdateSourceTrigger=PropertyChanged}"/>
-                <TextBlock Text="Fréquence d'actualisation des données (minutes)" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
-
-                <TextBlock Text="Alerte des arrêts" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
-                <CheckBox IsChecked="{Binding ShowStopAlerts}" Content="Afficher l'alerte des arrêts non qualifiés (fenêtre rouge) sur ce PC"/>
-                <CheckBox IsChecked="{Binding ResetStopAlertPosition}" Content="Remettre l'alerte à sa place (en haut à droite)" Margin="0,4,0,0"
-                          IsEnabled="{Binding ShowStopAlerts}"/>
-                <TextBlock Text="Propre à ce PC (l'écran TV peut la garder, un bureau la couper). L'alerte se déplace à la souris et garde sa place ; elle se ferme seule après 20 s ou avec sa croix, et revient pour un nouvel arrêt ou toutes les 30 min tant qu'un arrêt reste sans cause."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
-
-                <TextBlock Text="Diapositives : ordre, affichage et durée" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
-                <TextBlock Text="Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <Grid Margin="0,0,0,2">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="36"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="90"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1" Text="Diapositive" Style="{StaticResource FieldLabel}" Margin="28,0,0,0"/>
-                    <TextBlock Grid.Column="2" Text="Durée (s)" Style="{StaticResource FieldLabel}" Margin="8,0,0,0"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding Slides}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:SlideRowViewModel}">
-                            <Grid Margin="0,2,0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="36"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="90"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Position}" Foreground="{DynamicResource SubtleTextBrush}"
-                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
-                                <CheckBox Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"
-                                          ToolTip="Afficher cette diapositive dans la rotation">
-                                    <TextBlock Text="{Binding Label}">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                                        <Setter Property="Opacity" Value="0.45"/>
-                                                        <Setter Property="TextDecorations" Value="Strikethrough"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </CheckBox>
-                                <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}"
-                                         IsEnabled="{Binding IsEnabled}" ToolTip="Durée de cette diapositive en secondes (vide = durée par défaut)"/>
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
-                                    <Button Content="&#x25B2;" AutomationProperties.Name="Monter" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0,0,4,0"
-                                            ToolTip="Monter (passe plus tôt dans la rotation)"
-                                            Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"/>
-                                    <Button Content="&#x25BC;" AutomationProperties.Name="Descendre" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0"
-                                            ToolTip="Descendre (passe plus tard dans la rotation)"
-                                            Command="{Binding DataContext.MoveSlideDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"/>
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Button Content="Ordre par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
-                        ToolTip="Rétablit l'ordre d'origine : toutes les diapositives affichées, durée par défaut"
-                        Command="{Binding ResetSlidesCommand}"/>
-                <TextBlock Text="{Binding SlidesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-
-                <TextBlock Text="Cadence nominale et sachet vide, par machine et par poids" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Cadence : vitesse idéale (sacs/min) de la machine pour ce poids de sac, sert au calcul de la Performance et du TRS. Sachet vide : poids de l'emballage vide (g), déduit du poids mesuré pour obtenir le poids net (poids moyen, écart, surpoids). Une production est associée à la ligne de SA machine pour le poids le plus proche de son poids cible (à 5 % près), sinon à la ligne « Toutes ». Cadence vide = TRS non calculé pour ce poids."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                <Grid Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="130"/>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="130"/>
-                        <ColumnDefinition Width="120"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="Machine" Style="{StaticResource FieldLabel}"/>
-                    <TextBlock Grid.Column="1" Text="Poids (g)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
-                    <TextBlock Grid.Column="2" Text="Cadence (sacs/min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
-                    <TextBlock Grid.Column="3" Text="Sachet vide (g)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding NominalRates}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:NominalRateRowViewModel}">
-                            <Grid Margin="0,3,0,3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="130"/>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="130"/>
-                                    <ColumnDefinition Width="120"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <ComboBox Grid.Column="0" Style="{StaticResource DarkComboBox}"
-                                          ItemsSource="{Binding DataContext.MachineChoices, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedValuePath="Id" ItemTemplate="{StaticResource MachineChoiceTemplate}"
-                                          SelectedValue="{Binding MachineId}"/>
-                                <TextBox Grid.Column="1" Margin="8,0,0,0" Text="{Binding WeightText, UpdateSourceTrigger=PropertyChanged}"/>
-                                <TextBox Grid.Column="2" Margin="8,0,0,0" Text="{Binding RateText, UpdateSourceTrigger=PropertyChanged}"/>
-                                <TextBox Grid.Column="3" Margin="8,0,0,0" Text="{Binding TareText, UpdateSourceTrigger=PropertyChanged}"/>
-                                <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="8,0,0,0">
-                                    <Button Content="Dupliquer" Style="{StaticResource SecondaryButton}" Padding="10,4"
-                                            ToolTip="Copier cette ligne (par exemple pour une autre machine)"
-                                            Command="{Binding DataContext.DuplicateNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"/>
-                                    <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4"
-                                            Command="{Binding DataContext.RemoveNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"/>
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Button Content="+ Ligne" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
-                        Command="{Binding AddNominalRateCommand}"/>
-                <TextBlock Text="{Binding NominalRatesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-
-                <TextBlock Text="Pauses planifiées et arrêts" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Pauses quotidiennes, communes à toutes les machines. Le temps où la ligne est à l'arrêt pendant une pause n'est pas compté dans la Disponibilité (ni le TRS), ni dans la liste des arrêts ; une ligne qui tourne pendant la pause garde ce temps de marche. Même règle pour les créneaux de maintenance et les arrêts de cause « Planifié » saisis dans Planification."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                    <TextBlock Text="Début (hh:mm)" Style="{StaticResource FieldLabel}" Width="110"/>
-                    <TextBlock Text="Durée (min)" Style="{StaticResource FieldLabel}" Margin="8,8,0,2"/>
-                </StackPanel>
-                <ItemsControl ItemsSource="{Binding PlannedBreaks}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:PlannedBreakRowViewModel}">
-                            <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
-                                <TextBox Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
-                                <TextBox Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="8,0,0,0"/>
-                                <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="8,0,0,0"
-                                        Command="{Binding DataContext.RemovePlannedBreakCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding TrsWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                         ToolTip="Pour les machines sans tolérance (onglet Machines) : orange à partir de ce pourcentage de la cible (75 = 75 % de la cible)"/>
+                                <TextBlock Text="% de la cible" Style="{StaticResource ColorText}"/>
                             </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <Button Content="+ Pause" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,6,0,0"
-                        Command="{Binding AddPlannedBreakCommand}"/>
-                <TextBlock Text="Seuil d'arrêt (minutes) : tout arrêt du compteur au moins égal à cette durée, hors pauses, apparaît dans la fenêtre Arrêts et sur la fiche à imprimer"
-                           Style="{StaticResource FieldLabel}" TextWrapping="Wrap"/>
-                <TextBox Text="{Binding StopThresholdText, UpdateSourceTrigger=PropertyChanged}" Width="110" HorizontalAlignment="Left"/>
-                <TextBlock Text="{Binding BreaksStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="en dessous" Style="{StaticResource ColorText}"/>
 
-                <TextBlock Text="Équipes (rotation sur les 3 postes)" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Cycle par défaut (aucun planning client fourni) : chaque équipe travaille 3 jours de suite sur un poste différent, puis se repose 1 jour. À ajuster une fois le vrai planning connu."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                <TextBlock Text="Noms des 4 équipes" Style="{StaticResource FieldLabel}"/>
-                <TextBox Text="{Binding Team1Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
-                <TextBox Text="{Binding Team2Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
-                <TextBox Text="{Binding Team3Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4"/>
-                <TextBox Text="{Binding Team4Name, UpdateSourceTrigger=PropertyChanged}"/>
-                <TextBlock Text="Date de référence du cycle (jour 1 de la ligne ci-dessous)" Style="{StaticResource FieldLabel}"/>
-                <DatePicker SelectedDate="{Binding RotationStartDate}"/>
+                            <!-- Disponibilité -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Disponibilité" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding AvailabilityGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding AvailabilityWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="en dessous" Style="{StaticResource ColorText}"/>
 
-                <TextBlock Text="Planning du cycle : équipe par jour et par poste" Style="{StaticResource FieldLabel}"/>
-                <Grid Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="70"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1" Text="Matin (06-14)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
-                    <TextBlock Grid.Column="2" Text="Après-midi (14-22)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
-                    <TextBlock Grid.Column="3" Text="Nuit (22-06)" Style="{StaticResource FieldLabel}" Margin="4,0,0,0"/>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding RosterDays}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type vm:TeamRosterDayViewModel}">
-                            <Grid Margin="0,3,0,3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="70"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center">
-                                    <Run Text="Jour "/>
-                                    <Run Text="{Binding CycleDay, Mode=OneWay}"/>
-                                </TextBlock>
-                                <ComboBox Grid.Column="1" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
-                                          ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
-                                          SelectedValue="{Binding MatinTeamIndex}"/>
-                                <ComboBox Grid.Column="2" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
-                                          ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
-                                          SelectedValue="{Binding SoirTeamIndex}"/>
-                                <ComboBox Grid.Column="3" Style="{StaticResource DarkComboBox}"
-                                          ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
-                                          SelectedValue="{Binding NuitTeamIndex}"/>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                    <Button Content="+ Jour" Style="{StaticResource SecondaryButton}" Command="{Binding AddRosterDayCommand}"/>
-                    <Button Content="- Jour" Style="{StaticResource SecondaryButton}" Command="{Binding RemoveRosterDayCommand}"/>
-                </StackPanel>
+                            <!-- Performance -->
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Performance" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding PerformanceGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="3" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding PerformanceWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="3" Grid.Column="3" Text="en dessous" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource ColorCell}" Margin="0,0,0,6">
+                                <TextBlock Text="Orange aussi au-dessus de" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding PerformanceHighText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                         ToolTip="Une performance au-delà indique le plus souvent une cadence nominale trop basse dans l'onglet Cadences"/>
+                                <TextBlock Text="% (cadence nominale probablement trop basse)" Style="{StaticResource ColorText}" Foreground="{DynamicResource SubtleTextBrush}"/>
+                            </StackPanel>
 
-                <TextBlock Text="Document externe (diapositive PDF)" Style="{StaticResource SectionTitle}"/>
-                <TextBlock Text="Consignes, instructions ou document qualité affiché en diapositive (sa place se règle dans Affichage ci-dessus). Laisser vide pour ne pas afficher cette diapositive."
-                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
-                <StackPanel Orientation="Horizontal">
-                    <TextBox Text="{Binding PdfDocumentPath, UpdateSourceTrigger=PropertyChanged}" Width="360" IsReadOnly="True"/>
-                    <Button Content="Parcourir…" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
-                            Command="{Binding BrowsePdfDocumentCommand}"/>
-                    <Button Content="Effacer" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
-                            ToolTip="Ne plus afficher de document" Command="{Binding ClearPdfDocumentCommand}"/>
-                </StackPanel>
-                <TextBlock Text="{Binding PdfDocumentStatus}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" Margin="0,4,0,0"/>
-            </StackPanel>
-        </ScrollViewer>
+                            <!-- Conformité -->
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Conformité (Qualité)" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="5" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding QualityGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="5" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="≥" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding QualityWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="5" Grid.Column="3" Text="en dessous" Style="{StaticResource ColorText}"/>
 
-        <DockPanel Grid.Row="1" Margin="0,16,0,0">
+                            <!-- Écart de poids, au-dessus -->
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Écart de poids, au-dessus de la cible" TextWrapping="Wrap" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="6" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="jusqu'à +" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding WeightOverGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="6" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="jusqu'à +" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding WeightOverWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="6" Grid.Column="3" Text="au-delà" Style="{StaticResource ColorText}"/>
+
+                            <!-- Écart de poids, en dessous -->
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Écart de poids, en dessous de la cible (sous-dosage)" TextWrapping="Wrap" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="7" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="jusqu'à −" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding WeightUnderWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="7" Grid.Column="2" Style="{StaticResource ColorCell}">
+                                <TextBlock Text="jusqu'à −" Style="{StaticResource ColorText}"/>
+                                <TextBox Text="{Binding WeightUnderBadText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
+                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="7" Grid.Column="3" Text="au-delà" Style="{StaticResource ColorText}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Text="Écart de poids : en pourcentage du poids cible (1 g compte peu sur 5 kg, beaucoup sur 200 g). Le sous-dosage a ses propres limites, plus serrées : c'est un risque de non-conformité, alors qu'un surpoids ne fait que donner du produit."/>
+                        <Button Content="Valeurs par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
+                                ToolTip="Remet les limites d'origine (appliquées à l'enregistrement)" Command="{Binding ResetColorsCommand}"/>
+                        <TextBlock Text="{Binding ColorsStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <TextBlock Grid.Row="1" Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, couleurs et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
+                   Style="{StaticResource Hint}" Margin="0,12,0,0"/>
+
+        <DockPanel Grid.Row="2" Margin="0,12,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
                 <Button Content="Annuler" Style="{StaticResource SecondaryButton}" Click="CancelButton_Click"/>
                 <Button Content="Enregistrer" Style="{StaticResource PrimaryButton}" Click="SaveButton_Click"/>

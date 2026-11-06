@@ -12,4 +12,7 @@ public partial class MachineVisibilityOption : ObservableObject
 
     // TRS cible (%), as typed; validated on save.
     [ObservableProperty] private string trsTargetText = "";
+
+    // TRS tolerance (points), as typed; blank = Couleurs default.
+    [ObservableProperty] private string trsToleranceText = "";
 }

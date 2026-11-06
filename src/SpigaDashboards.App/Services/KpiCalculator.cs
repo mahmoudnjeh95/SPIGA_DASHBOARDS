@@ -57,10 +57,10 @@ public static class KpiCalculator
     // Also breaks the buckets down per target weight (Weights), with each
     // weight's TRS banded against trsTarget, and totals the net weight made.
     public static KpiSummary Summarize(
-        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, double trsTarget = AppSettings.DefaultTrsTarget)
+        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, TrsBand? trsBand = null)
     {
         var summary = SummarizeCore(lots, availabilityPercent);
-        summary.Weights = ByWeight(lots, trsTarget);
+        summary.Weights = ByWeight(lots, trsBand);
         summary.ProductionKg = Math.Round(summary.Weights.Sum(w => w.ProductionKg), 1);
         var weighed = summary.Weights.Where(w => w.GiveawayKg.HasValue).ToList();
         summary.GiveawayKg = weighed.Count > 0 ? Math.Round(weighed.Sum(w => w.GiveawayKg!.Value), 1) : null;
@@ -70,7 +70,7 @@ public static class KpiCalculator
     // One entry per target weight (rounded to the gram), biggest production
     // first. Production = bags x net average weight, or x target when that
     // weight has no trustworthy weight data; giveaway = bags x deviation.
-    public static List<WeightKpi> ByWeight(IReadOnlyCollection<ProductionBucket> lots, double trsTarget = AppSettings.DefaultTrsTarget)
+    public static List<WeightKpi> ByWeight(IReadOnlyCollection<ProductionBucket> lots, TrsBand? trsBand = null)
     {
         return lots
             .Where(l => l.TargetNetWeight > 0)
@@ -99,7 +99,7 @@ public static class KpiCalculator
                     SpeedBagsPerMinute = k.SpeedBagsPerMinute,
                     MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
                     DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent),
-                    TrsSeverity = TrsSeverity(k.TrsPercent, trsTarget),
+                    TrsSeverity = TrsSeverity(k.TrsPercent, trsBand ?? TrsBand.Default),
                 };
             })
             .Where(w => w.TotalBags > 0 || w.AvgWeight.HasValue)
@@ -107,15 +107,9 @@ public static class KpiCalculator
             .ToList();
     }
 
-    // Colour band of a TRS against the machine's target: reached = green,
-    // within 75 % of it = orange, below = red.
-    public static KpiSeverity TrsSeverity(double? trsPercent, double target) => trsPercent switch
-    {
-        null => KpiSeverity.Unknown,
-        { } t when t >= target => KpiSeverity.Good,
-        { } t when t >= 0.75 * target => KpiSeverity.Warning,
-        _ => KpiSeverity.Bad,
-    };
+    // Colour band of a TRS against the machine's target and tolerance
+    // (Parametres > Machines / Couleurs, see TrsBand).
+    public static KpiSeverity TrsSeverity(double? trsPercent, TrsBand band) => band.Severity(trsPercent);
 
     private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
 
@@ -237,20 +231,10 @@ public static class KpiCalculator
         return (Math.Round(deviationSum / bags, 2), Math.Round(100.0 * deviationSum / targetSum, 2));
     }
 
-    // Colour band of the weight deviation, relative to the target (1 g means
-    // nothing on a 5 kg bag but is a lot on a 200 g one). Running heavy only
-    // gives product away: within 0.5 % green, within 1.5 % orange, beyond
-    // red. Running light is a compliance risk (sous-dosage): orange as soon
-    // as the average is 0.1 % under the target, red from 0.5 % under.
-    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent) => deviationPercent switch
-    {
-        null => KpiSeverity.Unknown,
-        < -0.5 => KpiSeverity.Bad,
-        < -0.1 => KpiSeverity.Warning,
-        <= 0.5 => KpiSeverity.Good,
-        <= 1.5 => KpiSeverity.Warning,
-        _ => KpiSeverity.Bad,
-    };
+    // Colour band of the weight deviation, relative to the target (limits:
+    // Parametres > Couleurs, see ColorThresholds).
+    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent)
+        => ColorThresholds.Current.WeightDeviation(deviationPercent);
 
     // Share (0-100) of the required time (observed, minus the planned stops
     // the line was stopped in) in which the line produced bags. Over the
