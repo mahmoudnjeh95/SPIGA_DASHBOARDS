@@ -35,6 +35,20 @@ public partial class TvWindow : Window
 
         PlaceFromSettings();
 
+        // Stop pop-up: at its saved place each time it comes up (moved on the
+        // other window, or put back in Parametres), saved where it is dropped.
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsStopAlertShown) && viewModel.IsStopAlertShown)
+                StopAlert.SetOffset(_settings.StopAlertOffsetX, _settings.StopAlertOffsetY);
+        };
+        StopAlert.Moved += (x, y) =>
+        {
+            _settings.StopAlertOffsetX = x;
+            _settings.StopAlertOffsetY = y;
+            _settingsService.Save(_settings);
+        };
+
         _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clockTimer.Tick += (_, _) => UpdateClock();
         _clockTimer.Start();
@@ -120,7 +134,7 @@ public partial class TvWindow : Window
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Ecran TV : position non enregistree ({ex.Message})");
+            AppLogger.Log($"Écran TV : position non enregistrée ({ex.Message})");
         }
     }
 
@@ -139,7 +153,7 @@ public partial class TvWindow : Window
     {
         var fullScreen = IsFullScreen;
         PlacementHint.Visibility = fullScreen ? Visibility.Collapsed : Visibility.Visible;
-        FullScreenMenuItem.Header = fullScreen ? "Quitter le plein ecran" : "Plein ecran";
+        FullScreenMenuItem.Header = fullScreen ? "Quitter le plein écran" : "Plein écran";
     }
 
     private void UpdateClock() => ClockText.Text = DateTime.Now.ToString("dd/MM/yyyy  HH:mm");

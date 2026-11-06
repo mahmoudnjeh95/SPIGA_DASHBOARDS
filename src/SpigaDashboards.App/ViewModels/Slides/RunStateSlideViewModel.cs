@@ -10,12 +10,29 @@ public class MachineRunTile
     public string MachineName { get; init; } = "";
     public bool IsConnected { get; init; }
     public bool BeltRunning { get; init; }
-    public string RunStateLabel => !IsConnected ? "Pas de donnees" : BeltRunning ? "En marche" : "A l'arret";
+    public SlotKind? PlannedSlot { get; init; }
+    public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
+    public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
+    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    public string RunStateLabel => PlannedLabel ?? (!IsConnected ? "Pas de données" : BeltRunning ? "En marche" : "À l'arrêt");
+}
+
+// Banner of a run-state photo while the line is in a slot of the
+// Planification board (grey for a planned stop, yellow for a maintenance).
+public static class RunStateText
+{
+    public static string? Planned(SlotKind? slot) => slot switch
+    {
+        SlotKind.PlannedStop => "ARRÊT PLANIFIÉ",
+        SlotKind.Maintenance => "MAINTENANCE",
+        _ => null,
+    };
 }
 
 // First Cumul slide: nothing but the run-state photo of every machine,
 // captioned with its name from Parametres, and how many run right now. Live
-// state whatever the top-bar period (same snapshot as the machine headers).
+// state whatever the top-bar period (same snapshot as the machine headers),
+// greyed / yellowed while the line is in a planned stop / maintenance.
 public class RunStateSlideViewModel
 {
     public string Title { get; init; } = "";
@@ -28,6 +45,7 @@ public class RunStateSlideViewModel
     public static async Task<RunStateSlideViewModel> LoadAsync(ProductionRepository repository, string title, IReadOnlyList<Machine> machines)
     {
         var tiles = new List<MachineRunTile>();
+        var slots = await repository.GetActiveSlotKindsAsync();
         foreach (var m in machines)
         {
             var status = await repository.GetLatestStatusAsync(m.MachineId);
@@ -37,6 +55,7 @@ public class RunStateSlideViewModel
                 MachineName = m.MachineName,
                 IsConnected = status?.IsConnected ?? false,
                 BeltRunning = status?.BeltRunning ?? false,
+                PlannedSlot = slots.TryGetValue(m.MachineId, out var slot) ? slot : null,
             });
         }
         return new RunStateSlideViewModel { Title = title, Tiles = tiles };

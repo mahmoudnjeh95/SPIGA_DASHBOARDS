@@ -18,6 +18,7 @@
         <conv:CauseFamilyBrushConverter x:Key="CauseFamilyBrush"/>
         <conv:PercentBandBrushConverter x:Key="PercentBandBrush"/>
         <conv:SeverityBrushConverter x:Key="SeverityBrush"/>
+        <conv:SectorLabelConverter x:Key="SectorLabel"/>
 
         <!-- Note: the active theme's brushes (Themes/DarkTheme.xaml or LightTheme.xaml)
              are merged in at startup by ThemeService.Apply, before any window is

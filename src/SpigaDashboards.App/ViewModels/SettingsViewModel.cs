@@ -11,12 +11,18 @@ using SpigaDashboards.App.ViewModels.Slides;
 
 namespace SpigaDashboards.App.ViewModels;
 
+// Tabs of the Parametres window, in order (SettingsViewModel.SelectedTab).
+public enum SettingsTab { Connexion, Machines, Affichage, Cadences, Pauses, Equipes, Couleurs }
+
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _settingsService;
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
     private readonly ProductionRepository _repository;
+    private readonly SharedSettingsSync _sharedSettings;
+    // Shared part as it was when the window opened (see SharedSettingsSync.PushAsync).
+    private string _sharedAtOpen;
     private readonly Action _onApplied;
 
     [ObservableProperty] private DatabaseProvider provider;
@@ -32,7 +38,13 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string machinesStatusMessage = "";
 
+    // Set when Enregistrer could not share the shared settings: the window stays open.
+    [ObservableProperty] private string sharedSettingsMessage = "";
+
     [ObservableProperty] private int slideDurationSeconds;
+    [ObservableProperty] private bool showStopAlerts;
+    // "Replacer" ticked: the pop-up goes back to the top right on save.
+    [ObservableProperty] private bool resetStopAlertPosition;
     [ObservableProperty] private int dataRefreshIntervalMinutes;
 
     [ObservableProperty] private string team1Name = "";
@@ -62,6 +74,20 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string slidesStatusMessage = "";
     private List<Machine> _activeMachines = new();
 
+    // Tab shown (SettingsTab); Enregistrer moves to the tab with the bad cell.
+    [ObservableProperty] private int selectedTab;
+
+    // Couleurs: the limits of ColorThresholds, as typed.
+    [ObservableProperty] private string trsWarningText = "";
+    [ObservableProperty] private string availabilityGoodText = "";
+    [ObservableProperty] private string availabilityWarningText = "";
+    [ObservableProperty] private string performanceGoodText = "";
+    [ObservableProperty] private string performanceWarningText = "";
+    [ObservableProperty] private string performanceHighText = "";
+    [ObservableProperty] private string qualityGoodText = "";
+    [ObservableProperty] private string qualityWarningText = "";
+    [ObservableProperty] private string colorsStatusMessage = "";
+
     public event EventHandler? SettingsApplied;
 
     public SettingsViewModel(
@@ -69,12 +95,15 @@ public partial class SettingsViewModel : ObservableObject
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
         ProductionRepository repository,
+        SharedSettingsSync sharedSettings,
         Action onApplied)
     {
         _settingsService = settingsService;
         _settings = settings;
         _activeFactory = activeFactory;
         _repository = repository;
+        _sharedSettings = sharedSettings;
+        _sharedAtOpen = SharedSettings.Serialize(settings);
         _onApplied = onApplied;
 
         Provider = settings.Provider;
@@ -86,6 +115,7 @@ public partial class SettingsViewModel : ObservableObject
         // reused unless the user types a new one (see Save()).
 
         SlideDurationSeconds = settings.SlideDurationSeconds;
+        ShowStopAlerts = settings.ShowStopAlerts;
         DataRefreshIntervalMinutes = settings.DataRefreshIntervalMinutes;
 
         // TeamOptions must exist before the TeamXName assignments below: setting
@@ -133,6 +163,8 @@ public partial class SettingsViewModel : ObservableObject
             });
         StopThresholdText = settings.StopThresholdMinutes.ToString(CultureInfo.InvariantCulture);
 
+        LoadColors(settings.Colors);
+
         _ = LoadMachinesAsync();
     }
 
@@ -147,11 +179,11 @@ public partial class SettingsViewModel : ObservableObject
     private void UpdatePdfDocumentStatus()
     {
         if (string.IsNullOrWhiteSpace(PdfDocumentPath))
-            PdfDocumentStatus = "Aucun document configure : la diapositive document sera ignoree.";
+            PdfDocumentStatus = "Aucun document configuré : la diapositive document sera ignorée.";
         else if (!File.Exists(PdfDocumentPath))
-            PdfDocumentStatus = "Fichier introuvable a ce chemin.";
+            PdfDocumentStatus = "Fichier introuvable à ce chemin.";
         else
-            PdfDocumentStatus = $"Mis a jour le {File.GetLastWriteTime(PdfDocumentPath):dd/MM/yyyy HH:mm}.";
+            PdfDocumentStatus = $"Mis à jour le {File.GetLastWriteTime(PdfDocumentPath):dd/MM/yyyy HH:mm}.";
     }
 
     [RelayCommand]
@@ -165,6 +197,10 @@ public partial class SettingsViewModel : ObservableObject
         if (dialog.ShowDialog() == true)
             PdfDocumentPath = dialog.FileName;
     }
+
+    // No document: the PDF slide is skipped (applied on Enregistrer).
+    [RelayCommand]
+    private void ClearPdfDocument() => PdfDocumentPath = "";
 
     private void LoadRosterDays(List<TeamRosterEntry> pattern)
     {
@@ -226,22 +262,22 @@ public partial class SettingsViewModel : ObservableObject
             var where = machine.Length == 0 ? "" : $" ({machine})";
             if (!NominalRateRowViewModel.TryParse(row.WeightText, out var weight) || weight <= 0)
             {
-                NominalRatesStatusMessage = $"Poids invalide{where} : \"{row.WeightText}\" (nombre de grammes attendu).";
+                NominalRatesStatusMessage = $"Poids invalide{where} : « {row.WeightText} » (nombre de grammes attendu).";
                 return null;
             }
             if (!NominalRateRowViewModel.TryParse(row.RateText, out var rate))
             {
-                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g{where} : \"{row.RateText}\".";
+                NominalRatesStatusMessage = $"Cadence invalide pour {row.WeightText} g{where} : « {row.RateText} ».";
                 return null;
             }
             if (!NominalRateRowViewModel.TryParse(row.TareText, out var tare) || tare >= weight)
             {
-                NominalRatesStatusMessage = $"Poids du sachet vide invalide pour {row.WeightText} g{where} : \"{row.TareText}\".";
+                NominalRatesStatusMessage = $"Poids du sachet vide invalide pour {row.WeightText} g{where} : « {row.TareText} ».";
                 return null;
             }
             if (entries.Any(e => e.MachineId == machine && e.WeightGrams == weight))
             {
-                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparait deux fois pour {(machine.Length == 0 ? "Toutes" : machine)}.";
+                NominalRatesStatusMessage = $"Le poids {row.WeightText} g apparaît deux fois pour {(machine.Length == 0 ? "Toutes" : machine)}.";
                 return null;
             }
             entries.Add(new NominalRateEntry { MachineId = machine, WeightGrams = weight, RatePerMinute = rate, TareGrams = tare });
@@ -258,13 +294,68 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (!NominalRateRowViewModel.TryParse(machine.TrsTargetText, out var target) || target > 100)
             {
-                MachinesStatusMessage = $"TRS cible invalide pour {ChoiceLabel(machine)} :\"{machine.TrsTargetText}\" (0 a 100 %).";
+                MachinesStatusMessage = $"TRS cible invalide pour {ChoiceLabel(machine)}  : « {machine.TrsTargetText} » (0 à 100 %).";
                 return null;
             }
             if (target > 0)
                 targets[machine.MachineId] = target;
         }
         return targets;
+    }
+
+    // TRS tolerance per machine, in points; blank = Couleurs default (not
+    // stored). Null (message shown) on a bad cell.
+    private Dictionary<string, double>? ParseTrsTolerances()
+    {
+        var tolerances = new Dictionary<string, double>();
+        foreach (var machine in Machines)
+        {
+            if (machine.TrsToleranceText.Trim().Length == 0)
+                continue;
+            if (!NominalRateRowViewModel.TryParse(machine.TrsToleranceText, out var tolerance) || tolerance > 100)
+            {
+                MachinesStatusMessage = $"Tolérance invalide pour {ChoiceLabel(machine)} : « {machine.TrsToleranceText} » (0 à 100 points, vide = règle de l'onglet Couleurs).";
+                return null;
+            }
+            tolerances[machine.MachineId] = tolerance;
+        }
+        return tolerances;
+    }
+
+    // Weight-deviation limits per machine (every box filled, orange beyond
+    // green on each side). Null (message shown) on a bad cell.
+    private Dictionary<string, WeightBand>? ParseWeightBands()
+    {
+        var bands = new Dictionary<string, WeightBand>();
+        foreach (var machine in Machines)
+        {
+            double? Read(string text, string what)
+            {
+                if (text.Trim().Length > 0 && NominalRateRowViewModel.TryParse(text, out var value) && value <= 100)
+                    return value;
+                MachinesStatusMessage = $"Écart de poids {what} invalide pour {ChoiceLabel(machine)} : « {text} » (0 à 100 %).";
+                return null;
+            }
+
+            if (Read(machine.WeightOverGoodText, "au-dessus (vert)") is not { } overGood
+                || Read(machine.WeightOverWarningText, "au-dessus (orange)") is not { } overWarning
+                || Read(machine.WeightUnderWarningText, "en dessous (vert)") is not { } underWarning
+                || Read(machine.WeightUnderBadText, "en dessous (orange)") is not { } underBad)
+                return null;
+            if (overWarning < overGood || underBad < underWarning)
+            {
+                MachinesStatusMessage = $"Écart de poids pour {ChoiceLabel(machine)} : la limite orange doit être supérieure ou égale à la limite verte, de chaque côté.";
+                return null;
+            }
+            bands[machine.MachineId] = new WeightBand
+            {
+                OverGood = overGood,
+                OverWarning = overWarning,
+                UnderWarning = underWarning,
+                UnderBad = underBad,
+            };
+        }
+        return bands;
     }
 
     [RelayCommand]
@@ -283,12 +374,12 @@ public partial class SettingsViewModel : ObservableObject
                 continue;
             if (!PlannedBreakRowViewModel.TryParseStart(row.StartText, out var start))
             {
-                BreaksStatusMessage = $"Heure de pause invalide : \"{row.StartText}\" (format 10:00 attendu).";
+                BreaksStatusMessage = $"Heure de pause invalide : « {row.StartText} » (format 10:00 attendu).";
                 return null;
             }
             if (!int.TryParse(row.DurationText.Trim(), out var minutes) || minutes <= 0 || minutes > 480)
             {
-                BreaksStatusMessage = $"Duree invalide pour la pause de {row.StartText} : \"{row.DurationText}\" (1 a 480 min).";
+                BreaksStatusMessage = $"Durée invalide pour la pause de {row.StartText} : « {row.DurationText} » (1 à 480 min).";
                 return null;
             }
             breaks.Add(new PlannedBreak { Start = start, DurationMinutes = minutes });
@@ -301,14 +392,94 @@ public partial class SettingsViewModel : ObservableObject
     {
         if (int.TryParse(StopThresholdText.Trim(), out var minutes) && minutes >= 1 && minutes <= 240)
             return minutes;
-        BreaksStatusMessage = $"Seuil d'arret invalide : \"{StopThresholdText}\" (1 a 240 min).";
+        BreaksStatusMessage = $"Seuil d'arrêt invalide : « {StopThresholdText} » (1 à 240 min).";
         return null;
     }
 
-    // Every table cell checked before saving; false = a message says which one.
+    // Every table cell checked before saving; false = a message says which
+    // one, on the tab brought to the front.
     public bool Validate()
-        => ParseNominalRates() != null && ParseTrsTargets() != null && ParsePlannedBreaks() != null && ParseStopThreshold() != null
-           && ParseSlides() != null;
+    {
+        SettingsTab? bad = ParseTrsTargets() == null || ParseTrsTolerances() == null || ParseWeightBands() == null ? SettingsTab.Machines
+            : ParseSlides() == null ? SettingsTab.Affichage
+            : ParseNominalRates() == null ? SettingsTab.Cadences
+            : ParsePlannedBreaks() == null || ParseStopThreshold() == null ? SettingsTab.Pauses
+            : ParseColors() == null ? SettingsTab.Couleurs
+            : null;
+        if (bad is { } tab)
+            SelectedTab = (int)tab;
+        return bad == null;
+    }
+
+    private void LoadColors(ColorThresholds c)
+    {
+        TrsWarningText = NominalRateRowViewModel.Format(c.TrsWarningPercentOfTarget);
+        AvailabilityGoodText = NominalRateRowViewModel.Format(c.AvailabilityGood);
+        AvailabilityWarningText = NominalRateRowViewModel.Format(c.AvailabilityWarning);
+        PerformanceGoodText = NominalRateRowViewModel.Format(c.PerformanceGood);
+        PerformanceWarningText = NominalRateRowViewModel.Format(c.PerformanceWarning);
+        PerformanceHighText = NominalRateRowViewModel.Format(c.PerformanceHigh);
+        QualityGoodText = NominalRateRowViewModel.Format(c.QualityGood);
+        QualityWarningText = NominalRateRowViewModel.Format(c.QualityWarning);
+        ColorsStatusMessage = "";
+    }
+
+    // Back to the bands the app shipped with (applied on Enregistrer).
+    [RelayCommand]
+    private void ResetColors() => LoadColors(new ColorThresholds());
+
+    // Couleurs tab; null (message shown) on a blank, bad or inconsistent value.
+    private ColorThresholds? ParseColors()
+    {
+        double? Read(string text, string what, double max)
+        {
+            if (text.Trim().Length > 0 && NominalRateRowViewModel.TryParse(text, out var value) && value <= max)
+                return value;
+            ColorsStatusMessage = $"{what} invalide : « {text} » (nombre de 0 à {max:0} attendu).";
+            return null;
+        }
+        bool Ordered(double low, double high, string message)
+        {
+            if (low <= high)
+                return true;
+            ColorsStatusMessage = message;
+            return false;
+        }
+
+        if (Read(TrsWarningText, "TRS : seuil orange", 100) is not { } trsWarning
+            || Read(AvailabilityGoodText, "Disponibilité : seuil vert", 100) is not { } availabilityGood
+            || Read(AvailabilityWarningText, "Disponibilité : seuil orange", 100) is not { } availabilityWarning
+            || Read(PerformanceGoodText, "Performance : seuil vert", 200) is not { } performanceGood
+            || Read(PerformanceWarningText, "Performance : seuil orange", 200) is not { } performanceWarning
+            || Read(PerformanceHighText, "Performance : seuil haut", 200) is not { } performanceHigh
+            || Read(QualityGoodText, "Conformité : seuil vert", 100) is not { } qualityGood
+            || Read(QualityWarningText, "Conformité : seuil orange", 100) is not { } qualityWarning)
+            return null;
+
+        if (!Ordered(availabilityWarning, availabilityGood, "Disponibilité : le seuil orange doit être inférieur ou égal au seuil vert.")
+            || !Ordered(performanceWarning, performanceGood, "Performance : le seuil orange doit être inférieur ou égal au seuil vert.")
+            || !Ordered(performanceGood, performanceHigh, "Performance : le seuil haut doit être supérieur ou égal au seuil vert.")
+            || !Ordered(qualityWarning, qualityGood, "Conformité : le seuil orange doit être inférieur ou égal au seuil vert."))
+            return null;
+
+        ColorsStatusMessage = "";
+        return new ColorThresholds
+        {
+            TrsWarningPercentOfTarget = trsWarning,
+            AvailabilityGood = availabilityGood,
+            AvailabilityWarning = availabilityWarning,
+            PerformanceGood = performanceGood,
+            PerformanceWarning = performanceWarning,
+            PerformanceHigh = performanceHigh,
+            QualityGood = qualityGood,
+            QualityWarning = qualityWarning,
+            // No longer edited here (Machines tab): the fallback stays as is.
+            WeightOverGood = _settings.Colors.WeightOverGood,
+            WeightOverWarning = _settings.Colors.WeightOverWarning,
+            WeightUnderWarning = _settings.Colors.WeightUnderWarning,
+            WeightUnderBad = _settings.Colors.WeightUnderBad,
+        };
+    }
 
     private async Task LoadMachinesAsync()
     {
@@ -318,6 +489,7 @@ public partial class SettingsViewModel : ObservableObject
             var machines = await _repository.GetMachinesAsync();
             foreach (var machine in machines)
             {
+                var weightBand = _settings.WeightBandFor(machine.MachineId);
                 var option = new MachineVisibilityOption
                 {
                     MachineId = machine.MachineId,
@@ -327,6 +499,13 @@ public partial class SettingsViewModel : ObservableObject
                     TrsTargetText = _settings.MachineTrsTargets.TryGetValue(machine.MachineId, out var target)
                         ? NominalRateRowViewModel.Format(target)
                         : "",
+                    TrsToleranceText = _settings.MachineTrsTolerances.TryGetValue(machine.MachineId, out var tolerance)
+                        ? NominalRateRowViewModel.Format(tolerance)
+                        : "",
+                    WeightOverGoodText = NominalRateRowViewModel.Format(weightBand.OverGood),
+                    WeightOverWarningText = NominalRateRowViewModel.Format(weightBand.OverWarning),
+                    WeightUnderWarningText = NominalRateRowViewModel.Format(weightBand.UnderWarning),
+                    WeightUnderBadText = NominalRateRowViewModel.Format(weightBand.UnderBad),
                 };
                 Machines.Add(option);
 
@@ -344,7 +523,7 @@ public partial class SettingsViewModel : ObservableObject
                         choice.Label = ChoiceLabel(option);
                 };
             }
-            MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvee." : "";
+            MachinesStatusMessage = machines.Count == 0 ? "Aucune machine trouvée." : "";
 
             // "Actualiser la liste" keeps the slide edits not saved yet.
             _activeMachines = machines.Where(m => m.IsActive).ToList();
@@ -357,7 +536,7 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
+            MachinesStatusMessage = $"Impossible de charger la liste des machines : {ex.Message}";
         }
     }
 
@@ -418,7 +597,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 if (!int.TryParse(row.DurationText.Trim(), out var value) || value < 1 || value > 3600)
                 {
-                    SlidesStatusMessage = $"Duree invalide pour \"{row.Label}\" : \"{row.DurationText}\" (1 a 3600 s, vide = duree par defaut).";
+                    SlidesStatusMessage = $"Durée invalide pour « {row.Label} » : « {row.DurationText} » (1 à 3600 s, vide = durée par défaut).";
                     return null;
                 }
                 seconds = value;
@@ -427,7 +606,7 @@ public partial class SettingsViewModel : ObservableObject
         }
         if (Slides.Count > 0 && !Slides.Any(r => r.IsEnabled))
         {
-            SlidesStatusMessage = "Au moins une diapositive doit etre affichee.";
+            SlidesStatusMessage = "Au moins une diapositive doit être affichée.";
             return null;
         }
         SlidesStatusMessage = "";
@@ -473,8 +652,8 @@ public partial class SettingsViewModel : ObservableObject
         TestResultSuccess = null;
 
         AppLogger.Log(Provider == DatabaseProvider.SqlServer
-            ? $"Cible : SQL Server {Host}/{Database} (auth {AuthMode})"
-            : "Cible : SQLite (dev)");
+            ? $"Cible : SQL Server {Host}/{Database} (auth {AuthMode})"
+            : "Cible : SQLite (dev)");
 
         var (success, message) = await ConnectionTester.TestAsync(BuildFactoryFromFields());
 
@@ -497,6 +676,12 @@ public partial class SettingsViewModel : ObservableObject
         _settings.HiddenMachineIds = Machines.Where(m => !m.IsVisible).Select(m => m.MachineId).ToList();
 
         _settings.SlideDurationSeconds = Math.Max(1, SlideDurationSeconds);
+        _settings.ShowStopAlerts = ShowStopAlerts;
+        if (ResetStopAlertPosition)
+        {
+            _settings.StopAlertOffsetX = 0;
+            _settings.StopAlertOffsetY = 0;
+        }
         _settings.DataRefreshIntervalMinutes = Math.Max(1, DataRefreshIntervalMinutes);
 
         _settings.TeamRotation.TeamNames = new[] { Team1Name, Team2Name, Team3Name, Team4Name };
@@ -519,16 +704,35 @@ public partial class SettingsViewModel : ObservableObject
         _settings.NominalRates = ParseNominalRates() ?? _settings.NominalRates;
         _settings.PlannedBreaks = ParsePlannedBreaks() ?? _settings.PlannedBreaks;
         _settings.StopThresholdMinutes = ParseStopThreshold() ?? _settings.StopThresholdMinutes;
+        _settings.Colors = ParseColors() ?? _settings.Colors;
         // Machine list not loaded (DB down): keep the targets and slides already saved.
         if (Machines.Count > 0)
         {
             _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;
+            _settings.MachineTrsTolerances = ParseTrsTolerances() ?? _settings.MachineTrsTolerances;
+            // Machines not listed this time (DB list changed) keep their limits.
+            if (ParseWeightBands() is { } weightBands)
+            {
+                var merged = new Dictionary<string, WeightBand>(_settings.MachineWeightBands);
+                foreach (var (id, band) in weightBands)
+                    merged[id] = band;
+                _settings.MachineWeightBands = merged;
+            }
             _settings.Slides = ParseSlides() ?? _settings.Slides;
         }
 
-        _settingsService.Save(_settings);
+        // The shared part goes to the base chosen above (a new PC's first
+        // save only sets its connection: nothing shared is sent).
         _activeFactory.SwitchTo(BuildFactoryFromFields());
-        AppLogger.Log("Parametres de connexion enregistres et appliques.");
+        _sharedSettings.Reset();
+        var shared = await _sharedSettings.PushAsync(_sharedAtOpen);
+        SharedSettingsMessage = shared.Message;
+        // Saved: a second Enregistrer compares with what is now in the base.
+        if (shared.Outcome == SharedSaveOutcome.Saved)
+            _sharedAtOpen = SharedSettings.Serialize(_settings);
+
+        _settingsService.Save(_settings);
+        AppLogger.Log("Paramètres de connexion enregistrés et appliqués.");
 
         foreach (var machine in Machines)
         {
@@ -541,7 +745,7 @@ public partial class SettingsViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    MachinesStatusMessage = $"Impossible de renommer {machine.OriginalMachineName} : {ex.Message}";
+                    MachinesStatusMessage = $"Impossible de renommer {machine.OriginalMachineName} : {ex.Message}";
                 }
             }
         }

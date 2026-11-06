@@ -41,7 +41,7 @@
                                         <Run Text="Production "/><Run Text="{Binding ProductionText, Mode=OneWay}" FontWeight="Bold" FontSize="24" Foreground="{DynamicResource PrimaryTextBrush}"/>
                                     </TextBlock>
                                     <TextBlock Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="22,0,0,0">
-                                        <Run Text="Ecart "/><Run Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
+                                        <Run Text="Écart "/><Run Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
                                                                  FontWeight="Bold" FontSize="24" Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                                         <Run Text="{Binding GiveawayText, StringFormat=({0}), Mode=OneWay, ConverterCulture=fr-FR}" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
                                     </TextBlock>
@@ -63,7 +63,7 @@
             <views:ChartCard Grid.Column="0" Chart="{Binding TrsChart}" ShowLegend="True"
                              Title="{Binding GrainLabel, StringFormat=TRS par ligne {0}}"/>
             <views:ChartCard Grid.Column="1" Chart="{Binding DeviationChart}" ShowLegend="True"
-                             Title="{Binding GrainLabel, StringFormat=Ecart de poids (% de la cible) {0}}"/>
+                             Title="{Binding GrainLabel, StringFormat=Écart de poids (% de la cible) {0}}"/>
         </Grid>
     </Grid>
 </UserControl>

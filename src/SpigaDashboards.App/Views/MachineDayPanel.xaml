@@ -59,24 +59,24 @@
                             <TextBlock Text="{Binding ProductionText}" Style="{StaticResource CardValue}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="3" Margin="0,0,24,0">
-                            <TextBlock Text="Conformite" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Conformité" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="4" Margin="0,0,24,0">
-                            <TextBlock Text="Vit. moy / max" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Vit. moy. / max" Style="{StaticResource CardLabel}"/>
                             <TextBlock Style="{StaticResource CardValue}">
                                 <Run Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
                                 <Run Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=/ {0:0.0}, TargetNullValue='/ —', Mode=OneWay, ConverterCulture=fr-FR}" FontSize="18" Foreground="{DynamicResource SecondaryTextBrush}"/>
                             </TextBlock>
                         </StackPanel>
                         <StackPanel Grid.Column="5" Margin="0,0,24,0">
-                            <TextBlock Text="Disponibilite" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Disponibilité" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="6">
-                            <TextBlock Text="Ecart de poids" Style="{StaticResource CardLabel}"/>
+                            <TextBlock Text="Écart de poids" Style="{StaticResource CardLabel}"/>
                             <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource CardValue}"
                                        Foreground="{Binding WeightDeviationSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </StackPanel>
@@ -119,8 +119,54 @@
         </StackPanel>
 
 
+        <!-- Declared panne / planned stop / maintenance going on now: the whole
+             body goes to it until the line produces again (StopDetector:
+             2 min in a row), then the poste figures come back on their own. -->
+        <Border Grid.Row="1" Grid.RowSpan="2" Margin="10,8,10,4" CornerRadius="16" BorderThickness="4"
+                Background="{DynamicResource TileBackgroundBrush}" DataContext="{Binding DeclaredStop}"
+                Visibility="{Binding Converter={StaticResource NullToVisibility}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="BorderBrush" Value="{DynamicResource WarningBrush}"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="Panne">
+                            <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Kind}" Value="Maintenance">
+                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40,20">
+                <TextBlock Text="{Binding Title}" FontSize="76" FontWeight="Black" HorizontalAlignment="Center"
+                           Foreground="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=Border}}"/>
+                <TextBlock Text="{Binding CauseText}" FontSize="34" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                <TextBlock FontSize="28" HorizontalAlignment="Center" Margin="0,26,0,0" Foreground="{DynamicResource SecondaryTextBrush}">
+                    <Run Text="Ligne à l'arrêt "/><Run Text="{Binding SinceText, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding DurationText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                </TextBlock>
+                <TextBlock Text="{Binding ExpectedEndText}" FontSize="28" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           Margin="0,8,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsOverdue}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Text="Les chiffres du poste reviennent dès que la ligne produit à nouveau."
+                           FontSize="17" HorizontalAlignment="Center" Margin="0,30,0,0" Foreground="{DynamicResource SubtleTextBrush}"/>
+            </StackPanel>
+        </Border>
+
         <!-- Main poste / team -->
-        <Grid Grid.Row="1" DataContext="{Binding Main}">
+        <Grid Grid.Row="1" DataContext="{Binding Main}"
+              Visibility="{Binding DataContext.DeclaredStop, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseNullToVisibility}}">
             <Grid.Style>
                 <Style TargetType="Grid">
                     <Style.Triggers>
@@ -149,9 +195,9 @@
                                        Foreground="{Binding TrsSeverity, Converter={StaticResource SeverityBrush}}"/>
                         </Viewbox>
                         <TextBlock Style="{StaticResource KpiSubtextCompact}">
-                            <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}"/>
+                            <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
+                            <Run Text=" · P"/> <Run Text="{Binding Kpis.PerformancePercent, StringFormat={}{0:0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{Binding Kpis.PerformancePercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Performance}"/>
+                            <Run Text=" · Q"/> <Run Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, Mode=OneWay, ConverterCulture=fr-FR, TargetNullValue=&#x2014;}" Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
@@ -161,7 +207,7 @@
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <TextBlock Text="{Binding Kpis.SpeedBagsPerMinute, StringFormat={}{0:0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"/>
                         </Viewbox>
-                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
+                        <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
@@ -172,7 +218,7 @@
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Taux conformite" Style="{StaticResource KpiLabelCompact}"/>
+                        <TextBlock Text="Taux de conformité" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <TextBlock Text="{Binding Kpis.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
                                        Foreground="{Binding Kpis.QualityPercent, Converter={StaticResource PercentBandBrush}, ConverterParameter=Quality}"/>
@@ -185,7 +231,7 @@
                 </Border>
                 <Border Style="{StaticResource KpiTileCompact}">
                     <StackPanel>
-                        <TextBlock Text="Ecart de poids" Style="{StaticResource KpiLabelCompact}"/>
+                        <TextBlock Text="Écart de poids" Style="{StaticResource KpiLabelCompact}"/>
                         <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                             <!-- No weight data = "—" in grey, never a green 0.0 g. -->
                             <TextBlock Text="{Binding Kpis.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource KpiValueCompact}"
@@ -205,7 +251,7 @@
                     <ColumnDefinition Width="1.3*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <views:ChartCard Grid.Column="0" Title="Marche / arret par heure" Chart="{Binding OnOffChart}"/>
+                <views:ChartCard Grid.Column="0" Title="Marche / arrêt par heure" Chart="{Binding OnOffChart}"/>
                 <views:ChartCard Grid.Column="1" Title="Vitesse moy. / max par heure (sacs/min)" Chart="{Binding SpeedChart}" ShowLegend="True"/>
                 <views:ChartCard Grid.Column="2" Title="Poids moyen net vs cible" Chart="{Binding WeightChart}"/>
             </Grid>
@@ -219,7 +265,8 @@
         </Grid>
 
         <!-- Earlier postes of the same shift day (nothing before the first poste of the day) -->
-        <StackPanel Grid.Row="2" Margin="0,4,0,0">
+        <Border Grid.Row="2" Visibility="{Binding DeclaredStop, Converter={StaticResource InverseNullToVisibility}}">
+        <StackPanel Margin="0,4,0,0">
             <StackPanel.Style>
                 <Style TargetType="StackPanel">
                     <Style.Triggers>
@@ -229,7 +276,7 @@
                     </Style.Triggers>
                 </Style>
             </StackPanel.Style>
-            <TextBlock Text="Postes precedents (meme journee)" Margin="10,0,10,0" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
+            <TextBlock Text="Postes précédents (même journée)" Margin="10,0,10,0" FontSize="14" Foreground="{DynamicResource SubtleTextBrush}"/>
             <ItemsControl ItemsSource="{Binding PreviousShifts}" ItemTemplate="{StaticResource PreviousShiftTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -238,5 +285,6 @@
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
         </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

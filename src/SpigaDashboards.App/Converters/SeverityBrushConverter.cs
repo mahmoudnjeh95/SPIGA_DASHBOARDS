@@ -13,8 +13,11 @@ namespace SpigaDashboards.App.Converters;
 public class SeverityBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => BrushFor(value as KpiSeverity? ?? KpiSeverity.Unknown);
+
+    public static Brush BrushFor(KpiSeverity severity)
     {
-        var key = value switch
+        var key = severity switch
         {
             KpiSeverity.Good => "SuccessBrush",
             KpiSeverity.Warning => "WarningBrush",

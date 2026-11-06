@@ -85,3 +85,16 @@ public class ProductionBucket
 
 // Bags weighed for one production in one bucket: WeightSum = average net weight x Bags.
 public sealed record WeightPart(string ProductionId, double Target, long Bags, double WeightSum);
+
+// One Stiavelli lot (lotto) with its own time span: drawn over time on the
+// weight chart instead of being counted in the hour it ends in. Average is
+// net of the empty bag (see ProductionRepository.GetLotSpansAsync).
+public sealed class LotSpan
+{
+    public string ProductionId { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public long Bags { get; set; }
+    public double Average { get; set; }
+    public double Target { get; set; }
+}

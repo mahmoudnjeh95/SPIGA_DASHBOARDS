@@ -414,6 +414,39 @@ rz AS (
     public Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
         => _planning.FindQualificationsAsync(from, to);
 
+    // Maintenance slots and planned stops running now (Planification), whole;
+    // none if they can't be read.
+    public async Task<List<MaintenanceEvent>> GetActiveSlotsAsync()
+    {
+        try
+        {
+            return await _planning.FindActiveSlotsAsync(DateTime.Now);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Créneaux planifiés (Planification) illisibles : " + ex.Message);
+            return new();
+        }
+    }
+
+    // Lines in a maintenance slot or a planned stop right now (Planification),
+    // for the run-state photos; a planned stop wins over a maintenance. None
+    // if they can't be read, so a slide never fails on them.
+    public async Task<Dictionary<string, SlotKind>> GetActiveSlotKindsAsync()
+    {
+        try
+        {
+            return (await _planning.FindActiveSlotsAsync(DateTime.Now))
+                .GroupBy(e => e.MachineId)
+                .ToDictionary(g => g.Key, g => g.Max(e => e.Kind));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Créneaux planifiés (Planification) illisibles : " + ex.Message);
+            return new();
+        }
+    }
+
     // Planned stops of the Planification window over the read range; none
     // (and a log line) if they can't be read, so the KPIs never fail on them.
     private async Task<List<(string MachineId, DateTime Start, DateTime End)>> LoadPlannedStopsAsync(DateTime from, DateTime to)
@@ -424,7 +457,7 @@ rz AS (
         }
         catch (Exception ex)
         {
-            AppLogger.Log("Arrets planifies (Planification) illisibles, non deduits du TRS : " + ex.Message);
+            AppLogger.Log("Arrêts planifiés (Planification) illisibles, non déduits du TRS : " + ex.Message);
             return new();
         }
     }
@@ -494,6 +527,31 @@ HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
         var segments = (await connection.QueryAsync<LineSegment>(sql, parameters)).ToList();
         foreach (var s in segments)
             s.MachineId = s.MachineId.TrimEnd();
+
+        // A line StatsViewer no longer reaches (switched off for a panne:
+        // PL01 since 27/10) writes no snapshot, so the query has nothing past
+        // its last one: no data from there to the end of the range (or now),
+        // so the stop shows while it lasts, not only once the line is back.
+        // A line that never wrote a snapshot since DataStartDate gets nothing.
+        var until = to < DateTime.Now ? to : DateTime.Now;
+        var lastSnapshots = (await connection.QueryAsync<(string MachineId, DateTime? Last)>($@"
+SELECT m.MachineId,
+       (SELECT MAX(p.tempo_fine) FROM produzione p
+        WHERE p.numero_linea = m.MachineId AND p.tempo_fine >= @dataStart AND p.tempo_fine < @until) AS Last
+FROM Machines m WHERE m.MachineId IN @machineIds",
+            new { machineIds = machineIds.ToList(), dataStart = _settings.DataStartDate, until }))
+            .ToList();
+        foreach (var (machineId, last) in lastSnapshots)
+        {
+            if (last is not { } lastSnapshot)
+                continue;
+            var id = machineId.TrimEnd();
+            var lastEnd = segments.Where(s => s.MachineId == id).Select(s => s.EndTime).DefaultIfEmpty(lastSnapshot).Max();
+            if (lastEnd < lastSnapshot)
+                lastEnd = lastSnapshot;
+            if ((until - lastEnd).TotalSeconds > NoDataSeconds && until > from)
+                segments.Add(new LineSegment { MachineId = id, State = LineState.NoData, StartTime = lastEnd, EndTime = until });
+        }
         return segments.OrderBy(s => s.MachineId).ThenBy(s => s.StartTime).ToList();
     }
 
@@ -755,6 +813,52 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
         return buckets;
     }
 
+    // Stiavelli lots of one line overlapping [from, to), each with its own
+    // time span (ora_inizio -> ora_fine), for the weight-over-time chart.
+    // Net averages (empty bag deducted, as LoadWeightPartsAsync). Target =
+    // peso_netto_impostato of the production's first snapshot at or after
+    // the lot end, else its last one before (lot closed after the latest
+    // snapshot). null = no lotto table (SQLite dev DB): caller falls back.
+    public async Task<List<LotSpan>?> GetLotSpansAsync(string machineId, DateTime from, DateTime to)
+    {
+        var d = Dialect.For(_connectionFactory.Provider);
+        using var connection = _connectionFactory.CreateConnection();
+        if (!await HasLotTableAsync(connection, d))
+            return null;
+
+        // The dev SQLite lotto has no ora_inizio (Stiavelli's has): hourly chart.
+        var hasStart = await connection.ExecuteScalarAsync<int>(_connectionFactory.Provider == DatabaseProvider.SqlServer
+            ? "SELECT CASE WHEN COL_LENGTH('lotto', 'ora_inizio') IS NULL THEN 0 ELSE 1 END"
+            : "SELECT COUNT(*) FROM pragma_table_info('lotto') WHERE name = 'ora_inizio'");
+        if (hasStart == 0)
+            return null;
+
+        const string target = "CAST(p.peso_netto_impostato AS {0})";
+        var rows = await connection.QueryAsync<LotSpan>($@"
+SELECT RTRIM(l.ID_produzione) AS ProductionId, l.ora_inizio AS StartTime, l.ora_fine AS EndTime,
+       CAST(l.dimensione AS BIGINT) AS Bags, CAST(l.media_effettiva AS {d.Float}) AS Average,
+       COALESCE(
+           (SELECT {d.Top(1)} {string.Format(target, d.Float)} FROM produzione p
+            WHERE p.numero_linea = @machineId AND p.ID_produzione = l.ID_produzione AND p.tempo_fine >= l.ora_fine
+            ORDER BY p.tempo_fine {d.Limit(1)}),
+           (SELECT {d.Top(1)} {string.Format(target, d.Float)} FROM produzione p
+            WHERE p.numero_linea = @machineId AND p.ID_produzione = l.ID_produzione AND p.tempo_fine < l.ora_fine
+            ORDER BY p.tempo_fine DESC {d.Limit(1)}), 0) AS Target
+FROM lotto l
+WHERE l.ora_fine > @from AND l.ora_fine < @readTo AND l.ora_inizio < @to
+  AND SUBSTRING(l.ID_produzione, 1, 4) = @machineId
+  AND l.dimensione > 0 AND l.media_effettiva > 0 AND l.ora_inizio IS NOT NULL
+ORDER BY l.ora_fine",
+            // A lot ends within a day of its start (longest seen: 21 h):
+            // bounds ora_fine for IX_lotto_ora_fine.
+            new { machineId = Line(machineId), from, to, readTo = to.AddDays(1) });
+
+        var lots = rows.Where(l => l.Target > 0 && l.EndTime > l.StartTime).ToList();
+        foreach (var lot in lots)
+            lot.Average -= _settings.FindTare(machineId, lot.Target);
+        return lots;
+    }
+
     private sealed class LotRow
     {
         public string MachineId { get; set; } = "";
@@ -869,7 +973,7 @@ GROUP BY p.ID_produzione", parameters))
             return known;
         var exists = await connection.ExecuteScalarAsync<int>(d.LotTableExists) > 0;
         if (!exists)
-            AppLogger.Log("Table lotto introuvable : poids calcules depuis media_totale (filtre).");
+            AppLogger.Log("Table lotto introuvable : poids calculés depuis media_totale (filtre).");
         _hasLotTable = exists;
         return exists;
     }

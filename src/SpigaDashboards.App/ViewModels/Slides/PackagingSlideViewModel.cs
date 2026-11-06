@@ -56,7 +56,7 @@ public class PackagingSlideViewModel
 
     public ChartParts TeamChart { get; init; } = ChartParts.Empty();
     public ChartParts MachineChart { get; init; } = ChartParts.Empty();
-    public string TeamChartTitle => IsTrs ? "TRS par equipe" : "Production par equipe";
+    public string TeamChartTitle => IsTrs ? "TRS par équipe" : "Production par équipe";
     public string MachineChartTitle => IsTrs ? "TRS par machine" : "Production par machine";
 
     // Ranges over a week are kept CacheDuration per group, as on the period slides.
@@ -104,13 +104,15 @@ public class PackagingSlideViewModel
         if (!teams.Contains(TeamScheduleService.NoTeam) && byTeam[TeamScheduleService.NoTeam].Any(l => l.TotalBags > 0))
             teams.Add(TeamScheduleService.NoTeam);
 
-        var targets = machines.Select(m => settings.TrsTarget(m.MachineId)).ToList();
-        var groupTarget = targets.Count > 0 ? targets.Average() : AppSettings.DefaultTrsTarget;
+        var bands = machines.Select(m => settings.TrsBandFor(m.MachineId)).ToList();
+        var targets = bands.Select(b => b.Target).ToList();
+        var groupBand = TrsBand.Average(bands);
+        var groupTarget = groupBand.Target;
 
         var rows = machines.Select(m =>
         {
             var machineLots = lots.Where(l => l.MachineId == m.MachineId).ToList();
-            var target = settings.TrsTarget(m.MachineId);
+            var target = settings.TrsBandFor(m.MachineId);
             return new PackagingRow
             {
                 Label = m.MachineName,
@@ -118,22 +120,23 @@ public class PackagingSlideViewModel
                 Total = Cell(machineLots, target),
             };
         }).ToList();
-        var teamTotals = teams.Select(t => Cell(byTeam[t], groupTarget)).ToList();
-        var total = Cell(lots, groupTarget);
+        var teamTotals = teams.Select(t => Cell(byTeam[t], groupBand)).ToList();
+        var total = Cell(lots, groupBand);
         rows.Add(new PackagingRow { Label = "Total", IsTotal = true, Cells = teamTotals, Total = total });
         var machineTotals = rows.Where(r => !r.IsTotal).Select(r => r.Total).ToList();
 
         // Target line only when every machine shares the same target.
         double? targetLine = targets.Distinct().Count() == 1 ? targets[0] : null;
 
-        var machineLabels = cumul ? machines.Select(m => m.MachineName).ToList() : ids;
+        // Always the names from Parametres (never the line codes CC03...).
+        var machineLabels = machines.Select(m => m.MachineName).ToList();
 
         return new PackagingSlideViewModel
         {
             Title = title,
             IsTrs = trs,
             IsCumul = cumul,
-            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", ids),
+            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", machineLabels),
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             TotalProductionText = KpiCalculator.FormatMass(total.ProductionKg),
@@ -153,16 +156,16 @@ public class PackagingSlideViewModel
     // Same figures as everywhere else: production = bags x net average weight
     // (or x target when the weight is unknown) summed over the weights run,
     // TRS from KpiCalculator.Summarize over the cell's buckets.
-    private static PackagingCell Cell(IEnumerable<ProductionBucket> lots, double trsTarget)
+    private static PackagingCell Cell(IEnumerable<ProductionBucket> lots, TrsBand trsBand)
     {
         var list = lots.ToList();
-        var kpis = KpiCalculator.Summarize(list, KpiCalculator.AvailabilityPercent(list), trsTarget);
+        var kpis = KpiCalculator.Summarize(list, KpiCalculator.AvailabilityPercent(list), trsBand);
         return new PackagingCell
         {
             ProductionKg = kpis.ProductionKg,
             TotalBags = list.Sum(l => l.TotalBags),
             Kpis = kpis,
-            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
         };
     }
 

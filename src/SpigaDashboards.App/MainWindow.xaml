@@ -129,7 +129,7 @@
                 <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="12,2,4,2" Margin="12,0,0,0"
                         Visibility="{Binding IsConnectionHealthy, Converter={StaticResource InverseBoolToVisibility}}">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Base deconnectee" FontSize="14" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="Base déconnectée" FontSize="14" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
                         <Button x:Name="TopBarReconnectButton" Content="Reconnecter" Padding="10,3" Margin="10,0,0,0"
                                 Background="White" Foreground="#1B1F26" BorderThickness="0"
                                 Command="{Binding ReconnectCommand}"
@@ -139,13 +139,13 @@
             </StackPanel>
 
             <!-- Opens the dashboard-only window to drag onto the production TV. -->
-            <Button x:Name="TvScreenButton" Grid.Column="1" Content="Ecran TV" Margin="12,0,0,0" Style="{StaticResource AccentBarButton}"
-                    ToolTip="Ouvrir le tableau de bord seul, a glisser sur l'ecran TV (double-clic : plein ecran)"
+            <Button x:Name="TvScreenButton" Grid.Column="1" Content="Écran TV" Margin="12,0,0,0" Style="{StaticResource AccentBarButton}"
+                    ToolTip="Ouvrir le tableau de bord seul, à glisser sur l'écran TV (double-clic : plein écran)"
                     Click="TvScreenButton_Click"/>
 
             <!-- Manual slide navigation + auto-rotation play/pause -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0">
-                <Button Content="Precedent" Padding="12,6" Command="{Binding PreviousSlideCommand}"
+                <Button Content="Précédent" Padding="12,6" Command="{Binding PreviousSlideCommand}"
                         Style="{StaticResource BarButton}"/>
                 <Button Padding="12,6" Margin="6,0,0,0" Command="{Binding ToggleRotationCommand}">
                     <Button.Style>
@@ -182,7 +182,7 @@
                     Style="{StaticResource BarButton}"
                     Click="PlanningButton_Click"/>
 
-            <Button Grid.Column="7" Content="Parametres" Margin="12,0,0,0" Padding="12,6"
+            <Button Grid.Column="7" Content="Paramètres" Margin="12,0,0,0" Padding="12,6"
                     Style="{StaticResource BarButton}"
                     Click="SettingsButton_Click"/>
 
@@ -198,17 +198,17 @@
                 BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="1">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="&#x2715; Effacer" Padding="10,5" Margin="8,0,0,0" VerticalAlignment="Bottom" BorderThickness="0"
-                        ToolTip="Revenir a Aujourd'hui, toutes machines, sans filtre"
+                        ToolTip="Revenir à aujourd'hui, toutes les machines, sans filtre"
                         Background="{DynamicResource DangerBrush}" Foreground="White"
                         Command="{Binding ResetFiltersCommand}"
                         Visibility="{Binding HasActiveFilter, Converter={StaticResource BoolToVisibility}}"/>
                 <StackPanel Orientation="Horizontal">
                     <StackPanel>
-                        <TextBlock Text="PERIODE" Style="{StaticResource BarCaption}"/>
+                        <TextBlock Text="PÉRIODE" Style="{StaticResource BarCaption}"/>
                         <StackPanel Orientation="Horizontal">
                             <RadioButton GroupName="Period" Content="Aujourd'hui" Style="{StaticResource Seg}"
                                          IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Day}"/>
-                            <RadioButton GroupName="Period" Content="Poste prec." Style="{StaticResource Seg}" ToolTip="Poste precedent"
+                            <RadioButton GroupName="Period" Content="Poste préc." Style="{StaticResource Seg}" ToolTip="Poste précédent"
                                          IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=PreviousShift}"/>
                             <RadioButton GroupName="Period" Content="Hier" Style="{StaticResource Seg}"
                                          IsChecked="{Binding SelectedPeriod, Converter={StaticResource EnumToBool}, ConverterParameter=Yesterday}"/>
@@ -227,7 +227,7 @@
                                Placement="Bottom" StaysOpen="True" AllowsTransparency="True">
                             <Border Style="{StaticResource DropPanel}">
                                 <StackPanel>
-                                    <TextBlock Text="Choisir la periode" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choisir la période" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PrimaryTextBrush}" Margin="0,0,0,8"/>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Du" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                         <DatePicker Width="150" SelectedDate="{Binding CustomFrom}"/>
@@ -249,9 +249,9 @@
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter=Tous}"/>
                             <RadioButton GroupName="Sector" Content="Couscous" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter=Couscous}"/>
-                            <RadioButton GroupName="Sector" Content="Pate courte" Style="{StaticResource Seg}"
+                            <RadioButton GroupName="Sector" Content="Pâte courte" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate courte'}"/>
-                            <RadioButton GroupName="Sector" Content="Pate longue" Style="{StaticResource Seg}"
+                            <RadioButton GroupName="Sector" Content="Pâte longue" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate longue'}"/>
                         </StackPanel>
                     </StackPanel>
@@ -303,7 +303,7 @@
 
                     <Rectangle Style="{StaticResource BarSeparator}"/>
                     <StackPanel>
-                        <TextBlock Text="EQUIPE" Style="{StaticResource BarCaption}"/>
+                        <TextBlock Text="ÉQUIPE" Style="{StaticResource BarCaption}"/>
                         <ComboBox Style="{StaticResource DarkComboBox}" Width="110" Padding="8,4" FontSize="14"
                                   ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding FilterTeam}"/>
                     </StackPanel>
@@ -330,6 +330,9 @@
                     views:SlideMotion.Paused="{Binding IsRotationPaused}"
                     views:SlideMotion.Timer="{Binding RotationCycle}"/>
         </Border>
+
+        <!-- Stop pop-up: lines stopped with no cause yet (MainViewModel.StopAlerts). -->
+        <views:StopAlertPopup x:Name="StopAlert" Grid.Row="2"/>
 
         <!-- Loading motion over the slide, when a load lasts -->
         <views:PastaLoader Grid.Row="2" IsActive="{Binding ShowLoading}" Background="{DynamicResource LoadingVeilBrush}"/>
@@ -364,7 +367,7 @@
         <Border Grid.Row="2" Background="{DynamicResource DisconnectedOverlayBrush}"
                 Visibility="{Binding IsConnectionHealthy, Converter={StaticResource InverseBoolToVisibility}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="700">
-                <TextBlock Text="Connexion a la base de donnees perdue" FontSize="26" FontWeight="Bold"
+                <TextBlock Text="Connexion à la base de données perdue" FontSize="26" FontWeight="Bold"
                            Foreground="{DynamicResource DangerBrush}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                 <TextBlock Text="{Binding ConnectionErrorMessage}" FontSize="14" Foreground="{DynamicResource SecondaryTextBrush}"
                            TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,10"/>
@@ -374,7 +377,7 @@
                     <Button Content="Reconnecter" Padding="18,10" Margin="0,0,10,0" Style="{StaticResource AccentBarButton}"
                             Command="{Binding ReconnectCommand}"
                             IsEnabled="{Binding IsReconnecting, Converter={StaticResource InverseBool}}"/>
-                    <Button Content="Parametres" Padding="18,10"
+                    <Button Content="Paramètres" Padding="18,10"
                             Style="{StaticResource BarButton}"
                             Click="SettingsButton_Click"/>
                 </StackPanel>

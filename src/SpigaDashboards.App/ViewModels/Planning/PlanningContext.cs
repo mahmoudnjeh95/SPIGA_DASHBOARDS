@@ -15,14 +15,17 @@ public sealed class PlanningContext
     public ProductionRepository Production { get; }
     public PlanningRepository Planning { get; }
     public AppSettings Settings { get; }
+    public SettingsService SettingsService { get; }
     public TeamScheduleService Teams { get; }
     public List<Machine> Machines { get; private set; } = new();
 
-    public PlanningContext(ProductionRepository production, PlanningRepository planning, AppSettings settings, TeamScheduleService teams)
+    public PlanningContext(ProductionRepository production, PlanningRepository planning, AppSettings settings,
+        SettingsService settingsService, TeamScheduleService teams)
     {
         Production = production;
         Planning = planning;
         Settings = settings;
+        SettingsService = settingsService;
         Teams = teams;
     }
 

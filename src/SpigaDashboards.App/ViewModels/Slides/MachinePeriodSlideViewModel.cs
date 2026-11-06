@@ -26,7 +26,13 @@ public class MachinePeriodSlideViewModel
     public string FilterLabel { get; init; } = "";
     public bool IsConnected { get; init; }
     public bool BeltRunning { get; init; }
-    public string RunStateLabel => BeltRunning ? "En marche" : "A l'arret";
+    public SlotKind? PlannedSlot { get; init; }
+    public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
+    public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
+    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    // The line's stop in progress, if any (header banner, whatever the period).
+    public OngoingStop? OngoingStop { get; init; }
+    public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
     public KpiSummary Kpis { get; init; } = new();
@@ -35,7 +41,7 @@ public class MachinePeriodSlideViewModel
     public KpiSeverity WeightDeviationSeverity { get; init; }
     public string AvgWeightText => KpiCalculator.FormatAverages(Kpis.Weights);
     public string TargetWeightsText => Kpis.Weights.Count == 0
-        ? "Pas de donnees de poids"
+        ? "Pas de données de poids"
         : "Cible " + string.Join(" · ", Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"));
     public IReadOnlyList<TeamPeriodRow> Teams { get; init; } = Array.Empty<TeamPeriodRow>();
 
@@ -68,9 +74,11 @@ public class MachinePeriodSlideViewModel
         var status = await repository.GetLatestStatusAsync(machine.MachineId);
         var allLots = await LoadLotsAsync(repository, machine.MachineId, from, to, now);
         var lots = filter.Apply(allLots, teamSchedule);
-        var trsTarget = settings.TrsTarget(machine.MachineId);
+        var trsBand = settings.TrsBandFor(machine.MachineId);
+        var trsTarget = trsBand.Target;
+        var weightBand = settings.WeightBandFor(machine.MachineId);
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsTarget);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand, weightBand);
 
         // Teams, best TRS first; teams that did not produce go last.
         var teams = lots
@@ -78,13 +86,13 @@ public class MachinePeriodSlideViewModel
             .Select(g =>
             {
                 var teamLots = g.ToList();
-                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsTarget);
+                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsBand, weightBand);
                 return new TeamPeriodRow
                 {
                     TeamName = g.Key,
                     Kpis = k,
-                    TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, trsTarget),
-                    WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
+                    TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, trsBand),
+                    WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent, weightBand),
                 };
             })
             .OrderByDescending(t => t.Kpis.TrsPercent ?? -1)
@@ -96,18 +104,20 @@ public class MachinePeriodSlideViewModel
 
         return new MachinePeriodSlideViewModel
         {
-            SectorLabel = sector,
+            SectorLabel = Machine.SectorLabel(sector),
             MachineName = machine.MachineName,
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             IsConnected = status?.IsConnected ?? false,
             BeltRunning = status?.BeltRunning ?? false,
+            PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
+            OngoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId),
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = MachineDaySlideViewModel.FormatProduction(status?.CurrentProduction, allLots),
             Kpis = kpis,
             TrsTarget = trsTarget,
-            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
-            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
+            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent, weightBand),
             Teams = teams,
             GrainLabel = "par " + PeriodRanges.GrainName(grain),
             TrsChart = DashboardCharts.Trs(steps, trsTarget),

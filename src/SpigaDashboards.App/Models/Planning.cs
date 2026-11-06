@@ -23,15 +23,15 @@ public static class StopCauses
         new("MECA", "Panne mécanique", CauseFamily.Panne),
         new("ELEC", "Panne électrique", CauseFamily.Panne),
         new("PNEU", "Panne pneumatique", CauseFamily.Panne),
-        new("AUTO", "Automate / capteur", CauseFamily.Panne),
         new("FORMAT", "Changement de format", CauseFamily.Process),
         new("REGLAGE", "Réglage", CauseFamily.Process),
-        new("MATIERE", "Manque matière", CauseFamily.Process),
+        new("MATIERE", "Manque produit", CauseFamily.Process),
         new("EMBALL", "Manque film / carton", CauseFamily.Process),
         new("QUALITE", "Contrôle qualité", CauseFamily.Process),
         new("NETT", "Nettoyage", CauseFamily.Organisation),
         new("OPERATEUR", "Absence opérateur", CauseFamily.Organisation),
         new("PAUSE", "Pause / réunion", CauseFamily.Organisation),
+        new("MICRO", "Micro-arrêt", CauseFamily.Organisation),
         new("NODATA", "Pas de données", CauseFamily.Organisation),
         new("PREV", "Maintenance préventive", CauseFamily.Planifie),
         new("NOPLAN", "Pas de production prévue", CauseFamily.Planifie),
@@ -49,6 +49,12 @@ public static class StopCauses
         CauseFamily.Process => "Process",
         CauseFamily.Organisation => "Organisation",
         _ => "Planifié",
+    };
+
+    // Suggested reasons of a planned stop (free text).
+    public static readonly IReadOnlyList<string> PlannedStopReasons = new[]
+    {
+        "Pas de commande", "Jour férié", "Nettoyage planifié", "Changement de format", "Manque produit",
     };
 
     // Suggested components (the list also learns what was typed before).
@@ -76,6 +82,9 @@ public class StopQualification
     public string? Comment { get; set; }
     public bool IsManual { get; set; }
     public DateTime CreatedAt { get; set; }
+    // Expected return of a panne / planned stop, given when qualifying it
+    // (shown on the TV; a planned stop stays out of the TRS until then).
+    public DateTime? ExpectedEnd { get; set; }
 
     public double Minutes => Math.Max(0, (StopEnd - StopStart).TotalMinutes);
     public StopCause? Cause => StopCauses.Find(CauseCode);
@@ -110,11 +119,21 @@ public enum PlanStatus
     Cancelled,
 }
 
-// A maintenance slot on the planning board (from a plan, or one-off).
+// What a slot of the board stops the line for. Stored in
+// PlanMaintenanceEvents.Kind (0 for every slot made before planned stops).
+public enum SlotKind
+{
+    Maintenance,
+    PlannedStop,
+}
+
+// A maintenance slot on the planning board (from a plan, or one-off), or a
+// planned stop (no order, holiday...: Task is then its reason).
 public class MaintenanceEvent
 {
     public int Id { get; set; }
     public int? PlanId { get; set; }
+    public SlotKind Kind { get; set; }
     public string MachineId { get; set; } = "";
     public string Task { get; set; } = "";
     public DateTime PlannedStart { get; set; }
@@ -125,6 +144,16 @@ public class MaintenanceEvent
     public string? Comment { get; set; }
 
     public DateTime PlannedEnd => PlannedStart.AddMinutes(DurationMinutes);
+    public bool IsStop => Kind == SlotKind.PlannedStop;
+
+    // Validated before its planned end: the slot ended then (not before its
+    // start), and the rest goes back to the TRS.
+    public DateTime ActualEnd => Status == PlanStatus.Done && DoneAt is { } done && done < PlannedEnd
+        ? (done > PlannedStart ? done : PlannedStart)
+        : PlannedEnd;
+
+    // Still planned (not done / cancelled) and running at `time`.
+    public bool IsActiveAt(DateTime time) => Status == PlanStatus.Planned && PlannedStart <= time && PlannedEnd > time;
 }
 
 // An ordre de fabrication: so many bags of a product on a line.

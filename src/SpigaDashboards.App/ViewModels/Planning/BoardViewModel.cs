@@ -16,6 +16,7 @@ public enum BlockKind
     MaintenanceDone,
     MaintenanceLate,
     Panne,
+    PlannedStop,
 }
 
 // What the board shows: a day (postes cut in hours), a week (days cut in
@@ -47,6 +48,10 @@ public partial class BoardBlock : ObservableObject
 
     public object? Source { get; init; }
     public double ProducedBags { get; init; }
+
+    // Shown instead of the text when the block is too narrow for it.
+    public string Icon { get; init; } = "";
+    public bool ShowIcon => !ShowLabel && Icon.Length > 0;
 }
 
 public sealed partial class MachineRow : ObservableObject
@@ -65,6 +70,18 @@ public sealed partial class MachineRow : ObservableObject
 }
 
 public sealed record SectorGroup(string Name, Brush Color, string Caption, IReadOnlyList<MachineRow> Rows);
+
+// One line of the "Lignes" list: shown on the calendar or not (this PC only).
+public sealed partial class LineChoice : ObservableObject
+{
+    public string MachineId { get; init; } = "";
+    public string MachineName { get; init; } = "";
+    [ObservableProperty] private bool isShown = true;
+    public Action? Changed { get; set; }
+    partial void OnIsShownChanged(bool value) => Changed?.Invoke();
+}
+
+public sealed record LineChoiceGroup(string Name, Brush Color, IReadOnlyList<LineChoice> Lines);
 // A column of the board (a poste, or a day) and its ticks (hours, postes, or the weekday).
 public sealed record ColumnTick(string Label, bool IsFirst);
 public sealed record ColumnHeader(string Name, IReadOnlyList<ColumnTick> Ticks, bool IsToday);
@@ -74,6 +91,14 @@ public sealed record AlertRow(string Machine, string Text, Brush Brush);
 public sealed record PreventiveRow(string MachineId, string MachineName, string Task, string Rule, string DueText,
     string StatusText, Brush StatusBrush, bool HasGauge, double Gauge,
     IRelayCommand Plan, IRelayCommand Done, IRelayCommand Edit);
+
+// What a mouse drag on a slot does: move it, or move its start / end edge.
+public enum BlockDrag
+{
+    Move,
+    Start,
+    End,
+}
 
 public enum EditorMode
 {
@@ -91,19 +116,25 @@ public static class MaintenanceText
 }
 
 // "Planification" tab: the day, week or month of every line (orders,
-// maintenance, pannes) with the real progress of each order from the counter,
-// the preventive maintenance rules and what is due, and the alerts a planner
-// acts on. A click or drag on an empty part of a line picks a slot to plan
-// an order or a maintenance in, as in a calendar.
+// maintenance, planned stops, pannes) with the real progress of each order
+// from the counter, the preventive maintenance rules and what is due, and the
+// alerts a planner acts on. A click or drag on an empty part of a line picks a
+// slot to plan a maintenance or a stop in, as in a calendar.
 public partial class BoardViewModel : ObservableObject
 {
     public static readonly string[] PosteNames = { "Matin", "Après-midi", "Nuit" };
+
+    // Production orders are not part of this version: their buttons only say so.
+    public static readonly bool OrdersEnabled = false;
+    public const string OrdersUnavailableText =
+        "Cette fonctionnalité n'est pas disponible dans cette version. Contactez le service client pour l'activer.";
     private readonly PlanningContext _ctx;
     private bool _refreshAgain;
     private List<ProductionOrder> _orders = new();
     private List<MaintenanceEvent> _events = new();
     private List<MaintenancePlan> _plans = new();
     private ProductionOrder? _editingOrder;
+    private int? _rulePlanId;
     private MaintenanceEvent? _editingEvent;
     private MaintenancePlan? _editingPlan;
 
@@ -119,6 +150,10 @@ public partial class BoardViewModel : ObservableObject
     public ObservableCollection<AlertRow> Alerts { get; } = new();
     public ObservableCollection<DetailRow> DetailRows { get; } = new();
     public ObservableCollection<string> MachineNames { get; } = new();
+    public ObservableCollection<LineChoiceGroup> LineGroups { get; } = new();
+    [ObservableProperty] private string linesLabel = "Lignes";
+    // Toutes / Aucune tick every box: one save and one rebuild, not one per line.
+    private bool _settingAllLines;
     public List<string> PlanKindOptions { get; } = new() { "Calendaire (jours)", "Usage (sacs produits)" };
 
     [ObservableProperty] private BoardRange range = BoardRange.Week;
@@ -130,11 +165,11 @@ public partial class BoardViewModel : ObservableObject
     [ObservableProperty] private bool isBusy;
     [ObservableProperty] private string statusMessage = "";
 
+    [ObservableProperty] private bool isUnavailableOpen;
+
     // KPI strip
-    [ObservableProperty] private string chargeText = "—";
-    [ObservableProperty] private double chargeRatio;
-    [ObservableProperty] private string ordersText = "0";
-    [ObservableProperty] private string ordersSub = "";
+    [ObservableProperty] private string stopsText = "0";
+    [ObservableProperty] private string stopsSub = "";
     [ObservableProperty] private string maintText = "0";
     [ObservableProperty] private string maintSub = "";
     [ObservableProperty] private string pannesText = "0";
@@ -196,6 +231,14 @@ public partial class BoardViewModel : ObservableObject
     [ObservableProperty] private string eventLength = "";
     [ObservableProperty] private string eventTechnician = "";
 
+    // The slot form plans a maintenance or a planned stop (Task = its reason).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsStopForm), nameof(EventTaskLabel))]
+    private SlotKind eventKind;
+    public bool IsStopForm => EventKind == SlotKind.PlannedStop;
+    public string EventTaskLabel => IsStopForm ? "Motif" : "Tâche";
+    public IReadOnlyList<string> StopReasons => StopCauses.PlannedStopReasons;
+
     // Start and end of the order / maintenance forms. The end moves with the
     // start (same length), as in a calendar. An order's end follows the
     // quantity at the nominal rate until one is typed (_orderEndManual).
@@ -210,6 +253,7 @@ public partial class BoardViewModel : ObservableObject
     [ObservableProperty] private int planKindIndex;
     [ObservableProperty] private string planInterval = "14";
     [ObservableProperty] private string planDuration = "60";
+    [ObservableProperty] private bool canDeletePlan;
     [ObservableProperty] private DateTime? planLastDone = DateTime.Today;
     public string PlanIntervalLabel => PlanKindIndex == 0 ? "Tous les (jours)" : "Tous les (sacs)";
 
@@ -242,6 +286,9 @@ public partial class BoardViewModel : ObservableObject
     partial void OnEditorChanged(EditorMode value)
     {
         OnPropertyChanged(nameof(ShowEmptyDetail));
+        // A form opens: the message of the last action no longer applies.
+        if (value != EditorMode.None)
+            StatusMessage = "";
         if (value is EditorMode.None or EditorMode.Plan)
             ClearSlot();
     }
@@ -263,9 +310,12 @@ public partial class BoardViewModel : ObservableObject
         _ = RefreshAsync();
     }
 
+    // A day follows the postes (the Nuit after midnight still belongs to the
+    // day before); a week or a month follows the calendar date, so
+    // "Aujourd'hui" at night opens the week / month of today.
     private static DateTime StartOf(DateTime t, BoardRange range)
     {
-        var day = Postes.Of(t).ShiftDate;
+        var day = range == BoardRange.Day ? Postes.Of(t).ShiftDate : t.Date;
         return range switch
         {
             BoardRange.Day => day.AddHours(6),
@@ -290,8 +340,65 @@ public partial class BoardViewModel : ObservableObject
         MachineNames.Clear();
         foreach (var m in _ctx.Machines)
             MachineNames.Add(m.MachineName);
+        LineGroups.Clear();
+        var hidden = _ctx.Settings.PlanningHiddenMachineIds;
+        foreach (var sector in _ctx.Machines.GroupBy(m => m.Sector))
+            LineGroups.Add(new LineChoiceGroup(Machine.SectorLabel(sector.Key), PlanningContext.Brush(PlanningContext.SectorColor(sector.Key)),
+                sector.Select(m => new LineChoice
+                {
+                    MachineId = m.MachineId, MachineName = m.MachineName, IsShown = !hidden.Contains(m.MachineId),
+                    Changed = OnLineChoiceChanged,
+                }).ToList()));
+        UpdateLinesLabel();
         await RefreshAsync();
     }
+
+    private IEnumerable<LineChoice> AllLineChoices => LineGroups.SelectMany(g => g.Lines);
+
+    private void OnLineChoiceChanged()
+    {
+        if (_settingAllLines)
+            return;
+        SaveLineChoices();
+        _ = RefreshAsync();
+    }
+
+    [RelayCommand]
+    private Task ShowAllLinesAsync() => SetAllLinesAsync(true);
+
+    [RelayCommand]
+    private Task HideAllLinesAsync() => SetAllLinesAsync(false);
+
+    private async Task SetAllLinesAsync(bool shown)
+    {
+        _settingAllLines = true;
+        foreach (var line in AllLineChoices)
+            line.IsShown = shown;
+        _settingAllLines = false;
+        SaveLineChoices();
+        await RefreshAsync();
+    }
+
+    // Kept in settings.json; lines hidden in Parametres (not listed here) keep their entry.
+    private void SaveLineChoices()
+    {
+        var listed = AllLineChoices.Select(l => l.MachineId).ToHashSet();
+        _ctx.Settings.PlanningHiddenMachineIds = _ctx.Settings.PlanningHiddenMachineIds
+            .Where(id => !listed.Contains(id))
+            .Concat(AllLineChoices.Where(l => !l.IsShown).Select(l => l.MachineId))
+            .ToList();
+        _ctx.SettingsService.Save(_ctx.Settings);
+        UpdateLinesLabel();
+    }
+
+    private void UpdateLinesLabel()
+    {
+        var all = AllLineChoices.ToList();
+        LinesLabel = $"Lignes ({all.Count(l => l.IsShown)}/{all.Count})";
+    }
+
+    private List<Machine> ShownMachines()
+        => _ctx.Machines.Where(m => !_ctx.Settings.PlanningHiddenMachineIds.Contains(m.MachineId)).ToList();
 
     [RelayCommand]
     private async Task PreviousAsync()
@@ -335,11 +442,13 @@ public partial class BoardViewModel : ObservableObject
         try
         {
             await BuildAsync();
-            StatusMessage = "";
+            StatusMessage = ShownMachines().Count == 0 && _ctx.Machines.Count > 0
+                ? "Aucune ligne affichée : les choisir avec le bouton Lignes."
+                : "";
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Planification - semaine : {ex}");
+            AppLogger.Log($"Planification - semaine : {ex}");
             StatusMessage = PlanningErrors.Describe(ex);
         }
         finally
@@ -358,11 +467,12 @@ public partial class BoardViewModel : ObservableObject
         var now = DateTime.Now;
         var french = PlanningContext.French;
         var week = ISOWeek.GetWeekOfYear(RangeStart);
+        // Short enough to stay whole beside the toolbar.
         (RangeLabel, PeriodSuffix) = Range switch
         {
-            BoardRange.Day => (Capitalize(RangeStart.ToString("dddd d MMMM yyyy", french)) + $" · semaine {week}", "du jour"),
+            BoardRange.Day => (Capitalize(RangeStart.ToString("dddd d MMMM", french)) + $" · S{week}", "du jour"),
             BoardRange.Month => (Capitalize(RangeStart.ToString("MMMM yyyy", french)), "du mois"),
-            _ => ($"Semaine {week} · {RangeStart.ToString("d MMM", french)} → {RangeEnd.AddDays(-1).ToString("d MMM yyyy", french)}", "de la semaine"),
+            _ => ($"Semaine {week} · {RangeStart.ToString("d MMM", french)} → {RangeEnd.AddDays(-1).ToString("d MMM", french)}", "de la semaine"),
         };
         NowFrac = (now - RangeStart).TotalHours / RangeHours;
         IsNowVisible = NowFrac is >= 0 and <= 1;
@@ -398,7 +508,9 @@ public partial class BoardViewModel : ObservableObject
 
         // Live state of each line.
         var states = new Dictionary<string, MachineStatusSnapshot?>();
-        foreach (var m in _ctx.Machines)
+        // Only the lines shown (Lignes); the alerts and preventive lists keep every line.
+        var shown = ShownMachines();
+        foreach (var m in shown)
         {
             try { states[m.MachineId] = await _ctx.Production.GetLatestStatusAsync(m.MachineId); }
             catch { states[m.MachineId] = null; }
@@ -407,17 +519,16 @@ public partial class BoardViewModel : ObservableObject
         var selectedKey = SelectedBlock?.Key;
         Sectors.Clear();
         var allBlocks = new List<BoardBlock>();
-        double orderHours = 0;
-        foreach (var sector in _ctx.Machines.GroupBy(m => m.Sector))
+        foreach (var sector in shown.GroupBy(m => m.Sector))
         {
             var color = PlanningContext.SectorColor(sector.Key);
             var rows = new List<MachineRow>();
-            double sectorHours = 0;
             foreach (var m in sector)
             {
-                var inMaintenance = _events.Any(e => e.MachineId == m.MachineId && e.Status == PlanStatus.Planned && e.PlannedStart <= now && e.PlannedEnd > now);
+                var active = _events.Where(e => e.MachineId == m.MachineId && e.IsActiveAt(now)).ToList();
                 var st = states.GetValueOrDefault(m.MachineId);
-                var (stateText, stateColor) = inMaintenance ? ("En maintenance", Color.FromRgb(0xFA, 0xB2, 0x19))
+                var (stateText, stateColor) = active.Any(e => e.IsStop) ? ("Arrêt planifié", Color.FromRgb(0x7F, 0x8C, 0x8D))
+                    : active.Count > 0 ? ("En maintenance", Color.FromRgb(0xFA, 0xB2, 0x19))
                     : st == null || !st.IsConnected ? ("Pas de données", Color.FromRgb(0x9A, 0xA4, 0xB2))
                     : st.BeltRunning ? ("En production", Color.FromRgb(0x2E, 0xCC, 0x71))
                     : ("À l'arrêt", Color.FromRgb(0xE7, 0x4C, 0x3C));
@@ -430,7 +541,6 @@ public partial class BoardViewModel : ObservableObject
                 foreach (var o in _orders.Where(o => o.MachineId == m.MachineId))
                 {
                     var hours = (Clamp(o.PlannedEnd) - Clamp(o.PlannedStart)).TotalHours;
-                    sectorHours += hours;
                     var done = produced.GetValueOrDefault(o.Id);
                     var progress = o.QuantityBags > 0 ? Math.Min(1, done / o.QuantityBags) : 0;
                     if (o.Status == PlanStatus.Done)
@@ -446,16 +556,33 @@ public partial class BoardViewModel : ObservableObject
                         Source = o, ProducedBags = done,
                     });
                 }
-                foreach (var e in _events.Where(e => e.MachineId == m.MachineId))
+                // The colour says what a slot is: its text is the reason / task and
+                // its hours. Short slots keep a minimum width and show an icon.
+                foreach (var e in _events.Where(e => e.MachineId == m.MachineId && e.IsStop))
+                {
+                    var (startFrac, endFrac) = SlotFracs(e);
+                    row.Blocks.Add(new BoardBlock
+                    {
+                        Key = "E" + e.Id, Kind = BlockKind.PlannedStop, StartFrac = startFrac, EndFrac = endFrac,
+                        Label = e.Task, Sub = ShortSpan(e.PlannedStart, e.PlannedEnd),
+                        ShowLabel = endFrac - startFrac >= 0.036, Icon = PauseIcon,
+                        Tooltip = $"Arrêt planifié · {e.Task} · {Span(e.PlannedStart, e.PlannedEnd)} · {PlanningContext.Duration(e.DurationMinutes)}",
+                        Source = e,
+                    });
+                }
+                // Done ones first, so one still to do is drawn on top and can be clicked.
+                foreach (var e in _events.Where(e => e.MachineId == m.MachineId && !e.IsStop).OrderBy(e => e.Status == PlanStatus.Done ? 0 : 1))
                 {
                     var kind = e.Status == PlanStatus.Done ? BlockKind.MaintenanceDone
                         : e.PlannedEnd < now ? BlockKind.MaintenanceLate : BlockKind.Maintenance;
+                    var (startFrac, endFrac) = SlotFracs(e);
                     row.Blocks.Add(new BoardBlock
                     {
-                        Key = "E" + e.Id, Kind = kind, StartFrac = Frac(e.PlannedStart), EndFrac = Frac(e.PlannedEnd),
-                        Label = kind == BlockKind.MaintenanceLate ? "Non validée" : e.Task, Sub = e.Task,
-                        ShowLabel = Frac(e.PlannedEnd) - Frac(e.PlannedStart) >= 0.036,
-                        Tooltip = $"Maintenance · {e.Task} · {When(e.PlannedStart)} · {PlanningContext.Duration(e.DurationMinutes)}",
+                        Key = "E" + e.Id, Kind = kind, StartFrac = startFrac, EndFrac = endFrac,
+                        Label = kind == BlockKind.MaintenanceLate ? "Non validée" : e.Task,
+                        Sub = kind == BlockKind.MaintenanceLate ? e.Task : ShortSpan(e.PlannedStart, e.ActualEnd),
+                        ShowLabel = endFrac - startFrac >= 0.036, Icon = kind == BlockKind.MaintenanceLate ? WarningIcon : WrenchIcon,
+                        Tooltip = $"Maintenance{(kind == BlockKind.MaintenanceLate ? " non validée" : "")} · {e.Task} · {Span(e.PlannedStart, e.ActualEnd)} · {PlanningContext.Duration((e.ActualEnd - e.PlannedStart).TotalMinutes)}",
                         Source = e,
                     });
                 }
@@ -477,22 +604,21 @@ public partial class BoardViewModel : ObservableObject
                 allBlocks.AddRange(row.Blocks);
                 rows.Add(row);
             }
-            orderHours += sectorHours;
-            var charge = rows.Count == 0 ? 0 : sectorHours / (rows.Count * RangeHours) * 100;
-            Sectors.Add(new SectorGroup(SectorLabel(sector.Key), PlanningContext.Brush(color),
-                $"{rows.Count} ligne{(rows.Count > 1 ? "s" : "")} · charge {charge:0} %", rows));
+            Sectors.Add(new SectorGroup(Machine.SectorLabel(sector.Key), PlanningContext.Brush(color),
+                $"{rows.Count} ligne{(rows.Count > 1 ? "s" : "")}", rows));
         }
 
         // KPIs
-        var chargeAll = _ctx.Machines.Count == 0 ? 0 : orderHours / (_ctx.Machines.Count * RangeHours) * 100;
-        ChargeText = $"{chargeAll:0} %";
-        ChargeRatio = Math.Clamp(chargeAll / 100, 0, 1);
         var running = _orders.Where(o => o.Status == PlanStatus.Planned && o.PlannedStart <= now && o.PlannedEnd > now).ToList();
         var lateOrders = running.Where(o => Behind(o, produced.GetValueOrDefault(o.Id), now) > 0.25).ToList();
-        OrdersText = _orders.Count.ToString(CultureInfo.InvariantCulture);
-        OrdersSub = $"{running.Count} en cours · {lateOrders.Count} en retard sur le plan";
+        var stops = _events.Where(e => e.IsStop).ToList();
+        var maintenances = _events.Where(e => !e.IsStop).ToList();
+        StopsText = stops.Count.ToString(CultureInfo.InvariantCulture);
+        var stopMinutes = stops.Sum(e => (Clamp(e.PlannedEnd) - Clamp(e.PlannedStart)).TotalMinutes);
+        var stopsNow = stops.Count(e => e.IsActiveAt(now));
+        StopsSub = $"{PlanningContext.Duration(stopMinutes)} d'arrêt prévu" + (stopsNow > 0 ? $" · {stopsNow} en cours" : "");
         var overduePlans = _plans.Select(p => (p, s: PlanState(p, now, null))).Where(x => x.s.Overdue && !openEvents.Any(e => e.PlanId == x.p.Id)).ToList();
-        MaintText = _events.Count.ToString(CultureInfo.InvariantCulture);
+        MaintText = maintenances.Count.ToString(CultureInfo.InvariantCulture);
         MaintSub = overduePlans.Count == 0 ? "aucun préventif en retard" : $"{overduePlans.Count} préventif{(overduePlans.Count > 1 ? "s" : "")} en retard";
         PannesText = pannes.Count.ToString(CultureInfo.InvariantCulture);
         PannesSub = $"{PlanningContext.Duration(pannes.Sum(q => q.Minutes))} d'arrêt";
@@ -519,8 +645,8 @@ public partial class BoardViewModel : ObservableObject
                 : (state.DueText, Color.FromRgb(0x2E, 0xCC, 0x71));
             Preventives.Add(new PreventiveRow(p.MachineId, _ctx.NameOf(p.MachineId), p.Task, MaintenanceText.Rule(p) + state.Detail,
                 state.DueText, statusText, PlanningContext.Brush(statusColor), p.LastDoneAt != null, Math.Clamp(state.Ratio, 0, 1),
-                new AsyncRelayCommand(() => PlanFromRuleAsync(plan, state.Due)),
-                new AsyncRelayCommand(() => MarkPlanDoneAsync(plan)),
+                new RelayCommand(() => PlanFromRule(plan, state.Due)),
+                new RelayCommand(() => ConfirmPlanDone(plan)),
                 new RelayCommand(() => EditPlan(plan))));
         }
         OnPropertyChanged(nameof(HasPreventives));
@@ -531,17 +657,17 @@ public partial class BoardViewModel : ObservableObject
         var orange = PlanningContext.Brush(Color.FromRgb(0xEC, 0x83, 0x5A));
         var amber = PlanningContext.Brush(Color.FromRgb(0xFA, 0xB2, 0x19));
         foreach (var (p, s) in overduePlans)
-            Alerts.Add(new AlertRow(_ctx.NameOf(p.MachineId), $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
+            Alerts.Add(new AlertRow(_ctx.NameOf(p.MachineId), $"Préventif « {p.Task} » : {s.DueText.ToLowerInvariant()}, pas encore planifié.", red));
         foreach (var o in lateOrders)
         {
             var late = Behind(o, produced.GetValueOrDefault(o.Id), now);
             Alerts.Add(new AlertRow(_ctx.NameOf(o.MachineId), $"{o.OrderNo} en retard de {PlanningContext.Duration(late * 60)} au rythme actuel.", orange));
         }
-        foreach (var e in _events.Where(e => e.Status == PlanStatus.Planned && e.PlannedEnd < now))
-            Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
+        foreach (var e in maintenances.Where(e => e.Status == PlanStatus.Planned && e.PlannedEnd < now))
+            Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"Maintenance « {e.Task} » du {When(e.PlannedStart)} non validée.", orange));
         foreach (var e in _events.Where(e => e.Status == PlanStatus.Planned))
             foreach (var o in _orders.Where(o => o.MachineId == e.MachineId && o.PlannedStart < e.PlannedEnd && o.PlannedEnd > e.PlannedStart))
-                Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
+                Alerts.Add(new AlertRow(_ctx.NameOf(e.MachineId), $"« {e.Task} » tombe pendant {o.OrderNo} ({When(e.PlannedStart)}).", amber));
         var planned = _orders.Where(o => o.Status == PlanStatus.Planned).OrderBy(o => o.PlannedStart).ToList();
         for (var i = 0; i < planned.Count; i++)
             foreach (var other in planned.Skip(i + 1).Where(x => x.MachineId == planned[i].MachineId && x.PlannedStart < planned[i].PlannedEnd))
@@ -567,7 +693,7 @@ public partial class BoardViewModel : ObservableObject
             }
             yield break;
         }
-        var today = Postes.Of(now).ShiftDate;
+        var today = now.Date;
         var postes = new[] { new ColumnTick("M", true), new ColumnTick("AM", false), new ColumnTick("N", false) };
         for (var d = RangeStart.Date; d < RangeEnd.Date; d = d.AddDays(1))
             yield return Range == BoardRange.Week
@@ -576,16 +702,29 @@ public partial class BoardViewModel : ObservableObject
                     new[] { new ColumnTick(PlanningContext.French.DateTimeFormat.GetShortestDayName(d.DayOfWeek), true) }, d == today);
     }
 
+    private const string WrenchIcon = "\uE90F";
+    private const string PauseIcon = "\uE769";
+    private const string WarningIcon = "\uE7BA";
+
+    // A slot's place on the board; outside the day view a short one keeps a
+    // minimum width (about half a day on a week) so it can be seen and clicked.
+    private (double Start, double End) SlotFracs(MaintenanceEvent e)
+    {
+        var start = Frac(e.PlannedStart);
+        var end = Frac(e.ActualEnd);
+        var min = Range == BoardRange.Day ? 0 : 0.02;
+        return (start, Math.Min(1, Math.Max(end, start + min)));
+    }
+
+    // "08:00 → 19:00", or "Mar 3 08:00 → Mer 4 19:00" over several days.
+    private static string ShortSpan(DateTime start, DateTime end)
+        => start.Date == end.Date || end == end.Date && end.AddDays(-1).Date == start.Date
+            ? $"{start:HH:mm} → {end:HH:mm}"
+            : $"{PlanningContext.Day(start)} {start:HH:mm} → {PlanningContext.Day(end)} {end:HH:mm}";
+
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpper(text[0]) + text[1..];
 
     private DateTime Clamp(DateTime t) => t < RangeStart ? RangeStart : t > RangeEnd ? RangeEnd : t;
-
-    private static string SectorLabel(string sector) => sector switch
-    {
-        "Pate courte" => "Pâte courte",
-        "Pate longue" => "Pâte longue",
-        _ => sector,
-    };
 
     public static string When(DateTime t) => PlanningContext.Day(t) + " · " + t.ToString("HH:mm");
 
@@ -663,7 +802,7 @@ public partial class BoardViewModel : ObservableObject
                     DetailHasProgress = true;
                     DetailProgress = block.Progress;
                     DetailExpected = Math.Clamp((now - o.PlannedStart).TotalHours / Math.Max(0.01, (o.PlannedEnd - o.PlannedStart).TotalHours), 0, 1);
-                    DetailProgressText = $"{PlanningContext.Bags(block.ProducedBags)} / {PlanningContext.Bags(o.QuantityBags)} sacs · trait = attendu maintenant ({DetailExpected * 100:0} %)";
+                    DetailProgressText = $"{PlanningContext.Bags(block.ProducedBags)} / {PlanningContext.Bags(o.QuantityBags)} sacs · trait = attendu maintenant ({DetailExpected * 100:0} %)";
                 }
                 if (running && block.ProducedBags > 0)
                 {
@@ -672,17 +811,38 @@ public partial class BoardViewModel : ObservableObject
                     var estimate = now.AddHours(elapsed * Math.Max(0, o.QuantityBags - block.ProducedBags) / block.ProducedBags);
                     DetailRows.Add(new DetailRow("Fin estimée", When(estimate)));
                     DetailNote = behind > 0.25
-                        ? $"Retard estimé de {PlanningContext.Duration(behind * 60)} au rythme actuel : l'ordre suivant sur cette ligne sera décalé."
+                        ? $"Retard estimé de {PlanningContext.Duration(behind * 60)} au rythme actuel : l'ordre suivant sur cette ligne sera décalé."
                         : "Dans les temps au rythme actuel.";
                     DetailNoteBrush = behind > 0.25 ? orange : green;
                 }
                 else if (running && (now - o.PlannedStart).TotalHours > 1)
                 {
-                    DetailNote = "Aucun sac compté depuis le début prévu : l'ordre a-t-il démarré ?";
+                    DetailNote = "Aucun sac compté depuis le début prévu : l'ordre a-t-il démarré ?";
                     DetailNoteBrush = orange;
                 }
                 CanEditSelected = o.Status == PlanStatus.Planned;
                 CanCloseSelected = o.Status == PlanStatus.Planned;
+                CloseSelectedText = "Terminer";
+                break;
+
+            case MaintenanceEvent { IsStop: true } e:
+                DetailKind = "ARRÊT PLANIFIÉ";
+                DetailKindBrush = PlanningContext.Brush(Color.FromRgb(0x7F, 0x8C, 0x8D));
+                DetailTitle = e.Task;
+                DetailSub = _ctx.NameOf(e.MachineId);
+                var grey = PlanningContext.Brush(Color.FromRgb(0x9A, 0xA4, 0xB2));
+                (DetailStatus, DetailStatusBrush) = e.Status == PlanStatus.Done || e.PlannedEnd <= now ? ("Terminé", grey)
+                    : e.PlannedStart <= now ? ("En cours", amber) : ("Planifié", blue);
+                DetailRows.Add(new DetailRow("Début", When(e.PlannedStart)));
+                DetailRows.Add(new DetailRow("Fin", When(e.PlannedEnd)));
+                DetailRows.Add(new DetailRow("Durée", PlanningContext.Duration(e.DurationMinutes)));
+                if (e.DoneAt is { } endedAt)
+                    DetailRows.Add(new DetailRow("Terminé le", When(endedAt)));
+                DetailNote = "Hors TRS : ce temps n'est pas compté dans le temps requis de la ligne.";
+                DetailNoteBrush = grey;
+                CanEditSelected = e.Status == PlanStatus.Planned && e.PlannedEnd > now;
+                // Ends it now (the line restarts early).
+                CanCloseSelected = e.IsActiveAt(now);
                 CloseSelectedText = "Terminer";
                 break;
 
@@ -703,14 +863,21 @@ public partial class BoardViewModel : ObservableObject
                     DetailRows.Add(new DetailRow("Intervenant", e.Technician));
                 if (e.DoneAt is { } doneAt)
                     DetailRows.Add(new DetailRow("Réalisée le", When(doneAt)));
+                if (e.ActualEnd < e.PlannedEnd)
+                {
+                    DetailRows.Add(new DetailRow("Fin réelle", When(e.ActualEnd)));
+                    DetailNote = "Validée avant la fin prévue : le reste du créneau compte à nouveau dans le TRS.";
+                    DetailNoteBrush = green;
+                }
                 if (e.Status == PlanStatus.Planned && e.PlannedEnd < now)
                 {
-                    DetailNote = "Le créneau est passé : validez-la si elle a été faite, sinon replanifiez-la.";
+                    DetailNote = "Le créneau est passé : validez-la si elle a été faite, sinon replanifiez-la.";
                     DetailNoteBrush = red;
                 }
                 CanEditSelected = e.Status == PlanStatus.Planned;
                 CanCloseSelected = e.Status == PlanStatus.Planned;
-                CloseSelectedText = "Valider";
+                // In progress: ends it now, like a planned stop.
+                CloseSelectedText = e.IsActiveAt(now) ? "Terminer" : "Valider";
                 break;
 
             case StopQualification q:
@@ -755,7 +922,17 @@ public partial class BoardViewModel : ObservableObject
                         o.PlannedEnd = now;
                     await _ctx.Planning.SaveOrderAsync(o);
                     break;
+                case MaintenanceEvent { IsStop: true } e:
+                    // Ended early: only the time really stopped stays out of the TRS.
+                    e.Status = PlanStatus.Done;
+                    e.DoneAt = now;
+                    e.DurationMinutes = Math.Max(1, (int)Math.Round((now - e.PlannedStart).TotalMinutes));
+                    await _ctx.Planning.SaveEventAsync(e);
+                    break;
                 case MaintenanceEvent e:
+                    // Ended early: the rest of the slot goes back to the TRS.
+                    if (e.IsActiveAt(now))
+                        e.DurationMinutes = Math.Max(1, (int)Math.Round((now - e.PlannedStart).TotalMinutes));
                     e.Status = PlanStatus.Done;
                     e.DoneAt = now;
                     await _ctx.Planning.SaveEventAsync(e);
@@ -774,8 +951,22 @@ public partial class BoardViewModel : ObservableObject
         }
     }
 
+    // "Supprimer" in the detail panel: asks first.
     [RelayCommand]
-    private async Task CancelSelectedAsync()
+    private void DeleteSelected()
+    {
+        var what = SelectedBlock?.Source switch
+        {
+            ProductionOrder o => $"l'ordre {o.OrderNo}",
+            MaintenanceEvent { IsStop: true } e => $"l'arrêt planifié « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
+            MaintenanceEvent e => $"la maintenance « {e.Task} » ({_ctx.NameOf(e.MachineId)}, {Span(e.PlannedStart, e.PlannedEnd)})",
+            _ => null,
+        };
+        if (what != null)
+            Confirm($"Supprimer {what} ?", "Supprimer", DeleteSelectedNowAsync);
+    }
+
+    private async Task DeleteSelectedNowAsync()
     {
         try
         {
@@ -792,6 +983,7 @@ public partial class BoardViewModel : ObservableObject
             }
             SelectedBlock = null;
             await RefreshAsync();
+            StatusMessage = "Supprimé.";
         }
         catch (Exception ex)
         {
@@ -802,8 +994,16 @@ public partial class BoardViewModel : ObservableObject
     // ---- Order editor ----
 
     [RelayCommand]
+    private void CloseUnavailable() => IsUnavailableOpen = false;
+
+    [RelayCommand]
     private async Task NewOrderAsync()
     {
+        if (!OrdersEnabled)
+        {
+            IsUnavailableOpen = true;
+            return;
+        }
         _editingOrder = null;
         FormTitle = "Nouvel ordre de fabrication";
         try
@@ -922,6 +1122,30 @@ public partial class BoardViewModel : ObservableObject
             EventTime = time;
     }
 
+    // "Fin de poste" chips: the end of the Matin / Après-midi / Nuit that
+    // comes after the start.
+    [RelayCommand]
+    private void PickPosteEnd(string index)
+    {
+        var hour = int.Parse(index, CultureInfo.InvariantCulture) switch { 1 => 22, 2 => 6, _ => 14 };
+        var start = Editor == EditorMode.Order ? StartAt(OrderDate, OrderTime) : StartAt(EventDate, EventTime);
+        if (start is not { } s)
+            return;
+        var end = s.Date.AddHours(hour);
+        if (end <= s)
+            end = end.AddDays(1);
+        if (Editor == EditorMode.Order)
+        {
+            OrderEndDate = end.Date;
+            OrderEndTime = end.ToString("HH:mm");
+        }
+        else if (Editor == EditorMode.Event)
+        {
+            EventEndDate = end.Date;
+            EventEndTime = end.ToString("HH:mm");
+        }
+    }
+
     private static double ParseNumber(string text)
         => double.TryParse(text.Replace(" ", "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
 
@@ -955,7 +1179,7 @@ public partial class BoardViewModel : ObservableObject
         var end = StartAt(OrderEndDate, OrderEndTime);
         CanOrderEndFromRate = _orderEndManual && rateHours != null;
 
-        var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
+        var rateText = rateHours is { } rh ? $"cadence nominale {rate:0.#} sacs/min : {PlanningContext.Duration(rh * 60)}"
             : machine != null && ParseNumber(OrderQuantity) > 0 ? $"pas de cadence nominale pour {machine.MachineName} à {ParseNumber(OrderWeight):0.##} g (Paramètres)"
             : "";
         if (SpanError(start, end) is { } error)
@@ -996,7 +1220,7 @@ public partial class BoardViewModel : ObservableObject
         try
         {
             await _ctx.Planning.SaveOrderAsync(o);
-            AppLogger.Log($"OF enregistre : {o.OrderNo} {o.MachineId} {o.PlannedStart:g}");
+            AppLogger.Log($"OF enregistré : {o.OrderNo} {o.MachineId} {o.PlannedStart:g}");
             Editor = EditorMode.None;
             await GoToAsync(o.PlannedStart, "O" + o.Id);
         }
@@ -1009,22 +1233,35 @@ public partial class BoardViewModel : ObservableObject
     // ---- Maintenance event editor ----
 
     [RelayCommand]
-    private void NewEvent()
+    private void NewEvent() => StartEventForm(SlotKind.Maintenance);
+
+    [RelayCommand]
+    private void NewStop() => StartEventForm(SlotKind.PlannedStop);
+
+    // A maintenance lasts an hour by default, a planned stop a poste.
+    private void StartEventForm(SlotKind kind)
     {
         _editingEvent = null;
-        FormTitle = "Planifier une maintenance";
+        _rulePlanId = null;
+        EventKind = kind;
+        FormTitle = kind == SlotKind.PlannedStop ? "Planifier un arrêt" : "Planifier une maintenance";
         EventMachine = SelectedMachineName() ?? MachineNames.FirstOrDefault() ?? "";
         EventTask = "";
         EventTechnician = "";
         Editor = EditorMode.Event;
         var next = Postes.NextStart(DateTime.Now);
-        FillEventTimes(next, next.AddHours(1));
+        FillEventTimes(next, next.AddHours(kind == SlotKind.PlannedStop ? 8 : 1));
     }
+
+    // Reason chips of the planned stop form.
+    [RelayCommand]
+    private void PickStopReason(string reason) => EventTask = reason;
 
     private void EditEvent(MaintenanceEvent e)
     {
         _editingEvent = e;
-        FormTitle = "Modifier la maintenance";
+        EventKind = e.Kind;
+        FormTitle = e.IsStop ? "Modifier l'arrêt planifié" : "Modifier la maintenance";
         EventMachine = _ctx.NameOf(e.MachineId);
         EventTask = e.Task;
         EventTechnician = e.Technician ?? "";
@@ -1086,7 +1323,7 @@ public partial class BoardViewModel : ObservableObject
         var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == EventMachine);
         if (machine == null || string.IsNullOrWhiteSpace(EventTask))
         {
-            StatusMessage = "Ligne et tâche sont nécessaires.";
+            StatusMessage = IsStopForm ? "Ligne et motif sont nécessaires." : "Ligne et tâche sont nécessaires.";
             return;
         }
         var (start, end) = (StartAt(EventDate, EventTime), StartAt(EventEndDate, EventEndTime));
@@ -1095,17 +1332,19 @@ public partial class BoardViewModel : ObservableObject
             StatusMessage = error;
             return;
         }
-        var e = _editingEvent ?? new MaintenanceEvent();
+        var e = _editingEvent ?? new MaintenanceEvent { PlanId = _rulePlanId };
+        e.Kind = EventKind;
         e.MachineId = machine.MachineId;
         e.Task = EventTask.Trim();
         e.PlannedStart = start!.Value;
         e.DurationMinutes = (int)Math.Round((end!.Value - start.Value).TotalMinutes);
-        e.Technician = string.IsNullOrWhiteSpace(EventTechnician) ? null : EventTechnician.Trim();
+        e.Technician = IsStopForm || string.IsNullOrWhiteSpace(EventTechnician) ? null : EventTechnician.Trim();
         try
         {
             await _ctx.Planning.SaveEventAsync(e);
             Editor = EditorMode.None;
             await GoToAsync(e.PlannedStart, "E" + e.Id);
+            StatusMessage = $"{(e.IsStop ? "Arrêt planifié enregistré" : "Maintenance enregistrée")} : {machine.MachineName} · {Span(e.PlannedStart, e.PlannedEnd)}.";
         }
         catch (Exception ex)
         {
@@ -1129,6 +1368,7 @@ public partial class BoardViewModel : ObservableObject
         PlanInterval = "14";
         PlanDuration = "60";
         PlanLastDone = DateTime.Today;
+        CanDeletePlan = false;
         Editor = EditorMode.Plan;
     }
 
@@ -1142,6 +1382,7 @@ public partial class BoardViewModel : ObservableObject
         PlanInterval = (p.Kind == MaintenanceKind.Calendar ? p.IntervalDays : p.IntervalBags).ToString(CultureInfo.InvariantCulture);
         PlanDuration = p.DurationMinutes.ToString(CultureInfo.InvariantCulture);
         PlanLastDone = p.LastDoneAt?.Date;
+        CanDeletePlan = true;
         Editor = EditorMode.Plan;
     }
 
@@ -1169,7 +1410,7 @@ public partial class BoardViewModel : ObservableObject
             await _ctx.Planning.SavePlanAsync(p);
             Editor = EditorMode.None;
             await RefreshAsync();
-            StatusMessage = $"Règle enregistrée : {p.Task} sur {machine.MachineName}.";
+            StatusMessage = $"Règle enregistrée : {p.Task} sur {machine.MachineName}.";
         }
         catch (Exception ex)
         {
@@ -1178,19 +1419,27 @@ public partial class BoardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DeletePlanAsync()
+    private void DeletePlan()
     {
         if (_editingPlan == null)
         {
             Editor = EditorMode.None;
             return;
         }
+        Confirm($"Supprimer la règle « {_editingPlan.Task} » ({_ctx.NameOf(_editingPlan.MachineId)}) ?", "Supprimer", DeletePlanNowAsync);
+    }
+
+    private async Task DeletePlanNowAsync()
+    {
+        if (_editingPlan == null)
+            return;
         _editingPlan.IsActive = false;
         try
         {
             await _ctx.Planning.SavePlanAsync(_editingPlan);
             Editor = EditorMode.None;
             await RefreshAsync();
+            StatusMessage = "Règle supprimée.";
         }
         catch (Exception ex)
         {
@@ -1198,27 +1447,25 @@ public partial class BoardViewModel : ObservableObject
         }
     }
 
-    // Puts the rule's next slot on the board: the next poste if it is due
-    // (or overdue), else the poste of its due date.
-    private async Task PlanFromRuleAsync(MaintenancePlan p, DateTime due)
+    // Opens the maintenance form filled from the rule, on the next poste if
+    // it is due (or overdue), else the poste of its due date: the planner
+    // checks or moves it, then saves.
+    private void PlanFromRule(MaintenancePlan p, DateTime due)
     {
         var now = DateTime.Now;
         var start = Postes.NextStart(due > now ? due : now);
-        var e = new MaintenanceEvent
-        {
-            PlanId = p.Id, MachineId = p.MachineId, Task = p.Task, PlannedStart = start, DurationMinutes = p.DurationMinutes,
-        };
-        try
-        {
-            await _ctx.Planning.SaveEventAsync(e);
-            await GoToAsync(start, "E" + e.Id);
-            StatusMessage = $"« {p.Task} » planifiée le {When(start)}.";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = PlanningErrors.Describe(ex);
-        }
+        SelectedBlock = null;
+        StartEventForm(SlotKind.Maintenance);
+        _rulePlanId = p.Id;
+        FormTitle = "Planifier le préventif";
+        EventMachine = _ctx.NameOf(p.MachineId);
+        EventTask = p.Task;
+        FillEventTimes(start, start.AddMinutes(p.DurationMinutes));
     }
+
+    private void ConfirmPlanDone(MaintenancePlan p)
+        => Confirm($"« {p.Task} » ({_ctx.NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée",
+            () => MarkPlanDoneAsync(p));
 
     private async Task MarkPlanDoneAsync(MaintenancePlan p)
     {
@@ -1234,7 +1481,7 @@ public partial class BoardViewModel : ObservableObject
                 await _ctx.Planning.SaveEventAsync(e);
             }
             await RefreshAsync();
-            StatusMessage = $"« {p.Task} » réalisée : prochaine échéance recalculée.";
+            StatusMessage = $"« {p.Task} » réalisée : prochaine échéance recalculée.";
         }
         catch (Exception ex)
         {
@@ -1272,12 +1519,12 @@ public partial class BoardViewModel : ObservableObject
     }
 
     // In hours, what a drag snaps to and what a single click picks:
-    // 15 min / 1 h on a day, 1 h / a poste on a week, a poste / a day on a month.
+    // 15 min / 1 h on a day, a poste / a poste on a week, a poste / a day on a month.
     private (double Snap, double Click) SlotUnits => Range switch
     {
         BoardRange.Day => (0.25, 1),
         BoardRange.Month => (8, 24),
-        _ => (1, 8),
+        _ => (8, 8),
     };
 
     private DateTime SnapAt(double frac, double unit, bool up)
@@ -1318,9 +1565,9 @@ public partial class BoardViewModel : ObservableObject
         var busy = _orders.Where(o => o.MachineId == id && o.Status == PlanStatus.Planned && o.PlannedStart < _slotEnd && o.PlannedEnd > _slotStart)
             .Select(o => o.OrderNo)
             .Concat(_events.Where(e => e.MachineId == id && e.Status == PlanStatus.Planned && e.PlannedStart < _slotEnd && e.PlannedEnd > _slotStart)
-                .Select(e => $"« {e.Task} »"))
+                .Select(e => $"« {e.Task} »"))
             .ToList();
-        SlotWarning = busy.Count == 0 ? "" : "Déjà occupé : " + string.Join(", ", busy);
+        SlotWarning = busy.Count == 0 ? "" : "Déjà occupé : " + string.Join(", ", busy);
         _slotTaken = false;
         IsSlotMenuOpen = true;
     }
@@ -1333,6 +1580,12 @@ public partial class BoardViewModel : ObservableObject
     {
         if (_slotMachineId is not { } id)
             return;
+        if (!OrdersEnabled)
+        {
+            IsSlotMenuOpen = false;
+            IsUnavailableOpen = true;
+            return;
+        }
         var (start, end) = (_slotStart, _slotEnd);
         _slotTaken = true;
         IsSlotMenuOpen = false;
@@ -1345,7 +1598,12 @@ public partial class BoardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void EventInSlot()
+    private void EventInSlot() => SlotForm(SlotKind.Maintenance);
+
+    [RelayCommand]
+    private void StopInSlot() => SlotForm(SlotKind.PlannedStop);
+
+    private void SlotForm(SlotKind kind)
     {
         if (_slotMachineId is not { } id)
             return;
@@ -1353,7 +1611,7 @@ public partial class BoardViewModel : ObservableObject
         _slotTaken = true;
         IsSlotMenuOpen = false;
         SelectedBlock = null;
-        NewEvent();
+        StartEventForm(kind);
         EventMachine = _ctx.NameOf(id);
         FillEventTimes(start, end);
     }
@@ -1377,10 +1635,7 @@ public partial class BoardViewModel : ObservableObject
                 continue;
             row.SlotStartFrac = Frac(_slotStart);
             row.SlotEndFrac = Frac(_slotEnd);
-            var hours = (_slotEnd - _slotStart).TotalHours;
-            row.SlotText = hours < 24 ? $"{_slotStart:HH:mm} – {_slotEnd:HH:mm}"
-                : hours == 24 ? PlanningContext.Day(_slotStart)
-                : $"{PlanningContext.Day(_slotStart)} → {PlanningContext.Day(_slotEnd.AddHours(-1))}";
+            row.SlotText = ShortSpan(_slotStart, _slotEnd);
         }
     }
 
@@ -1396,6 +1651,104 @@ public partial class BoardViewModel : ObservableObject
 
     [RelayCommand]
     private void CancelEditor() => Editor = EditorMode.None;
+
+    // ---- Confirmation before what can't be undone (Supprimer, Réalisée) ----
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsConfirmOpen))]
+    private string confirmText = "";
+    [ObservableProperty] private string confirmYesText = "";
+    public bool IsConfirmOpen => ConfirmText.Length > 0;
+    private Func<Task>? _confirmed;
+
+    private void Confirm(string text, string yes, Func<Task> action)
+    {
+        _confirmed = action;
+        ConfirmYesText = yes;
+        ConfirmText = text;
+    }
+
+    [RelayCommand]
+    private async Task ConfirmYesAsync()
+    {
+        var action = _confirmed;
+        _confirmed = null;
+        ConfirmText = "";
+        if (action != null)
+            await action();
+    }
+
+    [RelayCommand]
+    private void ConfirmNo()
+    {
+        _confirmed = null;
+        ConfirmText = "";
+    }
+
+    // ---- Moving / stretching a slot with the mouse (BoardView) ----
+
+    private MaintenanceEvent? _dragged;
+    private DateTime _dragStart;
+    private DateTime _dragEnd;
+
+    // Planned slots only (done ones are history), and not while a form is open.
+    public bool CanDrag(BoardBlock block) => Editor == EditorMode.None && block.Source is MaintenanceEvent { Status: PlanStatus.Planned };
+
+    // deltaFrac: how far the mouse went, as a part of the period shown. The
+    // new start / end snap like a picked slot (15 min on a day, a poste on a
+    // week or a month); the outline shows where it will go.
+    public void DragBlock(BoardBlock block, BlockDrag mode, double deltaFrac)
+    {
+        if (!CanDrag(block) || block.Source is not MaintenanceEvent e)
+            return;
+        _dragged = e;
+        var delta = TimeSpan.FromHours(deltaFrac * RangeHours);
+        var snap = SlotUnits.Snap;
+        DateTime Snap(DateTime t) => RangeStart.AddHours(Math.Round((t - RangeStart).TotalHours / snap) * snap);
+        var length = e.PlannedEnd - e.PlannedStart;
+        var (start, end) = mode switch
+        {
+            BlockDrag.Start => (Snap(e.PlannedStart + delta), e.PlannedEnd),
+            BlockDrag.End => (e.PlannedStart, Snap(e.PlannedEnd + delta)),
+            _ => (Snap(e.PlannedStart + delta), Snap(e.PlannedStart + delta) + length),
+        };
+        // Never shorter than one step.
+        if (end <= start)
+            (start, end) = mode == BlockDrag.Start ? (end.AddHours(-snap), end) : (start, start.AddHours(snap));
+        (_dragStart, _dragEnd) = (start, end);
+        SetSlot(e.MachineId, start, end);
+    }
+
+    public void CancelDrag()
+    {
+        _dragged = null;
+        SetSlot(null, default, default);
+    }
+
+    // Mouse up: saves the new place, if it changed.
+    public async Task EndDragAsync()
+    {
+        if (_dragged is not { } e)
+            return;
+        CancelDrag();
+        if (_dragStart == e.PlannedStart && _dragEnd == e.PlannedEnd)
+            return;
+        var (oldStart, oldMinutes) = (e.PlannedStart, e.DurationMinutes);
+        e.PlannedStart = _dragStart;
+        e.DurationMinutes = (int)Math.Round((_dragEnd - _dragStart).TotalMinutes);
+        try
+        {
+            await _ctx.Planning.SaveEventAsync(e);
+            await RefreshAsync();
+            SelectedBlock = Sectors.SelectMany(s => s.Rows).SelectMany(r => r.Blocks).FirstOrDefault(b => b.Key == "E" + e.Id);
+            StatusMessage = $"« {e.Task} » replanifié : {Span(e.PlannedStart, e.PlannedEnd)} ({PlanningContext.Duration(e.DurationMinutes)}).";
+        }
+        catch (Exception ex)
+        {
+            (e.PlannedStart, e.DurationMinutes) = (oldStart, oldMinutes);
+            StatusMessage = PlanningErrors.Describe(ex);
+        }
+    }
 
     private async Task GoToAsync(DateTime t, string key)
     {

@@ -24,7 +24,7 @@ public class SqlServerSettings
     public string Database { get; set; } = "stats";
     // The production server is reached with a SQL login (user + password).
     public SqlAuthMode AuthMode { get; set; } = SqlAuthMode.SqlLogin;
-    public string Username { get; set; } = "";
+    public string Username { get; set; } = "Stiavelli";
 
     // DPAPI-protected (CurrentUser scope), base64. Never store the plain password on disk.
     public string EncryptedPassword { get; set; } = "";
@@ -42,32 +42,37 @@ public class TeamRosterEntry
 
 public class TeamRotationSettings
 {
-    public string[] TeamNames { get; set; } = { "Equipe A", "Equipe B", "Equipe C", "Equipe D" };
+    // Defaults = the site's roster as set on the production PC (v1.5.15,
+    // 2026-11-06), so a new PC starts right before the shared settings arrive.
+    public string[] TeamNames { get; set; } = { "Equipe D", "Equipe B", "Equipe C", "Equipe A" };
 
-    // Anchor date for CycleDay 0. Nudge this to realign the cycle once the
-    // client's real roster is known.
-    public DateTime RotationStartDate { get; set; } = new(2026, 1, 5);
+    // Anchor date for CycleDay 0. Nudge this to realign the cycle.
+    public DateTime RotationStartDate { get; set; } = new(2026, 11, 1);
 
     public List<TeamRosterEntry> Pattern { get; set; } = BuildDefaultPattern();
 
-    // Placeholder 4-day cycle (no client roster yet): each team works 3
-    // consecutive days -- a different poste each day (Matin, Après-midi, Nuit) --
-    // then rests on the 4th, before starting the cycle again on Matin.
+    // The site's 8-day cycle: each team works 2 days on each poste (Matin,
+    // then Après-midi, then Nuit), then rests 2 days. One row per cycle
+    // day: team index (in TeamNames) on Matin, Après-midi, Nuit.
+    private static readonly int[][] SiteCycle =
+    {
+        new[] { 2, 0, 3 },
+        new[] { 1, 2, 0 },
+        new[] { 1, 2, 0 },
+        new[] { 3, 1, 2 },
+        new[] { 3, 1, 2 },
+        new[] { 0, 3, 1 },
+        new[] { 0, 3, 1 },
+        new[] { 2, 0, 3 },
+    };
+
     private static List<TeamRosterEntry> BuildDefaultPattern()
     {
         var entries = new List<TeamRosterEntry>();
-        for (var cycleDay = 0; cycleDay < 4; cycleDay++)
+        for (var cycleDay = 0; cycleDay < SiteCycle.Length; cycleDay++)
         {
             for (var shiftId = 1; shiftId <= 3; shiftId++)
-            {
-                var posteIndex = shiftId - 1; // 0=Matin, 1=Après-midi, 2=Nuit
-                entries.Add(new TeamRosterEntry
-                {
-                    CycleDay = cycleDay,
-                    ShiftId = shiftId,
-                    TeamIndex = (cycleDay + posteIndex) % 4,
-                });
-            }
+                entries.Add(new TeamRosterEntry { CycleDay = cycleDay, ShiftId = shiftId, TeamIndex = SiteCycle[cycleDay][shiftId - 1] });
         }
         return entries;
     }
@@ -126,19 +131,35 @@ public class AppSettings
     public SqlServerSettings SqlServer { get; set; } = new();
     public List<string> HiddenMachineIds { get; set; } = new();
 
+    // Lines left out of the Planification calendar on this PC (its "Lignes"
+    // list); the alerts and preventive lists still show them.
+    public List<string> PlanningHiddenMachineIds { get; set; } = new();
+
     // How long each slide (sector pair, PDF, annual summary) stays on screen.
     public int SlideDurationSeconds { get; set; } = 15;
 
     // Rotation order, slides switched off and per-slide durations (Parametres
-    // > Affichage). Empty = the default deck, every slide shown.
-    public List<SlideSetting> Slides { get; set; } = new();
+    // > Affichage). Empty = the default deck, every slide shown. Default =
+    // the production PC's order (2026-11-06).
+    public List<SlideSetting> Slides { get; set; } = new[]
+    {
+        "etat:Cumul",
+        "machine:CC03", "machine:CC04", "machine:CC01", "machine:CC02",
+        "machine:PC01", "machine:PC02", "machine:PC03",
+        "machine:PL03", "machine:PL02", "machine:PL01",
+        "pdf",
+        "synthese:Couscous", "synthese:Pate courte", "synthese:Pate longue",
+        "production:Conditionnement 1", "trs:Conditionnement 1",
+        "production:Conditionnement 2", "trs:Conditionnement 2",
+        "production:Cumul", "trs:Cumul",
+    }.Select(key => new SlideSetting { Key = key }).ToList();
 
     public int SlideSecondsFor(string key)
         => Math.Max(1, Slides.FirstOrDefault(s => s.Key == key)?.DurationSeconds ?? SlideDurationSeconds);
 
     // How often the slide deck itself is rebuilt (drops/reinstates disconnected
     // machines, refreshes underlying data). Spec calls for 1-5 min, configurable.
-    public int DataRefreshIntervalMinutes { get; set; } = 2;
+    public int DataRefreshIntervalMinutes { get; set; } = 1;
 
     // A line counts as "connected" while its latest produzione snapshot is
     // younger than this many minutes. 0 = automatic: 2.5x the line's own
@@ -168,20 +189,44 @@ public class AppSettings
     // Parametres. A production is matched on its line and target net weight
     // (see FindNominalRate / FindTare); rate 0 = not set yet, so Performance
     // and TRS stay unknown for that weight.
+    // Defaults = the production PC's table (2026-11-06).
     public List<NominalRateEntry> NominalRates { get; set; } = new()
     {
-        new() { WeightGrams = 200 },
-        new() { WeightGrams = 400 },
-        new() { WeightGrams = 500 },
-        new() { WeightGrams = 800 },
-        new() { WeightGrams = 1000 },
+        new() { MachineId = "CC01", WeightGrams = 800, RatePerMinute = 60, TareGrams = 4 },
+        new() { MachineId = "CC01", WeightGrams = 1000, RatePerMinute = 60, TareGrams = 5 },
+        new() { MachineId = "CC02", WeightGrams = 500, RatePerMinute = 60 },
+        new() { MachineId = "CC02", WeightGrams = 1000, RatePerMinute = 60 },
+        new() { MachineId = "CC03", WeightGrams = 1000, RatePerMinute = 50, TareGrams = 6 },
+        new() { MachineId = "CC04", WeightGrams = 500, RatePerMinute = 50, TareGrams = 8 },
+        new() { MachineId = "CC04", WeightGrams = 800, RatePerMinute = 50, TareGrams = 5 },
+        new() { MachineId = "CC04", WeightGrams = 1000, RatePerMinute = 50, TareGrams = 6 },
+        new() { MachineId = "PC01", WeightGrams = 400, RatePerMinute = 100 },
+        new() { MachineId = "PC02", WeightGrams = 500, RatePerMinute = 100 },
+        new() { MachineId = "PC03", WeightGrams = 500, RatePerMinute = 100 },
+        new() { MachineId = "PL01", WeightGrams = 400, RatePerMinute = 100, TareGrams = 5 },
+        new() { MachineId = "PL02", WeightGrams = 400, RatePerMinute = 100 },
+        new() { MachineId = "PL03", WeightGrams = 500, RatePerMinute = 100 },
     };
 
     // TRS target (%) per machine, shown next to each machine's TRS and used
     // for its colour band. Machines not listed use DefaultTrsTarget.
-    public Dictionary<string, double> MachineTrsTargets { get; set; } = new();
+    // Defaults = the production PC's targets (2026-11-06).
+    public Dictionary<string, double> MachineTrsTargets { get; set; } = new()
+    {
+        ["CC01"] = 45, ["CC02"] = 45, ["CC03"] = 45, ["CC04"] = 45,
+        ["PC01"] = 45, ["PC02"] = 45, ["PC03"] = 45,
+        ["PL01"] = 45, ["PL02"] = 45, ["PL03"] = 45,
+    };
 
     public const double DefaultTrsTarget = 85;
+
+    // TRS tolerance (points) per machine: orange from target - tolerance,
+    // red below. Machines not listed use the Couleurs share of the target.
+    public Dictionary<string, double> MachineTrsTolerances { get; set; } = new();
+
+    // Weight-deviation colour limits per machine (Parametres > Machines).
+    // Machines not listed use WeightBand.Default.
+    public Dictionary<string, WeightBand> MachineWeightBands { get; set; } = new();
 
     // Daily planned breaks (pauses), set in Parametres. Defaults = the site's
     // 6 breaks, two per poste.
@@ -199,8 +244,41 @@ public class AppSettings
     // minutes is listed as a stop (Arrets window / printed sheet).
     public int StopThresholdMinutes { get; set; } = 5;
 
+    // Stop pop-up (lines stopped with no cause yet), on this PC only: shown
+    // or not, and where it was dragged to, as an offset from its place at the
+    // top right of the slide (1600x900 canvas, same on the TV).
+    public bool ShowStopAlerts { get; set; } = true;
+    public double StopAlertOffsetX { get; set; }
+    public double StopAlertOffsetY { get; set; }
+
+    // Version of the shared settings (see SharedSettings) last received from
+    // the base; 0 = never received.
+    public int SharedSettingsVersion { get; set; }
+
+    // Green / orange / red limits of the coloured figures (Parametres >
+    // Couleurs). Also published as ColorThresholds.Current, read by the
+    // colour converters and KpiCalculator (there is one AppSettings per app,
+    // and this setter runs on load and when the shared settings arrive).
+    private ColorThresholds _colors = new();
+    public ColorThresholds Colors
+    {
+        get => _colors;
+        set
+        {
+            _colors = value ?? new ColorThresholds();
+            ColorThresholds.Current = _colors;
+        }
+    }
+
     public double TrsTarget(string machineId)
         => MachineTrsTargets.TryGetValue(machineId, out var target) && target > 0 ? target : DefaultTrsTarget;
+
+    public TrsBand TrsBandFor(string machineId)
+        => TrsBand.ForTarget(TrsTarget(machineId),
+            MachineTrsTolerances.TryGetValue(machineId, out var tolerance) && tolerance >= 0 ? tolerance : null);
+
+    public WeightBand WeightBandFor(string machineId)
+        => MachineWeightBands.TryGetValue(machineId, out var band) && band != null ? band : WeightBand.Default;
 
     // Rate for this machine and weight: the machine's own row first, then the
     // "every machine" row. A per-article rate in Products still wins (see

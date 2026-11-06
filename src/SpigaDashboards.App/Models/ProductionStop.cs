@@ -32,6 +32,13 @@ public class ProductionStop
     public DateTime Start { get; set; }
     public DateTime End { get; set; }
 
+    // Start of the whole stop this piece belongs to (earlier than Start for
+    // the part of a long stop falling in a later poste: "Suite 04/11 20:41"),
+    // and whether the stop is still going on (End = latest snapshot).
+    public DateTime RunStart { get; set; }
+    public bool IsLive { get; set; }
+    public bool IsContinuation => RunStart < Start.AddMinutes(-1);
+
     // Part of the stop inside planned breaks (not counted), and part with no
     // snapshot at all (StatsViewer not writing: cause unknown).
     public double BreakMinutes { get; set; }
@@ -48,7 +55,10 @@ public class ProductionStop
     public bool IsManual => Qualification?.IsManual == true;
 
     public string ShiftName => Services.KpiCalculator.ShiftName(ShiftId);
-    public string TypeLabel => IsManual ? "Saisie manuelle" : IsMostlyNoData ? "Sans données" : "Arrêt";
+    public string TypeLabel => IsManual ? "Saisie manuelle"
+        : IsContinuation ? $"Suite {RunStart:dd/MM HH:mm}"
+        : IsMostlyNoData ? "Sans données" : "Arrêt";
+    public string EndText => IsLive ? "en cours" : End.ToString("HH:mm");
     public CauseFamily? CauseFamily => Qualification?.Cause?.Family;
     public string CauseLabel => Qualification == null ? "—" : StopCauses.Label(Qualification.CauseCode);
     // "Mâchoires de soudure · Karim · changé la résistance"

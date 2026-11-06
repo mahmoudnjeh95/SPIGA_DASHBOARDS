@@ -63,7 +63,7 @@ public class SynthesisSlideViewModel
         if (from < settings.DataStartDate && to > settings.DataStartDate)
         {
             from = settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
 
         // Day buckets are enough unless postes / teams are filtered.
@@ -80,16 +80,17 @@ public class SynthesisSlideViewModel
         var lines = machines.Select(m =>
         {
             var machineLots = byMachine[m.MachineId].ToList();
-            var target = settings.TrsTarget(m.MachineId);
-            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), target);
+            var band = settings.TrsBandFor(m.MachineId);
+            var weightBand = settings.WeightBandFor(m.MachineId);
+            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band, weightBand);
             return new SynthesisLineRow
             {
                 MachineId = m.MachineId,
                 MachineName = m.MachineName,
                 Kpis = k,
-                TrsTarget = target,
-                TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, target),
-                WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
+                TrsTarget = band.Target,
+                TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, band),
+                WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent, weightBand),
             };
         }).ToList();
 
@@ -117,7 +118,7 @@ public class SynthesisSlideViewModel
 
         return new SynthesisSlideViewModel
         {
-            SectorLabel = sector,
+            SectorLabel = Machine.SectorLabel(sector),
             Period = period,
             PeriodLabel = label,
             FilterLabel = filter.Describe(),

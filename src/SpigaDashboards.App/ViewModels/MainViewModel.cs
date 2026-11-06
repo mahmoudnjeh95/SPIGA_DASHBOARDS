@@ -18,6 +18,10 @@ public partial class MainViewModel : ObservableObject
     private readonly ProductionRepository _repository;
     private readonly AppSettings _settings;
     private readonly TeamScheduleService _teamSchedule;
+    private readonly SharedSettingsSync _sharedSettings;
+    // Shared settings version this deck was built with: another PC's save
+    // (or this deck's twin pulling it first) rebuilds it from scratch.
+    private int _sharedVersionBuilt;
     private readonly DispatcherTimer _rotationTimer;
     private readonly DispatcherTimer _noteTimer;
     private readonly DispatcherTimer _refreshTimer;
@@ -84,6 +88,23 @@ public partial class MainViewModel : ObservableObject
     // The slide shown's duration (Parametres > Affichage, or the default one).
     public double SlideSeconds => _rotationTimer.Interval.TotalSeconds;
 
+    // Stop pop-up (both windows, the TV's above all): the lines in a stop
+    // nobody has given a cause yet. It comes up when a new one appears, then
+    // as a reminder every StopAlertReminder while any is left unqualified,
+    // and goes away after StopAlertDuration (or a click): never stays over
+    // the slides.
+    private static readonly TimeSpan StopAlertDuration = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan StopAlertReminder = TimeSpan.FromMinutes(30);
+    private readonly DispatcherTimer _stopAlertTimer;
+    private readonly HashSet<string> _alertedStops = new();
+    private DateTime _lastStopAlert = DateTime.MinValue;
+    public ObservableCollection<OngoingStop> StopAlerts { get; } = new();
+    [ObservableProperty] private bool isStopAlertShown;
+    [ObservableProperty] private string stopAlertTitle = "";
+    // The card lists the oldest few; the others are counted ("+ 4 autres lignes").
+    private const int StopAlertMaxLines = 5;
+    [ObservableProperty] private string stopAlertMore = "";
+
     // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
     [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
 
@@ -118,7 +139,7 @@ public partial class MainViewModel : ObservableObject
     // "Dates..." button: shows the chosen range once that period is selected.
     public string CustomRangeLabel => SelectedPeriod == DashboardPeriod.Custom
         ? $"{CustomFrom:dd/MM} - {CustomTo:dd/MM}"
-        : "Dates...";
+        : "Dates…";
 
     public ObservableCollection<string> TeamOptions { get; } = new();
     public ObservableCollection<string> WeightOptions { get; } = new();
@@ -134,11 +155,13 @@ public partial class MainViewModel : ObservableObject
             ? PeriodRanges.Get(DashboardPeriod.Day, DateTime.Now)
             : PeriodRanges.Get(SelectedPeriod, DateTime.Now, CustomFrom, CustomTo);
 
-    public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule)
+    public MainViewModel(ProductionRepository repository, AppSettings settings, TeamScheduleService teamSchedule,
+        SharedSettingsSync sharedSettings)
     {
         _repository = repository;
         _settings = settings;
         _teamSchedule = teamSchedule;
+        _sharedSettings = sharedSettings;
 
         _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _filterTimer.Tick += async (_, _) =>
@@ -160,10 +183,14 @@ public partial class MainViewModel : ObservableObject
         {
             RefreshCurrentTeam();
             await RefreshNoteAsync();
+            await RefreshStopAlertsAsync();
         });
 
+        _stopAlertTimer = new DispatcherTimer { Interval = StopAlertDuration };
+        _stopAlertTimer.Tick += (_, _) => DismissStopAlert();
+
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
-        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RebuildSlidesAsync);
+        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RefreshAsync);
 
         // Only runs while the DB is unreachable (see SetConnectionState).
         _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
@@ -176,13 +203,57 @@ public partial class MainViewModel : ObservableObject
         _healthCheckTimer.Start();
     }
 
+    private async Task RefreshStopAlertsAsync()
+    {
+        if (!_settings.ShowStopAlerts)
+        {
+            DismissStopAlert();
+            return;
+        }
+        var stops = await OngoingStopService.GetAsync(_repository, _settings);
+        var open = stops.Values
+            .Where(s => s.IsUnqualified && !_settings.HiddenMachineIds.Contains(s.MachineId))
+            .OrderBy(s => s.Start)
+            .ToList();
+        var keys = open.Select(s => $"{s.MachineId}|{s.Start:O}").ToHashSet();
+        var isNew = keys.Any(k => !_alertedStops.Contains(k));
+        _alertedStops.Clear();
+        _alertedStops.UnionWith(keys);
+
+        if (open.Count == 0)
+        {
+            DismissStopAlert();
+            return;
+        }
+        if (!isNew && DateTime.Now - _lastStopAlert < StopAlertReminder)
+            return;
+
+        StopAlerts.Clear();
+        foreach (var stop in open.Take(StopAlertMaxLines))
+            StopAlerts.Add(stop);
+        var more = open.Count - StopAlertMaxLines;
+        StopAlertMore = more <= 0 ? "" : more == 1 ? "+ 1 autre ligne" : $"+ {more} autres lignes";
+        StopAlertTitle = open.Count == 1 ? "ARRÊT EN COURS — cause à définir" : $"{open.Count} ARRÊTS EN COURS — cause à définir";
+        _lastStopAlert = DateTime.Now;
+        IsStopAlertShown = true;
+        _stopAlertTimer.Stop();
+        _stopAlertTimer.Start();
+    }
+
+    [RelayCommand]
+    private void DismissStopAlert()
+    {
+        _stopAlertTimer.Stop();
+        IsStopAlertShown = false;
+    }
+
     private async Task CheckConnectionAsync()
     {
         // While suspended / reconnecting, the reconnect timer already owns recovery.
         if (_suspended || IsReconnecting)
             return;
 
-        AppLogger.Log("Verification periodique de la connexion a la base de donnees...");
+        AppLogger.Log("Vérification périodique de la connexion à la base de données…");
         try
         {
             await _repository.GetMachinesAsync();
@@ -213,7 +284,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Erreur non geree : {ex.Message}");
+            AppLogger.Log($"Erreur non gérée : {ex.Message}");
             SetConnectionState(healthy: false, ex.Message);
         }
     }
@@ -224,6 +295,10 @@ public partial class MainViewModel : ObservableObject
         _rotationTimer.Stop();
         _noteTimer.Stop();
         _refreshTimer.Stop();
+
+        // Another PC may have changed the cadences, pauses, teams... meanwhile.
+        await _sharedSettings.PullAsync();
+        _sharedVersionBuilt = _settings.SharedSettingsVersion;
 
         // Settings (slide duration / refresh interval) may have changed since construction.
         // Set before resetting IsRotationPaused below, since that setter can restart
@@ -247,6 +322,7 @@ public partial class MainViewModel : ObservableObject
             await BuildSlidesAsync();
             await RefreshNoteAsync();
             RefreshCurrentTeam();
+            await RefreshStopAlertsAsync();
 
             _currentIndex = 0;
             if (_slides.Count > 0)
@@ -305,8 +381,8 @@ public partial class MainViewModel : ObservableObject
             return;
 
         IsReconnecting = true;
-        ReconnectStatus = "Reconnexion en cours...";
-        AppLogger.Log("Tentative de reconnexion a la base de donnees...");
+        ReconnectStatus = "Reconnexion en cours…";
+        AppLogger.Log("Tentative de reconnexion à la base de données…");
         try
         {
             _repository.ResetConnections();
@@ -317,7 +393,7 @@ public partial class MainViewModel : ObservableObject
             IsReconnecting = false;
             ReconnectStatus = IsConnectionHealthy
                 ? ""
-                : $"Echec a {DateTime.Now:HH:mm:ss} - nouvelle tentative automatique dans {(int)_reconnectTimer.Interval.TotalSeconds} s.";
+                : $"Échec à {DateTime.Now:HH:mm:ss} - nouvelle tentative automatique dans {(int)_reconnectTimer.Interval.TotalSeconds} s.";
         }
     }
 
@@ -327,11 +403,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await _repository.SetActiveNoteAsync(NoteText);
-            NoteSaveStatus = "Enregistre.";
+            NoteSaveStatus = "Enregistré.";
         }
         catch (Exception ex)
         {
-            NoteSaveStatus = $"Echec de l'enregistrement : {ex.Message}";
+            NoteSaveStatus = $"Échec de l'enregistrement : {ex.Message}";
         }
     }
 
@@ -388,7 +464,7 @@ public partial class MainViewModel : ObservableObject
             TargetWeight = FilterWeight == AllOption ? null : double.Parse(FilterWeight.Replace(" g", ""), CultureInfo.InvariantCulture),
         };
         ActiveFilterLabel = _filter.Describe();
-        AppLogger.Log($"Filtres appliques : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
+        AppLogger.Log($"Filtres appliqués : {(ActiveFilterLabel.Length == 0 ? "aucun" : ActiveFilterLabel)}");
 
         // Before the first load (or while disconnected) the deck is built later.
         if (_suspended)
@@ -560,6 +636,17 @@ public partial class MainViewModel : ObservableObject
         await ShowSlideAsync(_currentIndex);
     }
 
+    // Data refresh tick. New shared settings change every number (and the
+    // slide caches), so they rebuild the deck from scratch, as Enregistrer does.
+    private async Task RefreshAsync()
+    {
+        await _sharedSettings.PullAsync();
+        if (_settings.SharedSettingsVersion != _sharedVersionBuilt)
+            await InitializeAsync();
+        else
+            await RebuildSlidesAsync();
+    }
+
     // Rebuilds the slide deck in place (machines dis/reconnecting, admin
     // hiding a machine, etc.) without disrupting the rotation timers. Keeps
     // showing the current slide's content if it's still valid; otherwise
@@ -716,7 +803,7 @@ public partial class MainViewModel : ObservableObject
         if (from < _settings.DataStartDate && to > _settings.DataStartDate)
         {
             from = _settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
         return MachinePeriodSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Sector,
             _machinesById[slide.MachineId], from, to, label, _filter);
@@ -741,7 +828,7 @@ public partial class MainViewModel : ObservableObject
         if (from < _settings.DataStartDate && to > _settings.DataStartDate)
         {
             from = _settings.DataStartDate.Date;
-            label += $" - donnees depuis le {from:dd/MM/yyyy}";
+            label += $" - données depuis le {from:dd/MM/yyyy}";
         }
         return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Title, slide.Trs, slide.Cumul,
             slide.MachineIds.Select(id => _machinesById[id]).ToList(), from, to, label, _filter);
@@ -750,7 +837,7 @@ public partial class MainViewModel : ObservableObject
     private void SetConnectionState(bool healthy, string errorMessage = "")
     {
         if (healthy != IsConnectionHealthy)
-            AppLogger.Log(healthy ? "Connexion a la base de donnees retablie." : $"Connexion perdue : {errorMessage}");
+            AppLogger.Log(healthy ? "Connexion à la base de données rétablie." : $"Connexion perdue : {errorMessage}");
 
         IsConnectionHealthy = healthy;
         ConnectionErrorMessage = healthy ? "" : errorMessage;

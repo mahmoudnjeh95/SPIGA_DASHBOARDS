@@ -29,9 +29,8 @@ public class KpiSummary
     public double? WeightDeviationGrams { get; set; }
     public double? WeightDeviationPercent { get; set; }
 
-    // Net weight produced (bags x net average, or x target when the weight
-    // of that production is unknown) and weight given away above the target
-    // (negative = under), in kg.
+    // Net weight produced (bags x target weight) and weight given away above
+    // the target (negative = under), in kg.
     public double ProductionKg { get; set; }
     public double? GiveawayKg { get; set; }
 

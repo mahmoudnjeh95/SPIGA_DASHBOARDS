@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
     private readonly ProductionRepository _repository;
+    private readonly SharedSettingsSync _sharedSettings;
     private readonly LicenseService _license;
     private TvWindow? _tvWindow;
 
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
         ProductionRepository repository,
+        SharedSettingsSync sharedSettings,
         LicenseService license)
     {
         InitializeComponent();
@@ -32,6 +34,7 @@ public partial class MainWindow : Window
         _settings = settings;
         _activeFactory = activeFactory;
         _repository = repository;
+        _sharedSettings = sharedSettings;
         _license = license;
 
         DataContext = viewModel;
@@ -40,6 +43,20 @@ public partial class MainWindow : Window
         license.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(LicenseService.IsLicensed)) ApplyLicenseState(); };
         ApplyLicenseState();
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+
+        // Stop pop-up: at its saved place each time it comes up (moved on the
+        // other window, or put back in Parametres), saved where it is dropped.
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsStopAlertShown) && viewModel.IsStopAlertShown)
+                StopAlert.SetOffset(_settings.StopAlertOffsetX, _settings.StopAlertOffsetY);
+        };
+        StopAlert.Moved += (x, y) =>
+        {
+            _settings.StopAlertOffsetX = x;
+            _settings.StopAlertOffsetY = y;
+            _settingsService.Save(_settings);
+        };
         Loaded += async (_, _) => await viewModel.InitializeAsync();
         // Back on the TV after a restart, if it was left open there.
         ContentRendered += (_, _) => { if (_settings.TvScreen.IsOpen) OpenTvWindow(activate: false); };
@@ -56,6 +73,9 @@ public partial class MainWindow : Window
         {
             foreach (var owned in OwnedWindows.Cast<Window>().ToList())
                 owned.Close();
+            // Popups are windows of their own, drawn above the lock screen.
+            MachinePickerToggle.IsChecked = false;
+            _viewModel.IsDatePickerOpen = false;
         }
         DashboardRoot.IsEnabled = _license.IsLicensed;
     }
@@ -71,10 +91,12 @@ public partial class MainWindow : Window
         ThemeToggleButton.Content = ThemeService.CurrentTheme == AppTheme.Dark ? "Mode clair" : "Mode sombre";
     }
 
-    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        // Edit the shared settings as the other PCs last saved them.
+        await _sharedSettings.PullAsync();
         var settingsViewModel = new SettingsViewModel(
-            _settingsService, _settings, _activeFactory, _repository,
+            _settingsService, _settings, _activeFactory, _repository, _sharedSettings,
             onApplied: () =>
             {
                 _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
@@ -98,7 +120,7 @@ public partial class MainWindow : Window
         }
 
         // Its own deck, not this window's: filters set here stay off the TV.
-        var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings));
+        var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings), _sharedSettings);
         _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService, _license) { ShowActivated = activate };
         _tvWindow.Closed += (_, _) => _tvWindow = null;
         _tvWindow.Show();
@@ -121,7 +143,8 @@ public partial class MainWindow : Window
 
     private void PlanningButton_Click(object sender, RoutedEventArgs e)
     {
-        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, new TeamScheduleService(_settings));
+        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
+            new TeamScheduleService(_settings));
         new PlanningWindow(new PlanningViewModel(context)) { Owner = this }.ShowDialog();
     }
 

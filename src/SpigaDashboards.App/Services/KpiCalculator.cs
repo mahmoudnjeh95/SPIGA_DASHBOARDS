@@ -11,7 +11,7 @@ public static class KpiCalculator
         { 3, "Nuit" },
     };
 
-    public static string ShiftName(int shiftId) => ShiftNames.GetValueOrDefault(shiftId, $"Shift {shiftId}");
+    public static string ShiftName(int shiftId) => ShiftNames.GetValueOrDefault(shiftId, $"Poste {shiftId}");
 
     public static int ShiftStartHour(int shiftId) => shiftId switch
     {
@@ -55,12 +55,13 @@ public static class KpiCalculator
     //    means the nominal rate is set too low (flagged orange on screen).
     //  - Qualite: bags in tolerance / total bags.
     // Also breaks the buckets down per target weight (Weights), with each
-    // weight's TRS banded against trsTarget, and totals the net weight made.
+    // weight's TRS banded against trsTarget and its deviation against
+    // weightBand (the machine's), and totals the net weight made.
     public static KpiSummary Summarize(
-        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, double trsTarget = AppSettings.DefaultTrsTarget)
+        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, TrsBand? trsBand = null, WeightBand? weightBand = null)
     {
         var summary = SummarizeCore(lots, availabilityPercent);
-        summary.Weights = ByWeight(lots, trsTarget);
+        summary.Weights = ByWeight(lots, trsBand, weightBand);
         summary.ProductionKg = Math.Round(summary.Weights.Sum(w => w.ProductionKg), 1);
         var weighed = summary.Weights.Where(w => w.GiveawayKg.HasValue).ToList();
         summary.GiveawayKg = weighed.Count > 0 ? Math.Round(weighed.Sum(w => w.GiveawayKg!.Value), 1) : null;
@@ -70,7 +71,8 @@ public static class KpiCalculator
     // One entry per target weight (rounded to the gram), biggest production
     // first. Production = bags x net average weight, or x target when that
     // weight has no trustworthy weight data; giveaway = bags x deviation.
-    public static List<WeightKpi> ByWeight(IReadOnlyCollection<ProductionBucket> lots, double trsTarget = AppSettings.DefaultTrsTarget)
+    public static List<WeightKpi> ByWeight(
+        IReadOnlyCollection<ProductionBucket> lots, TrsBand? trsBand = null, WeightBand? weightBand = null)
     {
         return lots
             .Where(l => l.TargetNetWeight > 0)
@@ -92,14 +94,14 @@ public static class KpiCalculator
                     AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
                     DeviationGrams = k.WeightDeviationGrams,
                     DeviationPercent = k.WeightDeviationPercent,
-                    ProductionKg = Math.Round(k.TotalBags * (avg ?? g.Key) / 1000.0, 1),
+                    ProductionKg = Math.Round(k.TotalBags * g.Key / 1000.0, 1),
                     GiveawayKg = k.WeightDeviationGrams is { } dev ? Math.Round(k.TotalBags * dev / 1000.0, 1) : null,
                     QualityPercent = k.QualityPercent,
                     TrsPercent = k.TrsPercent,
                     SpeedBagsPerMinute = k.SpeedBagsPerMinute,
                     MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
-                    DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent),
-                    TrsSeverity = TrsSeverity(k.TrsPercent, trsTarget),
+                    DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent, weightBand ?? WeightBand.Default),
+                    TrsSeverity = TrsSeverity(k.TrsPercent, trsBand ?? TrsBand.Default),
                 };
             })
             .Where(w => w.TotalBags > 0 || w.AvgWeight.HasValue)
@@ -107,15 +109,9 @@ public static class KpiCalculator
             .ToList();
     }
 
-    // Colour band of a TRS against the machine's target: reached = green,
-    // within 75 % of it = orange, below = red.
-    public static KpiSeverity TrsSeverity(double? trsPercent, double target) => trsPercent switch
-    {
-        null => KpiSeverity.Unknown,
-        { } t when t >= target => KpiSeverity.Good,
-        { } t when t >= 0.75 * target => KpiSeverity.Warning,
-        _ => KpiSeverity.Bad,
-    };
+    // Colour band of a TRS against the machine's target and tolerance
+    // (Parametres > Machines / Couleurs, see TrsBand).
+    public static KpiSeverity TrsSeverity(double? trsPercent, TrsBand band) => band.Severity(trsPercent);
 
     private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
 
@@ -237,20 +233,10 @@ public static class KpiCalculator
         return (Math.Round(deviationSum / bags, 2), Math.Round(100.0 * deviationSum / targetSum, 2));
     }
 
-    // Colour band of the weight deviation, relative to the target (1 g means
-    // nothing on a 5 kg bag but is a lot on a 200 g one). Running heavy only
-    // gives product away: within 0.5 % green, within 1.5 % orange, beyond
-    // red. Running light is a compliance risk (sous-dosage): orange as soon
-    // as the average is 0.1 % under the target, red from 0.5 % under.
-    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent) => deviationPercent switch
-    {
-        null => KpiSeverity.Unknown,
-        < -0.5 => KpiSeverity.Bad,
-        < -0.1 => KpiSeverity.Warning,
-        <= 0.5 => KpiSeverity.Good,
-        <= 1.5 => KpiSeverity.Warning,
-        _ => KpiSeverity.Bad,
-    };
+    // Colour band of the weight deviation, relative to the target, against
+    // the machine's limits (Parametres > Machines, see WeightBand).
+    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent, WeightBand band)
+        => band.Severity(deviationPercent);
 
     // Share (0-100) of the required time (observed, minus the planned stops
     // the line was stopped in) in which the line produced bags. Over the
@@ -280,7 +266,7 @@ public static class KpiCalculator
             .ToList();
         var unassigned = byTeam.Where(kv => !teamNames.Contains(kv.Key)).Sum(kv => kv.Value);
         if (unassigned > 0)
-            result.Add(new TeamKpi { TeamName = "Sans equipe", TotalBags = unassigned });
+            result.Add(new TeamKpi { TeamName = "Sans équipe", TotalBags = unassigned });
         return result;
     }
 

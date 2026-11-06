@@ -100,7 +100,7 @@
                             </TextBlock>
                             <TextBlock Foreground="{DynamicResource SubtleTextBrush}" FontSize="11">
                                 <Run Text="{Binding Count, Mode=OneWay}"/>
-                                <Run Text="arrêt(s), hors « Sans données » :"/>
+                                <Run Text="arrêt(s), hors « Sans données » :"/>
                                 <Run Text="{Binding StopText, Mode=OneWay}"/>
                             </TextBlock>
                         </StackPanel>
@@ -120,10 +120,10 @@
                 <DataGridTextColumn Header="Équipe" Binding="{Binding Team}" Width="80"/>
                 <DataGridTextColumn Header="Machine" Binding="{Binding MachineName}" Width="125"/>
                 <DataGridTextColumn Header="Début" Binding="{Binding Start, StringFormat={}{0:HH:mm}}" Width="55"/>
-                <DataGridTextColumn Header="Fin" Binding="{Binding End, StringFormat={}{0:HH:mm}}" Width="55"/>
+                <DataGridTextColumn Header="Fin" Binding="{Binding EndText}" Width="65"/>
                 <DataGridTextColumn Header="Durée" Binding="{Binding DurationText}" Width="70"/>
                 <DataGridTextColumn Header="Pause déduite" Binding="{Binding BreakText}" Width="95"/>
-                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="100"/>
+                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="120"/>
                 <!-- Cause given in the Planification window, in its family's colour. -->
                 <DataGridTemplateColumn Header="Cause" Width="175">
                     <DataGridTemplateColumn.CellTemplate>
@@ -146,7 +146,7 @@
         <DockPanel Grid.Row="4" Margin="0,14,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="Imprimer la fiche des arrêts (PDF)" Style="{StaticResource SecondaryButton}" Command="{Binding PrintCommand}"
-                        ToolTip="Une page par poste et par équipe, avec les colonnes « Cause » et « Action » à remplir à la main"/>
+                        ToolTip="Une page par poste et par équipe, avec les colonnes « Cause » et « Action » à remplir à la main"/>
                 <Button Content="Fermer" Style="{StaticResource PrimaryButton}" Click="CloseButton_Click"/>
             </StackPanel>
             <TextBlock Text="{Binding SummaryText}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>

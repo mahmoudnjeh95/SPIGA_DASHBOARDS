@@ -39,7 +39,7 @@ public partial class StopsViewModel : ObservableObject
     public ObservableCollection<TeamStopTotal> TeamTotals { get; } = new();
 
     public string SettingsText =>
-        $"Seuil : {_settings.StopThresholdMinutes} min  -  Pauses planifiées déduites : {BreakSchedule.Describe(_settings.PlannedBreaks)}  (modifiables dans Paramètres)";
+        $"Seuil : {_settings.StopThresholdMinutes} min  -  Pauses planifiées déduites : {BreakSchedule.Describe(_settings.PlannedBreaks)}  (modifiables dans Paramètres)";
 
     public StopsViewModel(ProductionRepository repository, TeamScheduleService teamSchedule, AppSettings settings,
         (DateTime From, DateTime To)? initialRange = null)
@@ -73,7 +73,7 @@ public partial class StopsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Impossible de charger les machines : {ex.Message}";
+            StatusMessage = $"Impossible de charger les machines : {ex.Message}";
             return;
         }
         await SearchAsync();
@@ -91,8 +91,8 @@ public partial class StopsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Echec de la recherche des arrets : {ex}");
-            StatusMessage = $"Échec de la recherche : {ex.Message}";
+            AppLogger.Log($"Échec de la recherche des arrêts : {ex}");
+            StatusMessage = $"Échec de la recherche : {ex.Message}";
         }
         finally
         {
@@ -117,7 +117,7 @@ public partial class StopsViewModel : ObservableObject
             ? _machines
             : _machines.Where(m => SelectedMachine.MachineIds.Contains(m.MachineId)).ToList();
 
-        StatusMessage = "Recherche en cours...";
+        StatusMessage = "Recherche en cours…";
         var segments = await _repository.GetLineSegmentsAsync(machines.Select(m => m.MachineId).ToList(), from, to);
         var names = _machines.ToDictionary(m => m.MachineId, m => m.MachineName);
         var shiftId = ShiftOptions.IndexOf(SelectedShift); // 0 = Tous, 1 Matin, 2 Après-midi, 3 Nuit
@@ -138,7 +138,7 @@ public partial class StopsViewModel : ObservableObject
 
         SummaryText = stops.Count == 0
             ? ""
-            : $"{stops.Count} arrêt(s), durée totale hors pauses : {ProductionStop.FormatDuration(stops.Sum(s => s.NetMinutes))}";
+            : $"{stops.Count} arrêt(s), durée totale hors pauses : {ProductionStop.FormatDuration(stops.Sum(s => s.NetMinutes))}";
         StatusMessage = stops.Count == 0 ? "Aucun arrêt sur cette période." : "";
         OnPropertyChanged(nameof(SettingsText));
     }
@@ -156,7 +156,7 @@ public partial class StopsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            AppLogger.Log("Causes des arrets (Planification) illisibles : " + ex.Message);
+            AppLogger.Log("Causes des arrêts (Planification) illisibles : " + ex.Message);
             return new();
         }
     }
@@ -176,6 +176,11 @@ public partial class StopsViewModel : ObservableObject
             if (stop.Qualification != null)
                 used.Add(stop.Qualification.Id);
         }
+        // A long stop qualified on one of its postes: the others show the
+        // same cause (Pannes saves it for each of them when it next opens).
+        foreach (var stop in stops.Where(s => s.Qualification == null))
+            stop.Qualification = stops.FirstOrDefault(o => o.Qualification != null && o.MachineId == stop.MachineId
+                && o.RunStart == stop.RunStart)?.Qualification;
 
         var extra = quals.Where(q => !used.Contains(q.Id) && q.StopStart >= from && q.StopStart < to && q.StopEnd > q.StopStart)
             .Select(q => new ProductionStop
@@ -199,7 +204,7 @@ public partial class StopsViewModel : ObservableObject
     {
         if (Results.Count == 0)
         {
-            StatusMessage = "Aucun arrêt à imprimer : lancez d'abord une recherche.";
+            StatusMessage = "Aucun arrêt à imprimer : lancez d'abord une recherche.";
             return;
         }
 
@@ -216,14 +221,14 @@ public partial class StopsViewModel : ObservableObject
         try
         {
             StopSheetPdf.Export(Results.ToList(), _settings, dialog.FileName);
-            StatusMessage = $"Fiche enregistrée : {dialog.FileName}";
+            StatusMessage = $"Fiche enregistrée : {dialog.FileName}";
             // Opened in the PDF viewer, ready to print.
             Process.Start(new ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Echec de la fiche des arrets : {ex}");
-            StatusMessage = $"Échec de l'impression : {ex.Message}";
+            AppLogger.Log($"Échec de la fiche des arrêts : {ex}");
+            StatusMessage = $"Échec de l'impression : {ex.Message}";
         }
     }
 }

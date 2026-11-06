@@ -13,7 +13,7 @@ public class ShiftSummaryViewModel
     public string TimeRange { get; init; } = "";
     public string TeamName { get; init; } = "";
     public bool IsRunning { get; init; }
-    public string StateLabel => IsRunning ? "EN COURS" : "TERMINE";
+    public string StateLabel => IsRunning ? "EN COURS" : "TERMINÉ";
     public KpiSummary Kpis { get; init; } = new();
     public double TrsTarget { get; init; }
     public KpiSeverity TrsSeverity { get; init; }
@@ -22,7 +22,7 @@ public class ShiftSummaryViewModel
     // "Poids moyen" replaces the bag count: one value per target weight.
     public string AvgWeightText => KpiCalculator.FormatAverages(Kpis.Weights);
     public string TargetWeightsText => Kpis.Weights.Count == 0
-        ? "Pas de donnees de poids"
+        ? "Pas de données de poids"
         : "Cible " + string.Join(" · ", Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"));
     // Net weight produced by the team over the poste, all weights together.
     public string ProductionText => KpiCalculator.FormatMass(Kpis.ProductionKg);
@@ -40,14 +40,16 @@ public class ShiftSummaryViewModel
         IReadOnlyCollection<ProductionBucket> dayLots,
         TeamScheduleService teamSchedule,
         DateTime now,
-        double trsTarget)
+        TrsBand trsBand,
+        WeightBand weightBand,
+        IReadOnlyList<LotSpan>? lotSpans = null)
     {
         // A Nuit bucket after midnight belongs to the shift date it started on.
         var lots = dayLots
             .Where(l => l.ShiftId == shiftId && TeamScheduleService.GetShiftDate(l.StartTime, shiftId) == shiftDate)
             .ToList();
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsTarget);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand, weightBand);
         var team = teamSchedule.GetTeamForShift(shiftDate, shiftId);
 
         ChartParts onOff = ChartParts.Empty(), speed = ChartParts.Empty(), weight = ChartParts.Empty();
@@ -62,7 +64,12 @@ public class ShiftSummaryViewModel
                 .ToList();
             onOff = DashboardCharts.OnOff(steps);
             speed = DashboardCharts.Speed(steps);
-            weight = DashboardCharts.Weight(steps);
+            // Lots drawn over their real time span when the line has some in
+            // the poste; otherwise the hourly chart (running average fallback).
+            var end = start.AddHours(8);
+            weight = lotSpans is { Count: > 0 }
+                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end, live: now < end)
+                : DashboardCharts.Weight(steps);
         }
 
         return new ShiftSummaryViewModel
@@ -72,9 +79,9 @@ public class ShiftSummaryViewModel
             TeamName = string.IsNullOrEmpty(team) ? TeamScheduleService.NoTeam : team,
             IsRunning = isRunning,
             Kpis = kpis,
-            TrsTarget = trsTarget,
-            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsTarget),
-            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
+            TrsTarget = trsBand.Target,
+            TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
+            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent, weightBand),
             OnOffChart = onOff,
             SpeedChart = speed,
             WeightChart = weight,

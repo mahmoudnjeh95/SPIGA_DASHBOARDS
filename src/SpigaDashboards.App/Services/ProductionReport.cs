@@ -48,9 +48,10 @@ public sealed class ProductionReport
             .Select(m =>
             {
                 var machineLots = byMachine[m.MachineId].ToList();
-                var target = settings.TrsTarget(m.MachineId);
-                return new MachineReportRow(m.MachineId, m.MachineName, m.Sector, target,
-                    KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), target));
+                var band = settings.TrsBandFor(m.MachineId);
+                return new MachineReportRow(m.MachineId, m.MachineName, m.Sector, band.Target,
+                    KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band,
+                        settings.WeightBandFor(m.MachineId)));
             })
             .ToList();
 
@@ -73,13 +74,14 @@ public sealed class ProductionReport
             .Select(g => new GroupReportRow(StepLabel(g.Key, grain), KpiCalculator.Summarize(g.Lots, KpiCalculator.AvailabilityPercent(g.Lots))))
             .ToList();
 
-        var trsTarget = machineRows.Count > 0 ? machineRows.Average(m => m.TrsTarget) : AppSettings.DefaultTrsTarget;
+        var trsBand = TrsBand.Average(machineRows.Select(m => settings.TrsBandFor(m.MachineId)).ToList());
+        var trsTarget = trsBand.Target;
         return new ProductionReport
         {
             From = from,
             To = to,
             FilterLabel = filterLabel,
-            Summary = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsTarget),
+            Summary = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand),
             TrsTarget = trsTarget,
             Machines = machineRows,
             Weights = weightRows,

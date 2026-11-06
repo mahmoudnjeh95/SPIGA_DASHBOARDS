@@ -5,7 +5,8 @@
              xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels.Planning">
 
     <!-- Pannes tab (PannesViewModel): the stops the counter detected, newest
-         first; pick one, give it a cause, save; the next one comes up. -->
+         first; pick one, give it a cause, save; the next one comes up. Tick
+         several to give them one cause together. -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -32,7 +33,7 @@
                 <TextBlock Text="PANNES &amp; ARRÊTS" Style="{StaticResource Eyebrow}" Foreground="#E66767"/>
                 <TextBlock Text="Qualifier les arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
                 <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
-                           Text="Les arrêts sont détectés par le compteur de chaque ligne : la durée est déjà exacte, il ne reste qu'à donner la cause."/>
+                           Text="Les arrêts sont détectés par le compteur de chaque ligne : la durée est déjà exacte, il ne reste qu'à donner la cause."/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                 <Border Style="{StaticResource SegTrack}">
@@ -47,7 +48,9 @@
                 </Border>
                 <ComboBox Style="{StaticResource DarkComboBox}" Width="190" Margin="10,0,0,0" FontSize="14" VerticalContentAlignment="Center"
                           ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}"/>
-                <CheckBox Content="Seulement sans cause" IsChecked="{Binding OnlyUnqualified}" Margin="14,0,0,0" VerticalAlignment="Center"
+                <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="8,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                          ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
+                <CheckBox Content="Sans cause uniquement" IsChecked="{Binding OnlyUnqualified}" Margin="14,0,0,0" VerticalAlignment="Center"
                           FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"/>
                 <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>
                 <Button Content="+ Déclarer une panne" Style="{StaticResource AccentBarButton}" Margin="8,0,0,0" Command="{Binding StartManualCommand}"/>
@@ -68,7 +71,9 @@
                 </Border>
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding BannerTitle}" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                    <TextBlock Text="{Binding BannerDetail}" Style="{StaticResource Small}" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding BannerDetail}" Style="{StaticResource Small}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding BannerMicro}" Style="{StaticResource Small}" Margin="0,2,0,0"
+                               Visibility="{Binding HasBannerMicro, Converter={StaticResource BoolToVisibility}}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                     <DockPanel>
@@ -90,7 +95,7 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="430"/>
+                <ColumnDefinition Width="490"/>
                 <ColumnDefinition Width="18"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
@@ -103,9 +108,16 @@
                 </Grid.RowDefinitions>
                 <Border Style="{StaticResource Card}" Padding="0">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="18,14,18,10">
-                            <TextBlock DockPanel.Dock="Right" Text="plus récent en premier" Style="{StaticResource Small}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Arrêts détectés" Style="{StaticResource H2}"/>
+                        <DockPanel DockPanel.Dock="Top" Margin="18,12,14,8">
+                            <Button DockPanel.Dock="Right" Content="Tout cocher" Style="{StaticResource SuggestChip}" Margin="0" Command="{Binding CheckAllCommand}"
+                                    ToolTip="Cocher tous les arrêts sans cause, pour leur donner la même cause"
+                                    Visibility="{Binding IsBulk, Converter={StaticResource InverseBoolToVisibility}}"/>
+                            <Button DockPanel.Dock="Right" Content="{Binding CheckedCount}" ContentStringFormat="Décocher ({0})" Style="{StaticResource SuggestChip}" Margin="0"
+                                    Command="{Binding ClearChecksCommand}" Visibility="{Binding IsBulk, Converter={StaticResource BoolToVisibility}}"/>
+                            <StackPanel>
+                                <TextBlock Text="Arrêts détectés" Style="{StaticResource H2}"/>
+                                <TextBlock Text="Cochez-en plusieurs pour leur donner une même cause" Style="{StaticResource Small}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
                         </DockPanel>
                         <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource CardBorderBrush}"/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -115,28 +127,33 @@
                                         <Button Style="{StaticResource Bare}" CommandParameter="{Binding}"
                                                 Command="{Binding DataContext.SelectRowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <Border BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,0,0,1">
-                                            <Border x:Name="Row" Padding="15,12" BorderThickness="3,0,0,0" BorderBrush="Transparent" Background="Transparent">
+                                            <Border x:Name="Row" Padding="10,10,15,10" BorderThickness="3,0,0,0" BorderBrush="Transparent" Background="Transparent">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="100"/>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <Border Style="{StaticResource Pill}" CornerRadius="8" Padding="8,5" MinWidth="58">
-                                                        <TextBlock Text="{Binding MachineName}" Style="{StaticResource Mono}" FontSize="13" HorizontalAlignment="Center"/>
+                                                    <CheckBox IsChecked="{Binding IsChecked}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                              ToolTip="Cocher pour qualifier plusieurs arrêts ensemble" AutomationProperties.Name="Cocher"/>
+                                                    <Border Grid.Column="1" Style="{StaticResource Pill}" CornerRadius="8" Padding="6,5" ToolTip="{Binding MachineName}">
+                                                        <TextBlock Text="{Binding MachineName}" Style="{StaticResource Mono}" FontSize="12" HorizontalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"/>
                                                     </Border>
-                                                    <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                                    <StackPanel Grid.Column="2" Margin="10,0,8,0" VerticalAlignment="Center">
                                                         <TextBlock FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource PrimaryTextBrush}">
                                                             <Run Text="{Binding DayText, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding FromText, Mode=OneWay}"/><Run Text=" → "/><Run Text="{Binding ToText, Mode=OneWay}"/>
                                                         </TextBlock>
-                                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <DockPanel Margin="0,3,0,0">
                                                             <Ellipse Width="7" Height="7" Fill="{Binding CauseBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                                            <TextBlock Text="{Binding CauseLabel}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis" MaxWidth="170"/>
-                                                            <TextBlock Text="  ·  " Style="{StaticResource Small}"/>
-                                                            <TextBlock Text="{Binding PosteText}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"/>
-                                                        </StackPanel>
+                                                            <TextBlock Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"
+                                                                       ToolTip="{Binding PosteText}">
+                                                                <Run Text="{Binding CauseLabel, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding PosteText, Mode=OneWay}"/>
+                                                            </TextBlock>
+                                                        </DockPanel>
                                                     </StackPanel>
-                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                    <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                         <TextBlock Text="{Binding DurationText}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right"
                                                                    Foreground="{DynamicResource PrimaryTextBrush}"/>
                                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
@@ -202,12 +219,28 @@
                     <TextBlock Text="Choisissez un arrêt dans la liste, ou déclarez une panne." Style="{StaticResource Caption}"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}"/>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <!-- Actions: always in view under the form -->
+                    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource CardBorderBrush}" BorderThickness="0,1,0,0" Padding="22,12">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Style="{StaticResource AccentBarButton}" Padding="22,10" FontSize="14"
+                                    Content="{Binding SaveText}" Command="{Binding SaveCommand}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Retirer la cause" Style="{StaticResource BarButton}" Command="{Binding DeleteCommand}"
+                                        Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Content="Annuler" Style="{StaticResource BarButton}" Command="{Binding CancelFormCommand}"
+                                        Visibility="{Binding IsManualMode, Converter={StaticResource BoolToVisibility}}"/>
+                                <Button Content="Décocher" Style="{StaticResource BarButton}" Command="{Binding ClearChecksCommand}"
+                                        Visibility="{Binding IsBulk, Converter={StaticResource BoolToVisibility}}"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="22,20">
                             <!-- Header -->
                             <DockPanel>
                                 <Border DockPanel.Dock="Right" Background="#1F2ECC71" CornerRadius="12" Padding="10,5" VerticalAlignment="Top"
-                                        Visibility="{Binding IsManualMode, Converter={StaticResource InverseBoolToVisibility}}">
+                                        Visibility="{Binding ShowTimeline, Converter={StaticResource BoolToVisibility}}">
                                     <StackPanel Orientation="Horizontal">
                                         <Path Data="M0,5 L4,9 L12,0" Stroke="{DynamicResource SuccessBrush}" StrokeThickness="2" Width="12" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                         <TextBlock Text="Durée mesurée par le compteur" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource SuccessBrush}"/>
@@ -220,7 +253,7 @@
                             </DockPanel>
 
                             <!-- Where the stop sits in its poste -->
-                            <StackPanel Margin="0,16,0,0" Visibility="{Binding IsManualMode, Converter={StaticResource InverseBoolToVisibility}}">
+                            <StackPanel Margin="0,16,0,0" Visibility="{Binding ShowTimeline, Converter={StaticResource BoolToVisibility}}">
                                 <Grid Height="26">
                                     <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="6"/>
                                     <views:TimelinePanel ClipToBounds="True">
@@ -354,6 +387,29 @@
                             <TextBox Style="{StaticResource Input}" Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Description" MinHeight="74"
                                      AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" Padding="10,8"/>
 
+                            <!-- Expected return: shown on the TV ("Retour prévu le …"); a planned
+                                 stop stays out of the TRS until then. Applies to the whole stop
+                                 (every poste / team it covers). -->
+                            <TextBlock Text="Retour prévu (panne ou arrêt planifié, facultatif)" Style="{StaticResource FieldLabel}" Margin="0,16,0,5"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <DatePicker SelectedDate="{Binding ExpectedDate}" Height="40" VerticalContentAlignment="Center"
+                                            AutomationProperties.Name="Date de retour prévu"/>
+                                <TextBox Grid.Column="2" Style="{StaticResource Input}" Text="{Binding ExpectedTime, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.Name="Heure de retour prévu" ToolTip="HH:mm"/>
+                                <Button Grid.Column="4" Content="Effacer" Style="{StaticResource SuggestChip}" VerticalAlignment="Center"
+                                        Command="{Binding ClearExpectedCommand}"/>
+                            </Grid>
+                            <TextBlock Text="Donné à tout l'arrêt (chaque poste / équipe qu'il couvre). Si la ligne repart avant, l'arrêt se termine à la reprise."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
                             <!-- Repeat failure -->
                             <Border Margin="0,16,0,0" Padding="14,12" CornerRadius="12" Background="#1AFAB219" BorderBrush="#66FAB219" BorderThickness="1"
                                     Visibility="{Binding HasRepeatWarning, Converter={StaticResource BoolToVisibility}}">
@@ -365,20 +421,9 @@
                                 </DockPanel>
                             </Border>
 
-                            <!-- Actions -->
-                            <Border Height="1" Background="{DynamicResource CardBorderBrush}" Margin="0,18,0,14"/>
-                            <DockPanel>
-                                <Button DockPanel.Dock="Right" Style="{StaticResource AccentBarButton}" Padding="22,11" FontSize="14"
-                                        Content="{Binding SaveText}" Command="{Binding SaveCommand}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Content="Retirer la cause" Style="{StaticResource BarButton}" Command="{Binding DeleteCommand}"
-                                            Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"/>
-                                    <Button Content="Annuler" Style="{StaticResource BarButton}" Command="{Binding CancelFormCommand}"
-                                            Visibility="{Binding IsManualMode, Converter={StaticResource BoolToVisibility}}"/>
-                                </StackPanel>
-                            </DockPanel>
                         </StackPanel>
                     </ScrollViewer>
+                    </DockPanel>
                 </Grid>
             </Border>
         </Grid>

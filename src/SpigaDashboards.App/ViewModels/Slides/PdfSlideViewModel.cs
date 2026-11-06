@@ -19,7 +19,7 @@ public partial class PdfSlideViewModel : ObservableObject
 
         if (string.IsNullOrWhiteSpace(pdfPath) || !File.Exists(pdfPath))
         {
-            slide.ErrorMessage = "Document introuvable. Configurez le chemin dans Parametres.";
+            slide.ErrorMessage = "Document introuvable. Configurez le chemin dans Paramètres.";
             return slide;
         }
 
@@ -29,7 +29,7 @@ public partial class PdfSlideViewModel : ObservableObject
         // C# try/catch below can't reliably protect against.
         if (!LooksLikePdf(pdfPath))
         {
-            slide.ErrorMessage = "Le fichier configure ne semble pas etre un PDF valide.";
+            slide.ErrorMessage = "Le fichier configuré ne semble pas être un PDF valide.";
             return slide;
         }
 
@@ -51,7 +51,7 @@ public partial class PdfSlideViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            slide.ErrorMessage = $"Impossible d'afficher le document : {ex.Message}";
+            slide.ErrorMessage = $"Impossible d'afficher le document : {ex.Message}";
         }
 
         return slide;

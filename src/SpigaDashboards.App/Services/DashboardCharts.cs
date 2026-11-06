@@ -1,4 +1,5 @@
 using LiveChartsCore;
+using LiveChartsCore.Defaults;
 using LiveChartsCore.Measure;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -80,7 +81,7 @@ public static class DashboardCharts
                 DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
                 DataLabelsSize = LabelSize(steps.Count),
-                DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
             },
         };
         // Headroom above 100 % for the labels of full bars.
@@ -187,6 +188,205 @@ public static class DashboardCharts
             new[] { ChartHelpers.BuildYAxis(low, high, minStep: (high - low) / 2, labeler: v => $"{v:0} g") });
     }
 
+    // Flat segments of one line series over an hour axis: a null point (gap)
+    // between two segments more than 2 min apart, joined otherwise.
+    private sealed class Track
+    {
+        private const double GapHours = 2.0 / 60;
+        private double? _last;
+        public List<ObservablePoint> Points { get; } = new();
+
+        public void Add(double from, double to, double value)
+        {
+            if (_last is { } last && from - last > GapHours)
+                Points.Add(new ObservablePoint(last, null));
+            Points.Add(new ObservablePoint(from, value));
+            Points.Add(new ObservablePoint(to, value));
+            _last = to;
+        }
+    }
+
+    // Lines don't all close lots of the same size (PL03: 50 bags, one a
+    // minute; the others: 1000). Consecutive lots of one production are
+    // merged until they reach 1000 bags, so every line shows comparable
+    // steps; 1000-bag lots stay as they are. A production change closes the
+    // group early. Group average = bag-weighted average of its lots.
+    private const long LotGroupBags = 1000;
+
+    private static List<LotSpan> GroupLots(IReadOnlyList<LotSpan> lots, bool live)
+    {
+        var groups = new List<LotSpan>();
+        LotSpan? open = null;
+        double weightSum = 0;
+        foreach (var lot in lots.OrderBy(l => l.EndTime))
+        {
+            if (open != null && lot.ProductionId != open.ProductionId)
+            {
+                groups.Add(open);
+                open = null;
+            }
+            if (open == null)
+            {
+                open = new LotSpan { ProductionId = lot.ProductionId, StartTime = lot.StartTime };
+                weightSum = 0;
+            }
+            if (lot.StartTime < open.StartTime)
+                open.StartTime = lot.StartTime;
+            open.EndTime = lot.EndTime;
+            open.Bags += lot.Bags;
+            weightSum += lot.Average * lot.Bags;
+            open.Average = weightSum / open.Bags;
+            open.Target = lot.Target;
+            if (open.Bags >= LotGroupBags)
+            {
+                groups.Add(open);
+                open = null;
+            }
+        }
+        if (open != null && !live)
+            groups.Add(open);
+        return groups;
+    }
+
+    // Net average weight vs target over time: a smooth curve through one
+    // point per Stiavelli lot, at the middle of its span from its first to
+    // its last bag (instead of the whole lot counted in the hour it ends in).
+    // X = hours since start, labelled with the clock hour like the hourly
+    // charts. Lots are clipped to [start, end); the lot in progress isn't in
+    // lotto yet, so the line stops at the last closed lot. Values printed at
+    // each lot's middle while they stay readable. Stops aren't marked: they
+    // have their own panel and pop-up (a lot interrupted by a stop still has
+    // a real average, of the bags weighed before and after it).
+    // live = poste in progress: the last group still below 1000 bags is
+    // hidden, like a lot in progress on the 1000-bag lines.
+    public static ChartParts WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end, bool live)
+    {
+        var hours = Math.Max(1, (end - start).TotalHours);
+        var spans = GroupLots(lots, live)
+            .Select(l => (Lot: l,
+                From: Math.Max(0, (l.StartTime - start).TotalHours),
+                To: Math.Min(hours, (l.EndTime - start).TotalHours),
+                Avg: Math.Round(l.Average, 1)))
+            .Where(s => s.To > s.From)
+            .OrderBy(s => s.From)
+            .ToList();
+        if (spans.Count == 0)
+            return ChartParts.Empty();
+
+        // Smooth curve through the lot middles; two lots more than 2 min
+        // apart aren't joined (null point = gap).
+        const double gapHours = 2.0 / 60;
+        var curve = new List<ObservablePoint>();
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (i > 0 && spans[i].From - spans[i - 1].To > gapHours)
+                curve.Add(new ObservablePoint(curve[^1].X, null));
+            curve.Add(new ObservablePoint((spans[i].From + spans[i].To) / 2, spans[i].Avg));
+        }
+
+        // The target stays flat: it only moves on a production change.
+        var target = new Track();
+        foreach (var s in spans)
+            target.Add(s.From, s.To, s.Lot.Target);
+
+        // Readable labels on the TV: a value only when its lot's middle is far
+        // enough from the last labelled one (about a label's width), none at
+        // all for lines with tiny lots (PL03: 50 bags, one a minute).
+        var showLabels = spans.Count <= 3 * hours;
+        var minLabelGap = 0.12 * hours;
+        var labelled = new List<ObservablePoint>();
+        var unlabelled = new List<ObservablePoint>();
+        double? lastLabel = null;
+        foreach (var point in curve.Where(p => p.Y != null))
+        {
+            var dot = new ObservablePoint(point.X, point.Y);
+            if (showLabels && (lastLabel is not { } l || dot.X - l >= minLabelGap))
+            {
+                labelled.Add(dot);
+                lastLabel = dot.X;
+            }
+            else
+                unlabelled.Add(dot);
+        }
+
+        var series = new ISeries[]
+        {
+            new LineSeries<ObservablePoint>
+            {
+                Values = curve,
+                Name = "Poids moyen (lot)",
+                Stroke = new SolidColorPaint(Green, 3),
+                Fill = null,
+                GeometrySize = 0,
+                LineSmoothness = 0.6,
+            },
+            new LineSeries<ObservablePoint>
+            {
+                Values = target.Points,
+                Name = "Cible",
+                Stroke = new SolidColorPaint(Grey, 2),
+                Fill = null,
+                GeometrySize = 0,
+                LineSmoothness = 0,
+            },
+            // One dot per lot at its middle, the spaced ones carrying the value.
+            new ScatterSeries<ObservablePoint>
+            {
+                Values = labelled,
+                Name = "Lot",
+                Fill = new SolidColorPaint(Green),
+                Stroke = null,
+                GeometrySize = 9,
+                IsVisibleAtLegend = false,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = 13,
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French),
+            },
+            new ScatterSeries<ObservablePoint>
+            {
+                Values = unlabelled,
+                Name = "Lot",
+                Fill = new SolidColorPaint(Green),
+                Stroke = null,
+                GeometrySize = showLabels ? 9 : 5,
+                IsVisibleAtLegend = false,
+            },
+        };
+
+        // Room above the highest lot for its value.
+        var weights = spans.SelectMany(s => new[] { s.Avg, s.Lot.Target }).ToList();
+        var pad = Math.Max(5, (weights.Max() - weights.Min()) * 0.2);
+        var low = Math.Max(0, Math.Floor(weights.Min() - pad));
+        var high = Math.Ceiling(weights.Max() + 2 * pad);
+        var xAxis = new Axis
+        {
+            LabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+            TextSize = ChartHelpers.AxisTextSize,
+            MinLimit = 0,
+            MaxLimit = hours,
+            MinStep = 1,
+            ForceStepToMin = true,
+            Labeler = v => start.AddHours(Math.Round(v)).ToString("HH"),
+        };
+        return new ChartParts(series,
+            new[] { xAxis },
+            new[] { ChartHelpers.BuildYAxis(low, high, minStep: (high - low) / 2, labeler: v => $"{v:0} g") });
+    }
+
+    // One bar per machine / team: every bar keeps its name (machine names
+    // are longer than the line codes and LiveCharts drops every other label
+    // once they would touch), smaller from 7 bars on (Conditionnement 2: 8).
+    private static Axis NameAxis(IReadOnlyCollection<string> labels)
+    {
+        var axis = ChartHelpers.BuildXAxis(labels);
+        axis.MinStep = 1;
+        axis.ForceStepToMin = true;
+        if (labels.Count > 6)
+            axis.TextSize = 13;
+        return axis;
+    }
+
     // TRS per step as columns, with the machine's target as a line.
     public static ChartParts Trs(IReadOnlyList<Step> steps, double target)
     {
@@ -210,7 +410,7 @@ public static class DashboardCharts
             new LineSeries<double>
             {
                 Values = steps.Select(_ => target).ToArray(),
-                Name = $"Cible {target:0} %",
+                Name = $"Cible {target:0} %",
                 Stroke = new SolidColorPaint(Green, 2),
                 Fill = null,
                 GeometrySize = 0,
@@ -279,7 +479,7 @@ public static class DashboardCharts
             new LineSeries<double?>
             {
                 Values = values,
-                Name = "Ecart (%)",
+                Name = "Écart (%)",
                 Stroke = new SolidColorPaint(Red, 3),
                 GeometryStroke = new SolidColorPaint(Red, 2),
                 GeometrySize = 8,
@@ -366,7 +566,7 @@ public static class DashboardCharts
                     MaxBarWidth = 60,
                 },
             },
-            new[] { ChartHelpers.BuildXAxis(labels) },
+            new[] { NameAxis(labels) },
             new[] { axis });
     }
 
@@ -389,7 +589,7 @@ public static class DashboardCharts
                 DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
                 DataLabelsSize = ChartHelpers.DataLabelTextSize,
-                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French) + " %",
+                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("0.0", French) + " %",
                 MaxBarWidth = 60,
             },
         };
@@ -398,13 +598,13 @@ public static class DashboardCharts
             series.Add(new LineSeries<double>
             {
                 Values = labels.Select(_ => t).ToArray(),
-                Name = $"Cible {t:0} %",
+                Name = $"Cible {t:0} %",
                 Stroke = new SolidColorPaint(Green, 2),
                 Fill = null,
                 GeometrySize = 0,
                 DataLabelsPaint = null,
             });
         }
-        return new ChartParts(series.ToArray(), new[] { ChartHelpers.BuildXAxis(labels) }, new[] { axis });
+        return new ChartParts(series.ToArray(), new[] { NameAxis(labels) }, new[] { axis });
     }
 }

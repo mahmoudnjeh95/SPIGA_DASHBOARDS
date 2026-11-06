@@ -237,8 +237,15 @@
         <GradientStop Color="#E09A0B" Offset="0.5"/>
         <GradientStop Color="#E09A0B" Offset="1"/>
     </LinearGradientBrush>
+    <LinearGradientBrush x:Key="StopStripes" StartPoint="0,0" EndPoint="8,8" MappingMode="Absolute" SpreadMethod="Repeat">
+        <GradientStop Color="#9AA4B2" Offset="0"/>
+        <GradientStop Color="#9AA4B2" Offset="0.5"/>
+        <GradientStop Color="#7F8C8D" Offset="0.5"/>
+        <GradientStop Color="#7F8C8D" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="StopInk" Color="#111827"/>
     <SolidColorBrush x:Key="PanneBrush" Color="#D03B3B"/>
-    <SolidColorBrush x:Key="LateFill" Color="#2ED03B3B"/>
-    <SolidColorBrush x:Key="LateStroke" Color="#EC835A"/>
+    <SolidColorBrush x:Key="LateFill" Color="#59D03B3B"/>
+    <SolidColorBrush x:Key="LateStroke" Color="#D03B3B"/>
     <SolidColorBrush x:Key="MaintInk" Color="#1A1406"/>
 </ResourceDictionary>

@@ -91,7 +91,7 @@ public partial class HistoryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Impossible de charger les machines : {ex.Message}";
+            StatusMessage = $"Impossible de charger les machines : {ex.Message}";
         }
     }
 
@@ -107,7 +107,7 @@ public partial class HistoryViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Echec de la recherche : {ex.Message}";
+            StatusMessage = $"Échec de la recherche : {ex.Message}";
         }
         finally
         {
@@ -140,7 +140,7 @@ public partial class HistoryViewModel : ObservableObject
         var filter = BuildFilter();
         var machines = _machines.Where(filter.IncludesMachine).ToList();
 
-        StatusMessage = "Recherche en cours...";
+        StatusMessage = "Recherche en cours…";
         var lots = filter.Apply(
             await _repository.GetLotsForMachinesAsync(machines.Select(m => m.MachineId).ToList(), from, to),
             _teamSchedule);
@@ -167,7 +167,7 @@ public partial class HistoryViewModel : ObservableObject
                     TareGrams = _settings.FindTare(l.MachineId, l.TargetNetWeight),
                     AvgWeight = avg is { } a ? Math.Round(a, 1) : null,
                     DeviationGrams = k.WeightDeviationGrams,
-                    ProductionKg = Math.Round(l.TotalBags * (avg ?? l.TargetNetWeight) / 1000.0, 1),
+                    ProductionKg = Math.Round(l.TotalBags * l.TargetNetWeight / 1000.0, 1),
                     TotalBags = l.TotalBags,
                     BagsInTolerance = l.BagsInTolerance,
                     BagsOverTolerance = l.BagsOverTolerance,
@@ -187,7 +187,7 @@ public partial class HistoryViewModel : ObservableObject
 
         _report = ProductionReport.Build(lots, machines, rowList, _teamSchedule, _settings, from, to, filter.Describe());
         Summary = _report.Summary;
-        StatusMessage = $"{rowList.Count} ligne(s) trouvee(s) (une par machine, heure et production).";
+        StatusMessage = $"{rowList.Count} ligne(s) trouvée(s) (une par machine, heure et production).";
     }
 
     [RelayCommand]
@@ -200,7 +200,7 @@ public partial class HistoryViewModel : ObservableObject
     {
         if (_report == null || Results.Count == 0)
         {
-            StatusMessage = "Aucun resultat a exporter : lancez d'abord une recherche.";
+            StatusMessage = "Aucun résultat à exporter : lancez d'abord une recherche.";
             return;
         }
 
@@ -215,12 +215,12 @@ public partial class HistoryViewModel : ObservableObject
         try
         {
             export(_report, dialog.FileName);
-            StatusMessage = $"Exporte : {dialog.FileName}";
+            StatusMessage = $"Exporté : {dialog.FileName}";
         }
         catch (Exception ex)
         {
-            AppLogger.Log($"Echec de l'export {extension} : {ex}");
-            StatusMessage = $"Echec de l'export : {ex.Message}";
+            AppLogger.Log($"Échec de l'export {extension} : {ex}");
+            StatusMessage = $"Échec de l'export : {ex.Message}";
         }
     }
 }

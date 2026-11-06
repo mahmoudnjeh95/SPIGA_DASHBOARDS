@@ -79,7 +79,13 @@
             </StackPanel>
             <StackPanel Grid.Column="2" Margin="0,0,8,0">
                 <TextBlock Text="Secteur" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding SectorOptions}" SelectedItem="{Binding SelectedSector}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding SectorOptions}" SelectedItem="{Binding SelectedSector}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Converter={StaticResource SectorLabel}}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
             <StackPanel Grid.Column="3" Margin="0,0,8,0">
                 <TextBlock Text="Machine" Style="{StaticResource FieldLabel}"/>
@@ -91,7 +97,7 @@
                 <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding ShiftOptions}" SelectedItem="{Binding SelectedShift}"/>
             </StackPanel>
             <StackPanel Grid.Column="5" Margin="0,0,8,0">
-                <TextBlock Text="Equipe" Style="{StaticResource FieldLabel}"/>
+                <TextBlock Text="Équipe" Style="{StaticResource FieldLabel}"/>
                 <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
             </StackPanel>
             <StackPanel Grid.Column="6" Margin="0,0,8,0">
@@ -119,7 +125,7 @@
                 <TextBlock Text="{Binding Summary.TotalBags, StringFormat={}{0:N0}}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Ecart de poids" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="Écart de poids" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Text="{Binding Summary.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
@@ -134,11 +140,11 @@
                 </TextBlock>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Taux conformite" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="Taux de conformité" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Text="{Binding Summary.QualityPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Sous / sur tolerance" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="Sous / sur tolérance" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Style="{StaticResource SummaryValue}">
                     <Run Text="{Binding Summary.BagsUnderTolerance, StringFormat={}{0:N0}, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{DynamicResource WarningBrush}"/>
                     <Run Text="/"/>
@@ -156,21 +162,21 @@
                 <DataGridTextColumn Header="Date/Heure" Binding="{Binding StartTime, StringFormat={}{0:dd/MM/yyyy HH:mm}}" Width="125"/>
                 <DataGridTextColumn Header="Machine" Binding="{Binding MachineName}" Width="120"/>
                 <DataGridTextColumn Header="Poste" Binding="{Binding ShiftName}" Width="80"/>
-                <DataGridTextColumn Header="Equipe" Binding="{Binding Team}" Width="80"/>
+                <DataGridTextColumn Header="Équipe" Binding="{Binding Team}" Width="80"/>
                 <DataGridTextColumn Header="Produit" Binding="{Binding ProductName}" Width="120"/>
                 <DataGridTextColumn Header="Cible (g)" Binding="{Binding TargetNetWeight, StringFormat={}{0:N0}}" Width="65"/>
                 <DataGridTextColumn Header="Sachet (g)" Binding="{Binding TareGrams, StringFormat={}{0:0.#}}" Width="65"/>
-                <DataGridTextColumn Header="Moyen net (g)" Binding="{Binding AvgWeight, StringFormat={}{0:N1}}" Width="90"/>
-                <DataGridTextColumn Header="Ecart (g)" Binding="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0}}" Width="65"/>
+                <DataGridTextColumn Header="Net moyen (g)" Binding="{Binding AvgWeight, StringFormat={}{0:N1}}" Width="90"/>
+                <DataGridTextColumn Header="Écart (g)" Binding="{Binding DeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0}}" Width="65"/>
                 <DataGridTextColumn Header="Sacs" Binding="{Binding TotalBags, StringFormat={}{0:N0}}" Width="60"/>
                 <DataGridTextColumn Header="Prod. (kg)" Binding="{Binding ProductionKg, StringFormat={}{0:N1}}" Width="75"/>
-                <DataGridTextColumn Header="Vit. moy" Binding="{Binding SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Width="60"/>
+                <DataGridTextColumn Header="Vit. moy." Binding="{Binding SpeedBagsPerMinute, StringFormat={}{0:0.0}}" Width="60"/>
                 <DataGridTextColumn Header="Vit. max" Binding="{Binding MaxSpeedBagsPerMinute, StringFormat={}{0:0.0}}" Width="60"/>
                 <DataGridTextColumn Header="Dispo." Binding="{Binding AvailabilityPercent, StringFormat={}{0:0}%}" Width="55"/>
                 <DataGridTextColumn Header="TRS" Binding="{Binding TrsPercent, StringFormat={}{0:0}%}" Width="50"/>
                 <DataGridTextColumn Header="Conformes" Binding="{Binding BagsInTolerance, StringFormat={}{0:N0}}" Width="75"/>
-                <DataGridTextColumn Header="Eleves" Binding="{Binding BagsOverTolerance, StringFormat={}{0:N0}}" Width="55"/>
-                <DataGridTextColumn Header="Faibles" Binding="{Binding BagsUnderTolerance, StringFormat={}{0:N0}}" Width="55"/>
+                <DataGridTextColumn Header="Sur tol." Binding="{Binding BagsOverTolerance, StringFormat={}{0:N0}}" Width="62"/>
+                <DataGridTextColumn Header="Sous tol." Binding="{Binding BagsUnderTolerance, StringFormat={}{0:N0}}" Width="66"/>
                 <DataGridTextColumn Header="OK" Binding="{Binding ConformLabel}" Width="40"/>
             </DataGrid.Columns>
         </DataGrid>
@@ -179,8 +185,8 @@
         <views:PastaLoader Grid.Row="3" IsActive="{Binding IsBusy}" Text="Recherche en cours…" Background="{DynamicResource LoadingVeilBrush}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="Exporter rapport Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"/>
-            <Button Content="Exporter rapport PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"/>
+            <Button Content="Exporter le rapport Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"/>
+            <Button Content="Exporter le rapport PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"/>
             <Button Content="Fermer" Style="{StaticResource PrimaryButton}" Click="CloseButton_Click"/>
         </StackPanel>
     </Grid>
