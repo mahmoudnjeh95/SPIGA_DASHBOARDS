@@ -148,6 +148,13 @@
                 <TextBlock Text="Fréquence d'actualisation des données (minutes)" Style="{StaticResource FieldLabel}"/>
                 <TextBox Text="{Binding DataRefreshIntervalMinutes, UpdateSourceTrigger=PropertyChanged}"/>
 
+                <TextBlock Text="Alerte des arrêts" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
+                <CheckBox IsChecked="{Binding ShowStopAlerts}" Content="Afficher l'alerte des arrêts non qualifiés (fenêtre rouge) sur ce PC"/>
+                <CheckBox IsChecked="{Binding ResetStopAlertPosition}" Content="Remettre l'alerte à sa place (en haut à droite)" Margin="0,4,0,0"
+                          IsEnabled="{Binding ShowStopAlerts}"/>
+                <TextBlock Text="Propre à ce PC (l'écran TV peut la garder, un bureau la couper). L'alerte se déplace à la souris et garde sa place ; elle se ferme seule après 20 s ou avec sa croix, et revient pour un nouvel arrêt ou toutes les 30 min tant qu'un arrêt reste sans cause."
+                           Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
                 <TextBlock Text="Diapositives : ordre, affichage et durée" Style="{StaticResource FieldLabel}" Margin="0,12,0,2"/>
                 <TextBlock Text="Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine décochée dans la liste des machines n'apparaît nulle part, quel que soit ce réglage ; une nouvelle machine prend sa place par défaut."
                            Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>

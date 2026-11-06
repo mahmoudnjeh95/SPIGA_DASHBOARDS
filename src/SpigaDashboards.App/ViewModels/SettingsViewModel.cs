@@ -39,6 +39,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string sharedSettingsMessage = "";
 
     [ObservableProperty] private int slideDurationSeconds;
+    [ObservableProperty] private bool showStopAlerts;
+    // "Replacer" ticked: the pop-up goes back to the top right on save.
+    [ObservableProperty] private bool resetStopAlertPosition;
     [ObservableProperty] private int dataRefreshIntervalMinutes;
 
     [ObservableProperty] private string team1Name = "";
@@ -95,6 +98,7 @@ public partial class SettingsViewModel : ObservableObject
         // reused unless the user types a new one (see Save()).
 
         SlideDurationSeconds = settings.SlideDurationSeconds;
+        ShowStopAlerts = settings.ShowStopAlerts;
         DataRefreshIntervalMinutes = settings.DataRefreshIntervalMinutes;
 
         // TeamOptions must exist before the TeamXName assignments below: setting
@@ -510,6 +514,12 @@ public partial class SettingsViewModel : ObservableObject
         _settings.HiddenMachineIds = Machines.Where(m => !m.IsVisible).Select(m => m.MachineId).ToList();
 
         _settings.SlideDurationSeconds = Math.Max(1, SlideDurationSeconds);
+        _settings.ShowStopAlerts = ShowStopAlerts;
+        if (ResetStopAlertPosition)
+        {
+            _settings.StopAlertOffsetX = 0;
+            _settings.StopAlertOffsetY = 0;
+        }
         _settings.DataRefreshIntervalMinutes = Math.Max(1, DataRefreshIntervalMinutes);
 
         _settings.TeamRotation.TeamNames = new[] { Team1Name, Team2Name, Team3Name, Team4Name };

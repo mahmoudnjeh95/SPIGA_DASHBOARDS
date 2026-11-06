@@ -16,6 +16,9 @@ public partial class StopRow : ObservableObject
     public string MachineName { get; init; } = "";
     public DateTime Start { get; init; }
     public DateTime End { get; init; }
+    // Start of the whole stop: the rows of one long stop (one per poste /
+    // team) share it, and share their cause.
+    public DateTime RunStart { get; init; }
     public DateTime ShiftDate { get; init; }
     public int ShiftId { get; init; }
     public string Team { get; init; } = "";
@@ -78,6 +81,9 @@ public partial class PannesViewModel : ObservableObject
     private readonly PlanningContext _ctx;
     private bool _refreshAgain;
     private List<StopQualification> _recent30 = new();
+    // Every row of the last refresh, before the team / "sans cause" filters:
+    // a cause saved on one poste of a long stop goes to all of them.
+    private List<StopRow> _allRows = new();
 
     public event Action<string, string>? PreventiveRequested;
 
@@ -142,6 +148,9 @@ public partial class PannesViewModel : ObservableObject
     [ObservableProperty] private DateTime? manualDate = DateTime.Today;
     [ObservableProperty] private string manualFrom = "";
     [ObservableProperty] private string manualTo = "";
+    // Expected return of a panne / planned stop (date + HH:mm), optional.
+    [ObservableProperty] private DateTime? expectedDate;
+    [ObservableProperty] private string expectedTime = "";
 
     // Where the stop sits in its poste (0..1), for the little timeline.
     [ObservableProperty] private double posteStartFrac;
@@ -262,6 +271,8 @@ public partial class PannesViewModel : ObservableObject
         Component = q?.Component ?? "";
         Technician = q?.Technician ?? "";
         Comment = q?.Comment ?? "";
+        ExpectedDate = q?.ExpectedEnd?.Date;
+        ExpectedTime = q?.ExpectedEnd?.ToString("HH:mm") ?? "";
 
         var posteStart = Postes.Of(newValue.Start).Start;
         PosteStartFrac = Math.Clamp((newValue.Start - posteStart).TotalMinutes / 480, 0, 1);
@@ -330,23 +341,25 @@ public partial class PannesViewModel : ObservableObject
                     used.Add(match.Id);
                 rows.Add(new StopRow
                 {
-                    MachineId = s.MachineId, MachineName = s.MachineName, Start = s.Start, End = s.End,
+                    MachineId = s.MachineId, MachineName = s.MachineName, Start = s.Start, End = s.End, RunStart = s.RunStart,
                     ShiftDate = s.ShiftDate, ShiftId = s.ShiftId, Team = s.Team, Minutes = s.NetMinutes,
-                    IsNoData = s.IsMostlyNoData, IsLive = (DateTime.Now - s.End).TotalMinutes < 3,
+                    IsNoData = s.IsMostlyNoData, IsLive = s.IsLive,
                     Qualification = match,
                 });
             }
+            await FollowLongStopsAsync(rows);
             foreach (var q in quals.Where(q => !used.Contains(q.Id)))
             {
                 rows.Add(new StopRow
                 {
-                    MachineId = q.MachineId, MachineName = _ctx.NameOf(q.MachineId), Start = q.StopStart, End = q.StopEnd,
+                    MachineId = q.MachineId, MachineName = _ctx.NameOf(q.MachineId), Start = q.StopStart, End = q.StopEnd, RunStart = q.StopStart,
                     ShiftDate = q.ShiftDate, ShiftId = q.ShiftId, Team = q.Team, Minutes = q.Minutes, Qualification = q,
                 });
             }
 
             // Every team's stops get their calendar cause; the list and the banner show the chosen team's.
             var auto = await QualifyFromCalendarAsync(rows, from, to);
+            _allRows = rows;
             if (SelectedTeam != AllTeams)
             {
                 rows = rows.Where(r => r.Team == SelectedTeam).ToList();
@@ -438,6 +451,87 @@ public partial class PannesViewModel : ObservableObject
         return count;
     }
 
+    // A long stop qualified on one of its postes: the postes it ran into
+    // since then get the same cause (a row each, for each team's figures),
+    // and a stop still going on keeps its end up to date.
+    private async Task FollowLongStopsAsync(List<StopRow> rows)
+    {
+        foreach (var row in rows.Where(r => r.Qualification == null))
+        {
+            var model = rows.FirstOrDefault(o => o.Qualification is { IsManual: false } && o.MachineId == row.MachineId
+                && o.RunStart == row.RunStart)?.Qualification;
+            if (model == null)
+                continue;
+            var q = new StopQualification
+            {
+                MachineId = row.MachineId, StopStart = row.Start, StopEnd = row.End, ShiftDate = row.ShiftDate,
+                ShiftId = row.ShiftId, Team = row.Team, CauseCode = model.CauseCode, Component = model.Component,
+                Technician = model.Technician, Comment = model.Comment, ExpectedEnd = model.ExpectedEnd,
+            };
+            await _ctx.Planning.SaveQualificationAsync(q);
+            row.Qualification = q;
+        }
+        foreach (var row in rows.Where(r => r.Qualification is { IsManual: false } q && r.End > q.StopEnd.AddMinutes(1)))
+        {
+            row.Qualification!.StopEnd = row.End;
+            await _ctx.Planning.SaveQualificationAsync(row.Qualification);
+        }
+    }
+
+    // The row and the other postes of the same stop.
+    private List<StopRow> WithSiblings(StopRow row)
+        => row.IsManual
+            ? new List<StopRow> { row }
+            : _allRows.Where(r => r.MachineId == row.MachineId && r.RunStart == row.RunStart && !r.IsManual)
+                .Append(row).Distinct().ToList();
+
+    // The form's cause on a qualification (new or existing).
+    private void ApplyForm(StopQualification q, DateTime? expected)
+    {
+        q.CauseCode = SelectedCauseCode!;
+        q.Component = string.IsNullOrWhiteSpace(Component) ? null : Component.Trim();
+        q.Technician = string.IsNullOrWhiteSpace(Technician) ? null : Technician.Trim();
+        q.Comment = string.IsNullOrWhiteSpace(Comment) ? null : Comment.Trim();
+        q.ExpectedEnd = expected;
+    }
+
+    private static StopQualification QualificationOf(StopRow row)
+    {
+        var q = row.Qualification ?? new StopQualification
+        {
+            MachineId = row.MachineId, StopStart = row.Start, StopEnd = row.End, ShiftDate = row.ShiftDate,
+            ShiftId = row.ShiftId, Team = row.Team,
+        };
+        // A stop still running when qualified: keep its latest end.
+        if (!row.IsManual)
+            q.StopEnd = row.End;
+        return q;
+    }
+
+    // Expected return from the form: none without a date, 06:00 without a time.
+    private bool TryReadExpected(out DateTime? expected)
+    {
+        expected = null;
+        if (ExpectedDate is not { } date)
+            return true;
+        if (string.IsNullOrWhiteSpace(ExpectedTime))
+        {
+            expected = date.Date.AddHours(6);
+            return true;
+        }
+        if (!TimeSpan.TryParse(ExpectedTime.Trim(), CultureInfo.InvariantCulture, out var time) || time < TimeSpan.Zero || time >= TimeSpan.FromDays(1))
+            return false;
+        expected = date.Date + time;
+        return true;
+    }
+
+    [RelayCommand]
+    private void ClearExpected()
+    {
+        ExpectedDate = null;
+        ExpectedTime = "";
+    }
+
     private static DateTime Min(DateTime a, DateTime b) => a < b ? a : b;
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
@@ -489,6 +583,8 @@ public partial class PannesViewModel : ObservableObject
     {
         SelectedCauseCode = null;
         Component = Technician = Comment = "";
+        ExpectedDate = null;
+        ExpectedTime = "";
         RepeatWarning = "";
     }
 
@@ -500,14 +596,20 @@ public partial class PannesViewModel : ObservableObject
             StatusMessage = "Choisissez une cause.";
             return;
         }
+        if (!TryReadExpected(out var expected))
+        {
+            StatusMessage = "Heure de retour prévu : format HH:mm (ex. 14:30).";
+            return;
+        }
 
         if (IsBulk)
         {
-            await SaveCheckedAsync();
+            await SaveCheckedAsync(expected);
             return;
         }
 
         StopQualification q;
+        var siblings = new List<StopRow>();
         if (IsManualMode)
         {
             var machine = _ctx.Machines.FirstOrDefault(m => m.MachineName == ManualMachine);
@@ -531,27 +633,29 @@ public partial class PannesViewModel : ObservableObject
         }
         else if (SelectedRow is { } row)
         {
-            q = row.Qualification ?? new StopQualification
-            {
-                MachineId = row.MachineId, StopStart = row.Start, StopEnd = row.End, ShiftDate = row.ShiftDate,
-                ShiftId = row.ShiftId, Team = row.Team,
-            };
-            // A stop still running when qualified: keep its latest end.
-            q.StopEnd = row.End;
+            q = QualificationOf(row);
+            siblings = WithSiblings(row).Where(r => r != row).ToList();
         }
         else
         {
             return;
         }
 
-        q.CauseCode = SelectedCauseCode!;
-        q.Component = string.IsNullOrWhiteSpace(Component) ? null : Component.Trim();
-        q.Technician = string.IsNullOrWhiteSpace(Technician) ? null : Technician.Trim();
-        q.Comment = string.IsNullOrWhiteSpace(Comment) ? null : Comment.Trim();
+        ApplyForm(q, expected);
 
         try
         {
             await _ctx.Planning.SaveQualificationAsync(q);
+            // The other postes of the same stop get the same cause.
+            foreach (var sibling in siblings)
+            {
+                var sq = QualificationOf(sibling);
+                ApplyForm(sq, expected);
+                await _ctx.Planning.SaveQualificationAsync(sq);
+                sibling.Qualification = sq;
+            }
+            if (siblings.Count > 0 || expected != null)
+                AppLogger.Log($"Cause donnée à {siblings.Count + 1} poste(s) du même arrêt, retour prévu {expected:g}");
             AppLogger.Log($"Panne qualifiée : {q.MachineId} {q.StopStart:g} {q.CauseCode} {q.Component}");
             var next = NextOpenRow();
             IsManualMode = false;
@@ -570,24 +674,18 @@ public partial class PannesViewModel : ObservableObject
     }
 
     // The cause of the form given to every ticked stop.
-    private async Task SaveCheckedAsync()
+    private async Task SaveCheckedAsync(DateTime? expected)
     {
         var rows = CheckedRows;
         try
         {
-            foreach (var row in rows)
+            // Each ticked stop, with the other postes of the same stop.
+            foreach (var row in rows.SelectMany(WithSiblings).Distinct().ToList())
             {
-                var q = row.Qualification ?? new StopQualification
-                {
-                    MachineId = row.MachineId, StopStart = row.Start, StopEnd = row.End, ShiftDate = row.ShiftDate,
-                    ShiftId = row.ShiftId, Team = row.Team,
-                };
-                q.StopEnd = row.End;
-                q.CauseCode = SelectedCauseCode!;
-                q.Component = string.IsNullOrWhiteSpace(Component) ? null : Component.Trim();
-                q.Technician = string.IsNullOrWhiteSpace(Technician) ? null : Technician.Trim();
-                q.Comment = string.IsNullOrWhiteSpace(Comment) ? null : Comment.Trim();
+                var q = QualificationOf(row);
+                ApplyForm(q, expected);
                 await _ctx.Planning.SaveQualificationAsync(q);
+                row.Qualification = q;
             }
             AppLogger.Log($"Pannes qualifiées en lot : {rows.Count} x {SelectedCauseCode}");
             var cause = StopCauses.Label(SelectedCauseCode);

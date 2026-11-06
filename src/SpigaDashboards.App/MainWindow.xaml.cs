@@ -36,6 +36,20 @@ public partial class MainWindow : Window
 
         DataContext = viewModel;
         KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+
+        // Stop pop-up: at its saved place each time it comes up (moved on the
+        // other window, or put back in Parametres), saved where it is dropped.
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsStopAlertShown) && viewModel.IsStopAlertShown)
+                StopAlert.SetOffset(_settings.StopAlertOffsetX, _settings.StopAlertOffsetY);
+        };
+        StopAlert.Moved += (x, y) =>
+        {
+            _settings.StopAlertOffsetX = x;
+            _settings.StopAlertOffsetY = y;
+            _settingsService.Save(_settings);
+        };
         Loaded += async (_, _) => await viewModel.InitializeAsync();
         // Back on the TV after a restart, if it was left open there.
         ContentRendered += (_, _) => { if (_settings.TvScreen.IsOpen) OpenTvWindow(activate: false); };

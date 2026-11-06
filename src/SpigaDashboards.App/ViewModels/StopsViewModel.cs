@@ -176,6 +176,11 @@ public partial class StopsViewModel : ObservableObject
             if (stop.Qualification != null)
                 used.Add(stop.Qualification.Id);
         }
+        // A long stop qualified on one of its postes: the others show the
+        // same cause (Pannes saves it for each of them when it next opens).
+        foreach (var stop in stops.Where(s => s.Qualification == null))
+            stop.Qualification = stops.FirstOrDefault(o => o.Qualification != null && o.MachineId == stop.MachineId
+                && o.RunStart == stop.RunStart)?.Qualification;
 
         var extra = quals.Where(q => !used.Contains(q.Id) && q.StopStart >= from && q.StopStart < to && q.StopEnd > q.StopStart)
             .Select(q => new ProductionStop

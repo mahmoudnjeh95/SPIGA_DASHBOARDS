@@ -387,6 +387,29 @@
                             <TextBox Style="{StaticResource Input}" Text="{Binding Comment, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Description" MinHeight="74"
                                      AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" Padding="10,8"/>
 
+                            <!-- Expected return: shown on the TV ("Retour prévu le …"); a planned
+                                 stop stays out of the TRS until then. Applies to the whole stop
+                                 (every poste / team it covers). -->
+                            <TextBlock Text="Retour prévu (panne ou arrêt planifié, facultatif)" Style="{StaticResource FieldLabel}" Margin="0,16,0,5"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <DatePicker SelectedDate="{Binding ExpectedDate}" Height="40" VerticalContentAlignment="Center"
+                                            AutomationProperties.Name="Date de retour prévu"/>
+                                <TextBox Grid.Column="2" Style="{StaticResource Input}" Text="{Binding ExpectedTime, UpdateSourceTrigger=PropertyChanged}"
+                                         AutomationProperties.Name="Heure de retour prévu" ToolTip="HH:mm"/>
+                                <Button Grid.Column="4" Content="Effacer" Style="{StaticResource SuggestChip}" VerticalAlignment="Center"
+                                        Command="{Binding ClearExpectedCommand}"/>
+                            </Grid>
+                            <TextBlock Text="Donné à tout l'arrêt (chaque poste / équipe qu'il couvre). Si la ligne repart avant, l'arrêt se termine à la reprise."
+                                       Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
                             <!-- Repeat failure -->
                             <Border Margin="0,16,0,0" Padding="14,12" CornerRadius="12" Background="#1AFAB219" BorderBrush="#66FAB219" BorderThickness="1"
                                     Visibility="{Binding HasRepeatWarning, Converter={StaticResource BoolToVisibility}}">

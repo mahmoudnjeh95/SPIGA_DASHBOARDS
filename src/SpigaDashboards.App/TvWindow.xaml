@@ -77,6 +77,9 @@
                     views:SlideMotion.Timer="{Binding RotationCycle}"/>
         </Border>
 
+        <!-- Stop pop-up: lines stopped with no cause yet (MainViewModel.StopAlerts). -->
+        <views:StopAlertPopup x:Name="StopAlert" Grid.Row="1"/>
+
         <!-- Loading motion over the slide, when a load lasts (same as the main window). -->
         <views:PastaLoader Grid.Row="1" IsActive="{Binding ShowLoading}" Background="{DynamicResource LoadingVeilBrush}"/>
 

@@ -40,7 +40,9 @@ public class ShiftSummaryViewModel
         IReadOnlyCollection<ProductionBucket> dayLots,
         TeamScheduleService teamSchedule,
         DateTime now,
-        double trsTarget)
+        double trsTarget,
+        IReadOnlyList<LotSpan>? lotSpans = null,
+        IReadOnlyList<(DateTime Start, DateTime End)>? stops = null)
     {
         // A Nuit bucket after midnight belongs to the shift date it started on.
         var lots = dayLots
@@ -62,7 +64,13 @@ public class ShiftSummaryViewModel
                 .ToList();
             onOff = DashboardCharts.OnOff(steps);
             speed = DashboardCharts.Speed(steps);
-            weight = DashboardCharts.Weight(steps);
+            // Lots drawn over their real time span when the line has some in
+            // the poste; otherwise the hourly chart (running average fallback).
+            var end = start.AddHours(8);
+            weight = lotSpans is { Count: > 0 }
+                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end,
+                    stops ?? Array.Empty<(DateTime, DateTime)>(), live: now < end)
+                : DashboardCharts.Weight(steps);
         }
 
         return new ShiftSummaryViewModel

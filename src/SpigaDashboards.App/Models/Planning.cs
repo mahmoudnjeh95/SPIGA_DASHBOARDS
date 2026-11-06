@@ -82,6 +82,9 @@ public class StopQualification
     public string? Comment { get; set; }
     public bool IsManual { get; set; }
     public DateTime CreatedAt { get; set; }
+    // Expected return of a panne / planned stop, given when qualifying it
+    // (shown on the TV; a planned stop stays out of the TRS until then).
+    public DateTime? ExpectedEnd { get; set; }
 
     public double Minutes => Math.Max(0, (StopEnd - StopStart).TotalMinutes);
     public StopCause? Cause => StopCauses.Find(CauseCode);

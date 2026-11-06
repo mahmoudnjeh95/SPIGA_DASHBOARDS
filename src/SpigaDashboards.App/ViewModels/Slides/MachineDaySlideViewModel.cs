@@ -21,6 +21,11 @@ public class MachineDaySlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    // The line's stop in progress, if any: red banner under the header.
+    public OngoingStop? OngoingStop { get; init; }
+    // A declared panne / planned stop / maintenance going on now: one big
+    // panel instead of the KPIs and charts until the line runs again.
+    public OngoingStop? DeclaredStop => OngoingStop is { IsDeclared: true } && PeriodLabel.Length == 0 ? OngoingStop : null;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
@@ -66,6 +71,19 @@ public class MachineDaySlideViewModel
         var trsTarget = settings.TrsTarget(machine.MachineId);
 
         var mainId = postes[^1];
+        var mainStart = date.AddHours(KpiCalculator.ShiftStartHour(mainId));
+        // 2 h past the poste end: lots that complete its last 1000-bag group
+        // (see DashboardCharts.GroupLots); the chart clips them at the end.
+        var lotSpans = (await repository.GetLotSpansAsync(machine.MachineId, mainStart, mainStart.AddHours(10)))
+            ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
+        // Stops of the poste, as listed in Arrêts: drawn red on the lots.
+        var stops = new List<(DateTime Start, DateTime End)>();
+        if (lotSpans is { Count: > 0 })
+        {
+            var segments = await repository.GetLineSegmentsAsync(new[] { machine.MachineId }, mainStart, mainStart.AddHours(8));
+            stops = StopDetector.Detect(segments, mainStart, mainStart.AddHours(8), settings, teamSchedule, new Dictionary<string, string>())
+                .Select(s => (s.Start, s.End)).ToList();
+        }
         return new MachineDaySlideViewModel
         {
             SectorLabel = Machine.SectorLabel(sector),
@@ -74,11 +92,12 @@ public class MachineDaySlideViewModel
             IsConnected = status?.IsConnected ?? false,
             BeltRunning = status?.BeltRunning ?? false,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
+            OngoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId),
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),
             Main = ShiftSummaryViewModel.Build(mainId, date, withCharts: true,
-                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsTarget),
+                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsTarget, lotSpans, stops),
             PreviousShifts = postes.Take(postes.Count - 1)
                 .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsTarget))
                 .ToList(),

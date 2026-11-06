@@ -30,6 +30,8 @@ public class MachinePeriodSlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    // The line's stop in progress, if any (header banner, whatever the period).
+    public OngoingStop? OngoingStop { get; init; }
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
@@ -107,6 +109,7 @@ public class MachinePeriodSlideViewModel
             IsConnected = status?.IsConnected ?? false,
             BeltRunning = status?.BeltRunning ?? false,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
+            OngoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId),
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = MachineDaySlideViewModel.FormatProduction(status?.CurrentProduction, allLots),
             Kpis = kpis,

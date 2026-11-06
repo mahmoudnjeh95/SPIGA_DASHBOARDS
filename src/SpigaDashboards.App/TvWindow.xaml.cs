@@ -33,6 +33,20 @@ public partial class TvWindow : Window
 
         PlaceFromSettings();
 
+        // Stop pop-up: at its saved place each time it comes up (moved on the
+        // other window, or put back in Parametres), saved where it is dropped.
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.IsStopAlertShown) && viewModel.IsStopAlertShown)
+                StopAlert.SetOffset(_settings.StopAlertOffsetX, _settings.StopAlertOffsetY);
+        };
+        StopAlert.Moved += (x, y) =>
+        {
+            _settings.StopAlertOffsetX = x;
+            _settings.StopAlertOffsetY = y;
+            _settingsService.Save(_settings);
+        };
+
         _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _clockTimer.Tick += (_, _) => UpdateClock();
         _clockTimer.Start();

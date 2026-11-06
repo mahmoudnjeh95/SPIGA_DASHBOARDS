@@ -88,6 +88,23 @@ public partial class MainViewModel : ObservableObject
     // The slide shown's duration (Parametres > Affichage, or the default one).
     public double SlideSeconds => _rotationTimer.Interval.TotalSeconds;
 
+    // Stop pop-up (both windows, the TV's above all): the lines in a stop
+    // nobody has given a cause yet. It comes up when a new one appears, then
+    // as a reminder every StopAlertReminder while any is left unqualified,
+    // and goes away after StopAlertDuration (or a click): never stays over
+    // the slides.
+    private static readonly TimeSpan StopAlertDuration = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan StopAlertReminder = TimeSpan.FromMinutes(30);
+    private readonly DispatcherTimer _stopAlertTimer;
+    private readonly HashSet<string> _alertedStops = new();
+    private DateTime _lastStopAlert = DateTime.MinValue;
+    public ObservableCollection<OngoingStop> StopAlerts { get; } = new();
+    [ObservableProperty] private bool isStopAlertShown;
+    [ObservableProperty] private string stopAlertTitle = "";
+    // The card lists the oldest few; the others are counted ("+ 4 autres lignes").
+    private const int StopAlertMaxLines = 5;
+    [ObservableProperty] private string stopAlertMore = "";
+
     // Synthesis slides: current month, last 3 months or the year (buttons on the slide).
     [ObservableProperty] private SynthesisPeriod synthesisPeriod = SynthesisPeriod.Month;
 
@@ -166,7 +183,11 @@ public partial class MainViewModel : ObservableObject
         {
             RefreshCurrentTeam();
             await RefreshNoteAsync();
+            await RefreshStopAlertsAsync();
         });
+
+        _stopAlertTimer = new DispatcherTimer { Interval = StopAlertDuration };
+        _stopAlertTimer.Tick += (_, _) => DismissStopAlert();
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
         _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RefreshAsync);
@@ -180,6 +201,50 @@ public partial class MainViewModel : ObservableObject
         _healthCheckTimer = new DispatcherTimer { Interval = HealthCheckInterval };
         _healthCheckTimer.Tick += async (_, _) => await RunGuardedAsync(CheckConnectionAsync);
         _healthCheckTimer.Start();
+    }
+
+    private async Task RefreshStopAlertsAsync()
+    {
+        if (!_settings.ShowStopAlerts)
+        {
+            DismissStopAlert();
+            return;
+        }
+        var stops = await OngoingStopService.GetAsync(_repository, _settings);
+        var open = stops.Values
+            .Where(s => s.IsUnqualified && !_settings.HiddenMachineIds.Contains(s.MachineId))
+            .OrderBy(s => s.Start)
+            .ToList();
+        var keys = open.Select(s => $"{s.MachineId}|{s.Start:O}").ToHashSet();
+        var isNew = keys.Any(k => !_alertedStops.Contains(k));
+        _alertedStops.Clear();
+        _alertedStops.UnionWith(keys);
+
+        if (open.Count == 0)
+        {
+            DismissStopAlert();
+            return;
+        }
+        if (!isNew && DateTime.Now - _lastStopAlert < StopAlertReminder)
+            return;
+
+        StopAlerts.Clear();
+        foreach (var stop in open.Take(StopAlertMaxLines))
+            StopAlerts.Add(stop);
+        var more = open.Count - StopAlertMaxLines;
+        StopAlertMore = more <= 0 ? "" : more == 1 ? "+ 1 autre ligne" : $"+ {more} autres lignes";
+        StopAlertTitle = open.Count == 1 ? "ARRÊT EN COURS — cause à définir" : $"{open.Count} ARRÊTS EN COURS — cause à définir";
+        _lastStopAlert = DateTime.Now;
+        IsStopAlertShown = true;
+        _stopAlertTimer.Stop();
+        _stopAlertTimer.Start();
+    }
+
+    [RelayCommand]
+    private void DismissStopAlert()
+    {
+        _stopAlertTimer.Stop();
+        IsStopAlertShown = false;
     }
 
     private async Task CheckConnectionAsync()
@@ -257,6 +322,7 @@ public partial class MainViewModel : ObservableObject
             await BuildSlidesAsync();
             await RefreshNoteAsync();
             RefreshCurrentTeam();
+            await RefreshStopAlertsAsync();
 
             _currentIndex = 0;
             if (_slides.Count > 0)

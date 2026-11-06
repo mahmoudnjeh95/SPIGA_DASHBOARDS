@@ -35,11 +35,21 @@ public class PlanningRepository
             await connection.ExecuteAsync(IsSqlServer
                 ? "ALTER TABLE dbo.PlanMaintenanceEvents ADD Kind INT NOT NULL CONSTRAINT DF_PlanMaintenanceEvents_Kind DEFAULT 0"
                 : "ALTER TABLE PlanMaintenanceEvents ADD COLUMN Kind INTEGER NOT NULL DEFAULT 0");
+        // Expected return of a panne / planned stop (v1.5.14).
+        if (!await HasExpectedEndColumnAsync(connection))
+            await connection.ExecuteAsync(IsSqlServer
+                ? "ALTER TABLE dbo.PlanStopQualifications ADD ExpectedEnd DATETIME2(0) NULL"
+                : "ALTER TABLE PlanStopQualifications ADD COLUMN ExpectedEnd TEXT NULL");
         _schemaReady = true;
     }
 
     // Forget the check after a database switch (Parametres).
     public void Reset() => _schemaReady = false;
+
+    private Task<bool> HasExpectedEndColumnAsync(IDbConnection connection)
+        => connection.ExecuteScalarAsync<bool>(IsSqlServer
+            ? "SELECT CASE WHEN COL_LENGTH('dbo.PlanStopQualifications', 'ExpectedEnd') IS NULL THEN 0 ELSE 1 END"
+            : "SELECT COUNT(*) FROM pragma_table_info('PlanStopQualifications') WHERE name = 'ExpectedEnd'");
 
     private Task<bool> HasKindColumnAsync(IDbConnection connection)
         => connection.ExecuteScalarAsync<bool>(IsSqlServer
@@ -155,11 +165,13 @@ public class PlanningRepository
         return exists == 0 ? new() : await QueryQualificationsAsync(connection, from, to);
     }
 
-    private static async Task<List<StopQualification>> QueryQualificationsAsync(IDbConnection connection, DateTime from, DateTime to)
+    private async Task<List<StopQualification>> QueryQualificationsAsync(IDbConnection connection, DateTime from, DateTime to)
     {
+        // Read only callers may run before the column exists (older table).
+        var expectedEnd = await HasExpectedEndColumnAsync(connection) ? "ExpectedEnd" : "NULL AS ExpectedEnd";
         var rows = await connection.QueryAsync<StopQualification>(
-            @"SELECT Id, MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode, Component,
-                     Technician, Comment, IsManual, CreatedAt
+            $@"SELECT Id, MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode, Component,
+                     Technician, Comment, IsManual, CreatedAt, {expectedEnd}
               FROM PlanStopQualifications WHERE StopStart >= @from AND StopStart < @to",
             new { from, to });
         // Rows saved before v1.5.9 spelled the no-team value without the accent.
@@ -176,15 +188,15 @@ public class PlanningRepository
             q.CreatedAt = DateTime.Now;
             q.Id = await connection.ExecuteScalarAsync<int>(
                 @"INSERT INTO PlanStopQualifications (MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode,
-                      Component, Technician, Comment, IsManual, CreatedAt)
+                      Component, Technician, Comment, IsManual, CreatedAt, ExpectedEnd)
                   VALUES (@MachineId, @StopStart, @StopEnd, @ShiftDate, @ShiftId, @Team, @CauseCode,
-                      @Component, @Technician, @Comment, @IsManual, @CreatedAt); " + IdentitySelect, q);
+                      @Component, @Technician, @Comment, @IsManual, @CreatedAt, @ExpectedEnd); " + IdentitySelect, q);
         }
         else
         {
             await connection.ExecuteAsync(
                 @"UPDATE PlanStopQualifications SET StopStart = @StopStart, StopEnd = @StopEnd, CauseCode = @CauseCode,
-                      Component = @Component, Technician = @Technician, Comment = @Comment
+                      Component = @Component, Technician = @Technician, Comment = @Comment, ExpectedEnd = @ExpectedEnd
                   WHERE Id = @Id", q);
         }
     }
@@ -305,13 +317,18 @@ public class PlanningRepository
             @"SELECT MachineId, PlannedStart, DurationMinutes, Status, DoneAt FROM PlanMaintenanceEvents
               WHERE PlannedStart >= @early AND PlannedStart < @to AND Status <> 2",
             new { early = from.AddDays(-EventLookbackDays), to });
+        // A planned stop still going on reaches its expected return: only the
+        // minutes the line actually stood still are taken out of the TRS, so
+        // a line back early counts normally. Its pieces in later postes start
+        // up to the stop's length later: look back as far as a stop goes.
+        var expectedEnd = await HasExpectedEndColumnAsync(connection) ? "ExpectedEnd" : "NULL AS ExpectedEnd";
         var stops = await connection.QueryAsync<StopQualification>(
-            @"SELECT MachineId, StopStart, StopEnd FROM PlanStopQualifications
+            $@"SELECT MachineId, StopStart, StopEnd, {expectedEnd} FROM PlanStopQualifications
               WHERE StopStart >= @early AND StopStart < @to AND CauseCode IN @planned",
-            new { early = from.AddDays(-2), to, planned });
+            new { early = from.AddDays(-15), to, planned });
 
         return events.Select(e => (e.MachineId, e.PlannedStart, e.ActualEnd))
-            .Concat(stops.Select(q => (q.MachineId, q.StopStart, q.StopEnd)))
+            .Concat(stops.Select(q => (q.MachineId, q.StopStart, q.ExpectedEnd is { } e && e > q.StopEnd ? e : q.StopEnd)))
             .Where(w => w.Item3 > from && w.Item2 < to && w.Item3 > w.Item2)
             .ToList();
     }

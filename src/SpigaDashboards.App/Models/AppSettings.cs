@@ -203,6 +203,13 @@ public class AppSettings
     // minutes is listed as a stop (Arrets window / printed sheet).
     public int StopThresholdMinutes { get; set; } = 5;
 
+    // Stop pop-up (lines stopped with no cause yet), on this PC only: shown
+    // or not, and where it was dragged to, as an offset from its place at the
+    // top right of the slide (1600x900 canvas, same on the TV).
+    public bool ShowStopAlerts { get; set; } = true;
+    public double StopAlertOffsetX { get; set; }
+    public double StopAlertOffsetY { get; set; }
+
     // Version of the shared settings (see SharedSettings) last received from
     // the base; 0 = never received.
     public int SharedSettingsVersion { get; set; }

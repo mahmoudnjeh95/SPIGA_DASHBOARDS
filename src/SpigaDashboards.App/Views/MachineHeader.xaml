@@ -49,6 +49,16 @@
 
         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Top" Text="{Binding CurrentProductionLabel}" FontSize="16"
                    Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
-                   ToolTip="{Binding CurrentProduction.ProductionId}"/>
+                   ToolTip="{Binding CurrentProduction.ProductionId}"
+                   Visibility="{Binding OngoingStop, Converter={StaticResource InverseNullToVisibility}}"/>
+
+        <!-- Stop in progress (OngoingStopService), in place of the production
+             line: since when, how long, and its cause or "Cause à définir". -->
+        <Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Margin="0,4,0,0" Padding="12,3" CornerRadius="8" Background="{DynamicResource DangerBrush}"
+                Visibility="{Binding OngoingStop, Converter={StaticResource NullToVisibility}}">
+            <TextBlock Text="{Binding OngoingStop.BannerText}" FontSize="17" FontWeight="Bold" Foreground="White"
+                       TextTrimming="CharacterEllipsis"/>
+        </Border>
     </Grid>
 </UserControl>

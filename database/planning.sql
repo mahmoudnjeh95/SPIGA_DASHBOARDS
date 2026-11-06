@@ -19,10 +19,15 @@ CREATE TABLE dbo.PlanStopQualifications (
     Technician NVARCHAR(100) NULL,
     Comment NVARCHAR(1000) NULL,
     IsManual BIT NOT NULL,
-    CreatedAt DATETIME2(0) NOT NULL);
+    CreatedAt DATETIME2(0) NOT NULL,
+    ExpectedEnd DATETIME2(0) NULL);
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PlanStopQualifications_Start')
 CREATE INDEX IX_PlanStopQualifications_Start ON dbo.PlanStopQualifications (StopStart, MachineId);
+GO
+-- Expected return of a panne / planned stop (v1.5.14).
+IF COL_LENGTH('dbo.PlanStopQualifications', 'ExpectedEnd') IS NULL
+ALTER TABLE dbo.PlanStopQualifications ADD ExpectedEnd DATETIME2(0) NULL;
 GO
 IF OBJECT_ID('dbo.PlanMaintenancePlans') IS NULL
 CREATE TABLE dbo.PlanMaintenancePlans (
