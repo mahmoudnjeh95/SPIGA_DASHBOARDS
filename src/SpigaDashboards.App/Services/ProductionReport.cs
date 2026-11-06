@@ -50,7 +50,8 @@ public sealed class ProductionReport
                 var machineLots = byMachine[m.MachineId].ToList();
                 var band = settings.TrsBandFor(m.MachineId);
                 return new MachineReportRow(m.MachineId, m.MachineName, m.Sector, band.Target,
-                    KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band));
+                    KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band,
+                        settings.WeightBandFor(m.MachineId)));
             })
             .ToList();
 

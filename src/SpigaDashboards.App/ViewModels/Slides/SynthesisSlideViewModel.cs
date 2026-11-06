@@ -81,7 +81,8 @@ public class SynthesisSlideViewModel
         {
             var machineLots = byMachine[m.MachineId].ToList();
             var band = settings.TrsBandFor(m.MachineId);
-            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band);
+            var weightBand = settings.WeightBandFor(m.MachineId);
+            var k = KpiCalculator.Summarize(machineLots, KpiCalculator.AvailabilityPercent(machineLots), band, weightBand);
             return new SynthesisLineRow
             {
                 MachineId = m.MachineId,
@@ -89,7 +90,7 @@ public class SynthesisSlideViewModel
                 Kpis = k,
                 TrsTarget = band.Target,
                 TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, band),
-                WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
+                WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent, weightBand),
             };
         }).ToList();
 

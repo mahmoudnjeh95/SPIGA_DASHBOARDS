@@ -69,6 +69,7 @@ public class MachineDaySlideViewModel
         var allLots = await repository.GetLotsAsync(machine.MachineId, date, date.AddDays(1).AddHours(6));
         var lots = filter.Apply(allLots, teamSchedule);
         var trsBand = settings.TrsBandFor(machine.MachineId);
+        var weightBand = settings.WeightBandFor(machine.MachineId);
 
         var mainId = postes[^1];
         var mainStart = date.AddHours(KpiCalculator.ShiftStartHour(mainId));
@@ -89,9 +90,9 @@ public class MachineDaySlideViewModel
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),
             Main = ShiftSummaryViewModel.Build(mainId, date, withCharts: true,
-                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsBand, lotSpans),
+                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsBand, weightBand, lotSpans),
             PreviousShifts = postes.Take(postes.Count - 1)
-                .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsBand))
+                .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsBand, weightBand))
                 .ToList(),
         };
     }

@@ -76,8 +76,9 @@ public class MachinePeriodSlideViewModel
         var lots = filter.Apply(allLots, teamSchedule);
         var trsBand = settings.TrsBandFor(machine.MachineId);
         var trsTarget = trsBand.Target;
+        var weightBand = settings.WeightBandFor(machine.MachineId);
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand, weightBand);
 
         // Teams, best TRS first; teams that did not produce go last.
         var teams = lots
@@ -85,13 +86,13 @@ public class MachinePeriodSlideViewModel
             .Select(g =>
             {
                 var teamLots = g.ToList();
-                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsBand);
+                var k = KpiCalculator.Summarize(teamLots, KpiCalculator.AvailabilityPercent(teamLots), trsBand, weightBand);
                 return new TeamPeriodRow
                 {
                     TeamName = g.Key,
                     Kpis = k,
                     TrsSeverity = KpiCalculator.TrsSeverity(k.TrsPercent, trsBand),
-                    WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent),
+                    WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(k.WeightDeviationPercent, weightBand),
                 };
             })
             .OrderByDescending(t => t.Kpis.TrsPercent ?? -1)
@@ -116,7 +117,7 @@ public class MachinePeriodSlideViewModel
             Kpis = kpis,
             TrsTarget = trsTarget,
             TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
-            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
+            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent, weightBand),
             Teams = teams,
             GrainLabel = "par " + PeriodRanges.GrainName(grain),
             TrsChart = DashboardCharts.Trs(steps, trsTarget),

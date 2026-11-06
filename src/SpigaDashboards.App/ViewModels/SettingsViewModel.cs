@@ -86,10 +86,6 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string performanceHighText = "";
     [ObservableProperty] private string qualityGoodText = "";
     [ObservableProperty] private string qualityWarningText = "";
-    [ObservableProperty] private string weightOverGoodText = "";
-    [ObservableProperty] private string weightOverWarningText = "";
-    [ObservableProperty] private string weightUnderWarningText = "";
-    [ObservableProperty] private string weightUnderBadText = "";
     [ObservableProperty] private string colorsStatusMessage = "";
 
     public event EventHandler? SettingsApplied;
@@ -326,6 +322,42 @@ public partial class SettingsViewModel : ObservableObject
         return tolerances;
     }
 
+    // Weight-deviation limits per machine (every box filled, orange beyond
+    // green on each side). Null (message shown) on a bad cell.
+    private Dictionary<string, WeightBand>? ParseWeightBands()
+    {
+        var bands = new Dictionary<string, WeightBand>();
+        foreach (var machine in Machines)
+        {
+            double? Read(string text, string what)
+            {
+                if (text.Trim().Length > 0 && NominalRateRowViewModel.TryParse(text, out var value) && value <= 100)
+                    return value;
+                MachinesStatusMessage = $"Écart de poids {what} invalide pour {ChoiceLabel(machine)} : « {text} » (0 à 100 %).";
+                return null;
+            }
+
+            if (Read(machine.WeightOverGoodText, "au-dessus (vert)") is not { } overGood
+                || Read(machine.WeightOverWarningText, "au-dessus (orange)") is not { } overWarning
+                || Read(machine.WeightUnderWarningText, "en dessous (vert)") is not { } underWarning
+                || Read(machine.WeightUnderBadText, "en dessous (orange)") is not { } underBad)
+                return null;
+            if (overWarning < overGood || underBad < underWarning)
+            {
+                MachinesStatusMessage = $"Écart de poids pour {ChoiceLabel(machine)} : la limite orange doit être supérieure ou égale à la limite verte, de chaque côté.";
+                return null;
+            }
+            bands[machine.MachineId] = new WeightBand
+            {
+                OverGood = overGood,
+                OverWarning = overWarning,
+                UnderWarning = underWarning,
+                UnderBad = underBad,
+            };
+        }
+        return bands;
+    }
+
     [RelayCommand]
     private void AddPlannedBreak() => PlannedBreaks.Add(new PlannedBreakRowViewModel { DurationText = "20" });
 
@@ -368,7 +400,7 @@ public partial class SettingsViewModel : ObservableObject
     // one, on the tab brought to the front.
     public bool Validate()
     {
-        SettingsTab? bad = ParseTrsTargets() == null || ParseTrsTolerances() == null ? SettingsTab.Machines
+        SettingsTab? bad = ParseTrsTargets() == null || ParseTrsTolerances() == null || ParseWeightBands() == null ? SettingsTab.Machines
             : ParseSlides() == null ? SettingsTab.Affichage
             : ParseNominalRates() == null ? SettingsTab.Cadences
             : ParsePlannedBreaks() == null || ParseStopThreshold() == null ? SettingsTab.Pauses
@@ -389,10 +421,6 @@ public partial class SettingsViewModel : ObservableObject
         PerformanceHighText = NominalRateRowViewModel.Format(c.PerformanceHigh);
         QualityGoodText = NominalRateRowViewModel.Format(c.QualityGood);
         QualityWarningText = NominalRateRowViewModel.Format(c.QualityWarning);
-        WeightOverGoodText = NominalRateRowViewModel.Format(c.WeightOverGood);
-        WeightOverWarningText = NominalRateRowViewModel.Format(c.WeightOverWarning);
-        WeightUnderWarningText = NominalRateRowViewModel.Format(c.WeightUnderWarning);
-        WeightUnderBadText = NominalRateRowViewModel.Format(c.WeightUnderBad);
         ColorsStatusMessage = "";
     }
 
@@ -425,19 +453,13 @@ public partial class SettingsViewModel : ObservableObject
             || Read(PerformanceWarningText, "Performance : seuil orange", 200) is not { } performanceWarning
             || Read(PerformanceHighText, "Performance : seuil haut", 200) is not { } performanceHigh
             || Read(QualityGoodText, "Conformité : seuil vert", 100) is not { } qualityGood
-            || Read(QualityWarningText, "Conformité : seuil orange", 100) is not { } qualityWarning
-            || Read(WeightOverGoodText, "Écart de poids au-dessus de la cible : limite verte", 100) is not { } overGood
-            || Read(WeightOverWarningText, "Écart de poids au-dessus de la cible : limite orange", 100) is not { } overWarning
-            || Read(WeightUnderWarningText, "Écart de poids en dessous de la cible : limite verte", 100) is not { } underWarning
-            || Read(WeightUnderBadText, "Écart de poids en dessous de la cible : limite orange", 100) is not { } underBad)
+            || Read(QualityWarningText, "Conformité : seuil orange", 100) is not { } qualityWarning)
             return null;
 
         if (!Ordered(availabilityWarning, availabilityGood, "Disponibilité : le seuil orange doit être inférieur ou égal au seuil vert.")
             || !Ordered(performanceWarning, performanceGood, "Performance : le seuil orange doit être inférieur ou égal au seuil vert.")
             || !Ordered(performanceGood, performanceHigh, "Performance : le seuil haut doit être supérieur ou égal au seuil vert.")
-            || !Ordered(qualityWarning, qualityGood, "Conformité : le seuil orange doit être inférieur ou égal au seuil vert.")
-            || !Ordered(overGood, overWarning, "Écart de poids au-dessus de la cible : la limite orange doit être supérieure ou égale à la limite verte.")
-            || !Ordered(underWarning, underBad, "Écart de poids en dessous de la cible : la limite orange doit être supérieure ou égale à la limite verte."))
+            || !Ordered(qualityWarning, qualityGood, "Conformité : le seuil orange doit être inférieur ou égal au seuil vert."))
             return null;
 
         ColorsStatusMessage = "";
@@ -451,10 +473,11 @@ public partial class SettingsViewModel : ObservableObject
             PerformanceHigh = performanceHigh,
             QualityGood = qualityGood,
             QualityWarning = qualityWarning,
-            WeightOverGood = overGood,
-            WeightOverWarning = overWarning,
-            WeightUnderWarning = underWarning,
-            WeightUnderBad = underBad,
+            // No longer edited here (Machines tab): the fallback stays as is.
+            WeightOverGood = _settings.Colors.WeightOverGood,
+            WeightOverWarning = _settings.Colors.WeightOverWarning,
+            WeightUnderWarning = _settings.Colors.WeightUnderWarning,
+            WeightUnderBad = _settings.Colors.WeightUnderBad,
         };
     }
 
@@ -466,6 +489,7 @@ public partial class SettingsViewModel : ObservableObject
             var machines = await _repository.GetMachinesAsync();
             foreach (var machine in machines)
             {
+                var weightBand = _settings.WeightBandFor(machine.MachineId);
                 var option = new MachineVisibilityOption
                 {
                     MachineId = machine.MachineId,
@@ -478,6 +502,10 @@ public partial class SettingsViewModel : ObservableObject
                     TrsToleranceText = _settings.MachineTrsTolerances.TryGetValue(machine.MachineId, out var tolerance)
                         ? NominalRateRowViewModel.Format(tolerance)
                         : "",
+                    WeightOverGoodText = NominalRateRowViewModel.Format(weightBand.OverGood),
+                    WeightOverWarningText = NominalRateRowViewModel.Format(weightBand.OverWarning),
+                    WeightUnderWarningText = NominalRateRowViewModel.Format(weightBand.UnderWarning),
+                    WeightUnderBadText = NominalRateRowViewModel.Format(weightBand.UnderBad),
                 };
                 Machines.Add(option);
 
@@ -682,6 +710,14 @@ public partial class SettingsViewModel : ObservableObject
         {
             _settings.MachineTrsTargets = ParseTrsTargets() ?? _settings.MachineTrsTargets;
             _settings.MachineTrsTolerances = ParseTrsTolerances() ?? _settings.MachineTrsTolerances;
+            // Machines not listed this time (DB list changed) keep their limits.
+            if (ParseWeightBands() is { } weightBands)
+            {
+                var merged = new Dictionary<string, WeightBand>(_settings.MachineWeightBands);
+                foreach (var (id, band) in weightBands)
+                    merged[id] = band;
+                _settings.MachineWeightBands = merged;
+            }
             _settings.Slides = ParseSlides() ?? _settings.Slides;
         }
 

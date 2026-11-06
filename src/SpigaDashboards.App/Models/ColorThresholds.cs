@@ -28,15 +28,23 @@ public class ColorThresholds
     public double QualityGood { get; set; } = 98;
     public double QualityWarning { get; set; } = 95;
 
-    // Weight deviation, as a % of the target (1 g means nothing on a 5 kg bag
-    // but is a lot on a 200 g one), each side on its own. Running heavy only
-    // gives product away: green up to +OverGood, orange up to +OverWarning,
-    // red beyond. Running light is a compliance risk (sous-dosage), so its
-    // limits are tighter: orange below -UnderWarning, red below -UnderBad.
+    // Weight deviation limits: set per machine since 1.5.18 (Parametres >
+    // Machines, see WeightBand), no longer shown in Couleurs. Kept as the band
+    // of a machine with none of its own, so limits set in Couleurs by 1.5.16
+    // / 1.5.17 still apply until the machines get theirs.
     public double WeightOverGood { get; set; } = 0.5;
     public double WeightOverWarning { get; set; } = 1.5;
     public double WeightUnderWarning { get; set; } = 0.1;
     public double WeightUnderBad { get; set; } = 0.5;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public WeightBand DefaultWeightBand => new()
+    {
+        OverGood = WeightOverGood,
+        OverWarning = WeightOverWarning,
+        UnderWarning = WeightUnderWarning,
+        UnderBad = WeightUnderBad,
+    };
 
     public KpiSeverity Availability(double? percent) => Band(percent, AvailabilityGood, AvailabilityWarning);
 
@@ -44,16 +52,6 @@ public class ColorThresholds
         => percent > PerformanceHigh ? KpiSeverity.Warning : Band(percent, PerformanceGood, PerformanceWarning);
 
     public KpiSeverity Quality(double? percent) => Band(percent, QualityGood, QualityWarning);
-
-    public KpiSeverity WeightDeviation(double? deviationPercent) => deviationPercent switch
-    {
-        null => KpiSeverity.Unknown,
-        { } d when d < -WeightUnderBad => KpiSeverity.Bad,
-        { } d when d < -WeightUnderWarning => KpiSeverity.Warning,
-        { } d when d <= WeightOverGood => KpiSeverity.Good,
-        { } d when d <= WeightOverWarning => KpiSeverity.Warning,
-        _ => KpiSeverity.Bad,
-    };
 
     // "Higher is better": green from good, orange from warning, red below.
     private static KpiSeverity Band(double? percent, double good, double warning) => percent switch

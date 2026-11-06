@@ -55,12 +55,13 @@ public static class KpiCalculator
     //    means the nominal rate is set too low (flagged orange on screen).
     //  - Qualite: bags in tolerance / total bags.
     // Also breaks the buckets down per target weight (Weights), with each
-    // weight's TRS banded against trsTarget, and totals the net weight made.
+    // weight's TRS banded against trsTarget and its deviation against
+    // weightBand (the machine's), and totals the net weight made.
     public static KpiSummary Summarize(
-        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, TrsBand? trsBand = null)
+        IReadOnlyCollection<ProductionBucket> lots, double availabilityPercent, TrsBand? trsBand = null, WeightBand? weightBand = null)
     {
         var summary = SummarizeCore(lots, availabilityPercent);
-        summary.Weights = ByWeight(lots, trsBand);
+        summary.Weights = ByWeight(lots, trsBand, weightBand);
         summary.ProductionKg = Math.Round(summary.Weights.Sum(w => w.ProductionKg), 1);
         var weighed = summary.Weights.Where(w => w.GiveawayKg.HasValue).ToList();
         summary.GiveawayKg = weighed.Count > 0 ? Math.Round(weighed.Sum(w => w.GiveawayKg!.Value), 1) : null;
@@ -70,7 +71,8 @@ public static class KpiCalculator
     // One entry per target weight (rounded to the gram), biggest production
     // first. Production = bags x net average weight, or x target when that
     // weight has no trustworthy weight data; giveaway = bags x deviation.
-    public static List<WeightKpi> ByWeight(IReadOnlyCollection<ProductionBucket> lots, TrsBand? trsBand = null)
+    public static List<WeightKpi> ByWeight(
+        IReadOnlyCollection<ProductionBucket> lots, TrsBand? trsBand = null, WeightBand? weightBand = null)
     {
         return lots
             .Where(l => l.TargetNetWeight > 0)
@@ -98,7 +100,7 @@ public static class KpiCalculator
                     TrsPercent = k.TrsPercent,
                     SpeedBagsPerMinute = k.SpeedBagsPerMinute,
                     MaxSpeedBagsPerMinute = k.MaxSpeedBagsPerMinute,
-                    DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent),
+                    DeviationSeverity = WeightDeviationSeverity(k.WeightDeviationPercent, weightBand ?? WeightBand.Default),
                     TrsSeverity = TrsSeverity(k.TrsPercent, trsBand ?? TrsBand.Default),
                 };
             })
@@ -231,10 +233,10 @@ public static class KpiCalculator
         return (Math.Round(deviationSum / bags, 2), Math.Round(100.0 * deviationSum / targetSum, 2));
     }
 
-    // Colour band of the weight deviation, relative to the target (limits:
-    // Parametres > Couleurs, see ColorThresholds).
-    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent)
-        => ColorThresholds.Current.WeightDeviation(deviationPercent);
+    // Colour band of the weight deviation, relative to the target, against
+    // the machine's limits (Parametres > Machines, see WeightBand).
+    public static KpiSeverity WeightDeviationSeverity(double? deviationPercent, WeightBand band)
+        => band.Severity(deviationPercent);
 
     // Share (0-100) of the required time (observed, minus the planned stops
     // the line was stopped in) in which the line produced bags. Over the

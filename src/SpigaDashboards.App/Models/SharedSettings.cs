@@ -14,6 +14,8 @@ public class SharedSettings
     public Dictionary<string, double> MachineTrsTargets { get; set; } = new();
     // null = saved by a version before per-machine tolerances: kept as is.
     public Dictionary<string, double>? MachineTrsTolerances { get; set; }
+    // null = saved by a version before per-machine weight limits: kept as is.
+    public Dictionary<string, WeightBand>? MachineWeightBands { get; set; }
     public List<PlannedBreak> PlannedBreaks { get; set; } = new();
     public int StopThresholdMinutes { get; set; }
     public TeamRotationSettings TeamRotation { get; set; } = new();
@@ -31,6 +33,7 @@ public class SharedSettings
         NominalRates = settings.NominalRates,
         MachineTrsTargets = settings.MachineTrsTargets,
         MachineTrsTolerances = settings.MachineTrsTolerances,
+        MachineWeightBands = settings.MachineWeightBands,
         PlannedBreaks = settings.PlannedBreaks,
         StopThresholdMinutes = settings.StopThresholdMinutes,
         TeamRotation = settings.TeamRotation,
@@ -46,6 +49,8 @@ public class SharedSettings
         settings.MachineTrsTargets = MachineTrsTargets;
         if (MachineTrsTolerances != null)
             settings.MachineTrsTolerances = MachineTrsTolerances;
+        if (MachineWeightBands != null)
+            settings.MachineWeightBands = MachineWeightBands;
         settings.PlannedBreaks = PlannedBreaks;
         settings.StopThresholdMinutes = StopThresholdMinutes;
         settings.TeamRotation = TeamRotation;

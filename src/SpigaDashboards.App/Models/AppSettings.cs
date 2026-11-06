@@ -224,6 +224,10 @@ public class AppSettings
     // red below. Machines not listed use the Couleurs share of the target.
     public Dictionary<string, double> MachineTrsTolerances { get; set; } = new();
 
+    // Weight-deviation colour limits per machine (Parametres > Machines).
+    // Machines not listed use WeightBand.Default.
+    public Dictionary<string, WeightBand> MachineWeightBands { get; set; } = new();
+
     // Daily planned breaks (pauses), set in Parametres. Defaults = the site's
     // 6 breaks, two per poste.
     public List<PlannedBreak> PlannedBreaks { get; set; } = new()
@@ -272,6 +276,9 @@ public class AppSettings
     public TrsBand TrsBandFor(string machineId)
         => TrsBand.ForTarget(TrsTarget(machineId),
             MachineTrsTolerances.TryGetValue(machineId, out var tolerance) && tolerance >= 0 ? tolerance : null);
+
+    public WeightBand WeightBandFor(string machineId)
+        => MachineWeightBands.TryGetValue(machineId, out var band) && band != null ? band : WeightBand.Default;
 
     // Rate for this machine and weight: the machine's own row first, then the
     // "every machine" row. A per-article rate in Products still wins (see

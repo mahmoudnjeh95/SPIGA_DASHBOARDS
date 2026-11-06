@@ -41,6 +41,7 @@ public class ShiftSummaryViewModel
         TeamScheduleService teamSchedule,
         DateTime now,
         TrsBand trsBand,
+        WeightBand weightBand,
         IReadOnlyList<LotSpan>? lotSpans = null)
     {
         // A Nuit bucket after midnight belongs to the shift date it started on.
@@ -48,7 +49,7 @@ public class ShiftSummaryViewModel
             .Where(l => l.ShiftId == shiftId && TeamScheduleService.GetShiftDate(l.StartTime, shiftId) == shiftDate)
             .ToList();
 
-        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand);
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand, weightBand);
         var team = teamSchedule.GetTeamForShift(shiftDate, shiftId);
 
         ChartParts onOff = ChartParts.Empty(), speed = ChartParts.Empty(), weight = ChartParts.Empty();
@@ -80,7 +81,7 @@ public class ShiftSummaryViewModel
             Kpis = kpis,
             TrsTarget = trsBand.Target,
             TrsSeverity = KpiCalculator.TrsSeverity(kpis.TrsPercent, trsBand),
-            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent),
+            WeightDeviationSeverity = KpiCalculator.WeightDeviationSeverity(kpis.WeightDeviationPercent, weightBand),
             OnOffChart = onOff,
             SpeedChart = speed,
             WeightChart = weight,

@@ -185,29 +185,70 @@
             <TabItem Header="Machines" Style="{StaticResource TabHeader}">
                 <ScrollViewer Style="{StaticResource TabPage}">
                     <StackPanel>
-                        <TextBlock Text="Machines : nom affiché, visibilité et TRS cible" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
+                        <TextBlock Text="Machines : nom affiché, visibilité, TRS cible et écart de poids" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
                         <TextBlock Text="TRS cible (%) : objectif de chaque machine, le TRS est vert quand il l'atteint. Vide = 85 %. Tolérance (points) : orange entre la cible moins la tolérance et la cible, rouge en dessous (ex. cible 50, tolérance 5 : orange de 45 à 50 %, rouge sous 45 %). Vide = règle de l'onglet Couleurs (orange à partir d'une part de la cible)."
+                                   Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <TextBlock Text="Écart de poids, en % du poids cible (1 g compte peu sur 5 kg, beaucoup sur 200 g). Au-dessus de la cible : vert jusqu'à la 1re limite, orange jusqu'à la 2e, rouge au-delà. En dessous (sous-dosage) : de même, avec des limites plus serrées, car c'est un risque de non-conformité alors qu'un surpoids ne fait que donner du produit."
                                    Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                         <Button Content="Actualiser la liste" Style="{StaticResource SecondaryButton}"
                                 HorizontalAlignment="Left" Command="{Binding RefreshMachinesCommand}"/>
                         <TextBlock Text="{Binding MachinesStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                        <StackPanel Orientation="Horizontal" Margin="28,6,0,0">
-                            <TextBlock Text="Nom affiché" Style="{StaticResource FieldLabel}" Width="250" Margin="0"/>
-                            <TextBlock Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Width="90" Margin="0"/>
-                            <TextBlock Text="Tolérance (points)" Style="{StaticResource FieldLabel}" Margin="0"/>
-                        </StackPanel>
+                        <!-- Same columns as the rows below. -->
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28"/>
+                                <ColumnDefinition Width="210"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="62"/>
+                                <ColumnDefinition Width="72"/>
+                                <ColumnDefinition Width="62"/>
+                                <ColumnDefinition Width="62"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="Nom affiché" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="2" Grid.RowSpan="2" Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="3" Grid.RowSpan="2" Text="Tolérance (points)" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="4" Grid.ColumnSpan="2" Text="Poids au-dessus (+ %)" Style="{StaticResource FieldLabel}" Margin="0"/>
+                            <TextBlock Grid.Column="6" Grid.ColumnSpan="2" Text="En dessous (− %)" Style="{StaticResource FieldLabel}" Margin="0"/>
+                            <TextBlock Grid.Row="1" Grid.Column="4" Text="vert ≤" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="5" Text="orange ≤" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="6" Text="vert ≤" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="7" Text="orange ≤" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}"/>
+                        </Grid>
                         <ItemsControl ItemsSource="{Binding Machines}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:MachineVisibilityOption}">
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
-                                        <CheckBox IsChecked="{Binding IsVisible}" VerticalAlignment="Center" Margin="0,0,10,0"
+                                    <Grid Margin="0,4,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="210"/>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="62"/>
+                                            <ColumnDefinition Width="72"/>
+                                            <ColumnDefinition Width="62"/>
+                                            <ColumnDefinition Width="62"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox IsChecked="{Binding IsVisible}" VerticalAlignment="Center"
                                                   ToolTip="Afficher cette machine dans la rotation du tableau de bord"/>
-                                        <TextBox Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" Width="240"/>
-                                        <TextBox Text="{Binding TrsTargetText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
-                                                 ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
-                                        <TextBox Text="{Binding TrsToleranceText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="10,0,0,0"
+                                        <TextBox Grid.Column="1" Text="{Binding MachineName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
+                                        <TextBox Grid.Column="2" Text="{Binding TrsTargetText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"
+                                                 ToolTip="TRS cible de cette machine, en % (vide = 85 %)"/>
+                                        <TextBox Grid.Column="3" Text="{Binding TrsToleranceText, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"
                                                  ToolTip="Orange entre la cible moins cette tolérance et la cible, rouge en dessous (vide = règle de l'onglet Couleurs)"/>
-                                    </StackPanel>
+                                        <TextBox Grid.Column="4" Text="{Binding WeightOverGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                                 ToolTip="Au-dessus de la cible : vert jusqu'à + cette valeur (% du poids cible)"/>
+                                        <TextBox Grid.Column="5" Text="{Binding WeightOverWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                                 ToolTip="Au-dessus de la cible : orange jusqu'à + cette valeur, rouge au-delà (% du poids cible)"/>
+                                        <TextBox Grid.Column="6" Text="{Binding WeightUnderWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                                 ToolTip="En dessous de la cible : vert jusqu'à − cette valeur (% du poids cible)"/>
+                                        <TextBox Grid.Column="7" Text="{Binding WeightUnderBadText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                                 ToolTip="En dessous de la cible : orange jusqu'à − cette valeur, rouge au-delà (% du poids cible)"/>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -477,8 +518,6 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Indicateur" Style="{StaticResource FieldLabel}"/>
@@ -546,37 +585,9 @@
                                 <TextBlock Text="%" Style="{StaticResource ColorText}"/>
                             </StackPanel>
                             <TextBlock Grid.Row="5" Grid.Column="3" Text="en dessous" Style="{StaticResource ColorText}"/>
-
-                            <!-- Écart de poids, au-dessus -->
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Écart de poids, au-dessus de la cible" TextWrapping="Wrap" Style="{StaticResource ColorText}"/>
-                            <StackPanel Grid.Row="6" Grid.Column="1" Style="{StaticResource ColorCell}">
-                                <TextBlock Text="jusqu'à +" Style="{StaticResource ColorText}"/>
-                                <TextBox Text="{Binding WeightOverGoodText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
-                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="6" Grid.Column="2" Style="{StaticResource ColorCell}">
-                                <TextBlock Text="jusqu'à +" Style="{StaticResource ColorText}"/>
-                                <TextBox Text="{Binding WeightOverWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
-                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
-                            </StackPanel>
-                            <TextBlock Grid.Row="6" Grid.Column="3" Text="au-delà" Style="{StaticResource ColorText}"/>
-
-                            <!-- Écart de poids, en dessous -->
-                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Écart de poids, en dessous de la cible (sous-dosage)" TextWrapping="Wrap" Style="{StaticResource ColorText}"/>
-                            <StackPanel Grid.Row="7" Grid.Column="1" Style="{StaticResource ColorCell}">
-                                <TextBlock Text="jusqu'à −" Style="{StaticResource ColorText}"/>
-                                <TextBox Text="{Binding WeightUnderWarningText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
-                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="7" Grid.Column="2" Style="{StaticResource ColorCell}">
-                                <TextBlock Text="jusqu'à −" Style="{StaticResource ColorText}"/>
-                                <TextBox Text="{Binding WeightUnderBadText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"/>
-                                <TextBlock Text="%" Style="{StaticResource ColorText}"/>
-                            </StackPanel>
-                            <TextBlock Grid.Row="7" Grid.Column="3" Text="au-delà" Style="{StaticResource ColorText}"/>
                         </Grid>
                         <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
-                                   Text="Écart de poids : en pourcentage du poids cible (1 g compte peu sur 5 kg, beaucoup sur 200 g). Le sous-dosage a ses propres limites, plus serrées : c'est un risque de non-conformité, alors qu'un surpoids ne fait que donner du produit."/>
+                                   Text="Écart de poids : limites propres à chaque machine, dans l'onglet Machines."/>
                         <Button Content="Valeurs par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
                                 ToolTip="Remet les limites d'origine (appliquées à l'enregistrement)" Command="{Binding ResetColorsCommand}"/>
                         <TextBlock Text="{Binding ColorsStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
@@ -585,7 +596,7 @@
             </TabItem>
         </TabControl>
 
-        <TextBlock Grid.Row="1" Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, couleurs et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
+        <TextBlock Grid.Row="1" Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
                    Style="{StaticResource Hint}" Margin="0,12,0,0"/>
 
         <DockPanel Grid.Row="2" Margin="0,12,0,0">
