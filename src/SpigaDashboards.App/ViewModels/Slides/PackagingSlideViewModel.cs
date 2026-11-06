@@ -126,14 +126,15 @@ public class PackagingSlideViewModel
         // Target line only when every machine shares the same target.
         double? targetLine = targets.Distinct().Count() == 1 ? targets[0] : null;
 
-        var machineLabels = cumul ? machines.Select(m => m.MachineName).ToList() : ids;
+        // Always the names from Parametres (never the line codes CC03...).
+        var machineLabels = machines.Select(m => m.MachineName).ToList();
 
         return new PackagingSlideViewModel
         {
             Title = title,
             IsTrs = trs,
             IsCumul = cumul,
-            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", ids),
+            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", machineLabels),
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             TotalProductionText = KpiCalculator.FormatMass(total.ProductionKg),

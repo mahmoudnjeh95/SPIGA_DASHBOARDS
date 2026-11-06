@@ -400,6 +400,19 @@ public static class DashboardCharts
             new[] { ChartHelpers.BuildYAxis(low, high, minStep: (high - low) / 2, labeler: v => $"{v:0} g") });
     }
 
+    // One bar per machine / team: every bar keeps its name (machine names
+    // are longer than the line codes and LiveCharts drops every other label
+    // once they would touch), smaller from 7 bars on (Conditionnement 2: 8).
+    private static Axis NameAxis(IReadOnlyCollection<string> labels)
+    {
+        var axis = ChartHelpers.BuildXAxis(labels);
+        axis.MinStep = 1;
+        axis.ForceStepToMin = true;
+        if (labels.Count > 6)
+            axis.TextSize = 13;
+        return axis;
+    }
+
     // TRS per step as columns, with the machine's target as a line.
     public static ChartParts Trs(IReadOnlyList<Step> steps, double target)
     {
@@ -579,7 +592,7 @@ public static class DashboardCharts
                     MaxBarWidth = 60,
                 },
             },
-            new[] { ChartHelpers.BuildXAxis(labels) },
+            new[] { NameAxis(labels) },
             new[] { axis });
     }
 
@@ -618,6 +631,6 @@ public static class DashboardCharts
                 DataLabelsPaint = null,
             });
         }
-        return new ChartParts(series.ToArray(), new[] { ChartHelpers.BuildXAxis(labels) }, new[] { axis });
+        return new ChartParts(series.ToArray(), new[] { NameAxis(labels) }, new[] { axis });
     }
 }
