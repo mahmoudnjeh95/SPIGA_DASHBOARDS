@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
+        xmlns:views="clr-namespace:SpigaDashboards.App.Views"
         mc:Ignorable="d"
         Title="Paramètres" Icon="/Assets/spiga-logo.png" Height="720" Width="780"
         WindowStartupLocation="CenterOwner"
@@ -591,12 +592,71 @@
                         <Button Content="Valeurs par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,12,0,0"
                                 ToolTip="Remet les limites d'origine (appliquées à l'enregistrement)" Command="{Binding ResetColorsCommand}"/>
                         <TextBlock Text="{Binding ColorsStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                        <TextBlock Text="Barre défilante des arrêts" Style="{StaticResource SectionTitle}" Margin="0,20,0,8"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8"
+                                   Text="Barre sous la photo de la machine tant que la ligne est à l'arrêt ; les chiffres du poste restent visibles. Un arrêt planifié ou une maintenance prend tout l'écran de la diapositive du poste à la place. Couleur : #RRGGBB (ex. #E74C3C) ou un nom anglais (Red, Orange…). Commun à tous les postes."/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="230"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Vitesse de défilement" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource ColorCell}">
+                                <TextBox Text="{Binding TickerSpeedText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}"
+                                         ToolTip="De 20 (lent) à 600 (très rapide) pixels par seconde ; 120 par défaut"/>
+                                <TextBlock Text="pixels / seconde (20 à 600)" Style="{StaticResource ColorText}"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="1" Text="Panne / cause à définir" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBox Text="{Binding TickerPanneColorText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}" Width="100" HorizontalContentAlignment="Left"/>
+                                <Border Width="28" Height="20" CornerRadius="4" Background="{Binding TickerPanneBrush}" BorderBrush="{DynamicResource SubtleTextBrush}" BorderThickness="1" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2" Text="Autre cause (manque produit…)" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBox Text="{Binding TickerOtherColorText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}" Width="100" HorizontalContentAlignment="Left"/>
+                                <Border Width="28" Height="20" CornerRadius="4" Background="{Binding TickerOtherBrush}" BorderBrush="{DynamicResource SubtleTextBrush}" BorderThickness="1" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="3" Text="Arrêt planifié / maintenance" Style="{StaticResource ColorText}"
+                                       ToolTip="Seulement sur les diapositives de période (jour, semaine…) : la diapositive du poste leur donne tout l'écran"/>
+                            <StackPanel Grid.Row="3" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBox Text="{Binding TickerPlannedColorText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}" Width="100" HorizontalContentAlignment="Left"/>
+                                <Border Width="28" Height="20" CornerRadius="4" Background="{Binding TickerPlannedBrush}" BorderBrush="{DynamicResource SubtleTextBrush}" BorderThickness="1" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="4" Text="Texte" Style="{StaticResource ColorText}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Style="{StaticResource ColorCell}">
+                                <TextBox Text="{Binding TickerTextColorText, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ColorBox}" Width="100" HorizontalContentAlignment="Left"/>
+                                <Border Width="28" Height="20" CornerRadius="4" Background="{Binding TickerTextBrush}" BorderBrush="{DynamicResource SubtleTextBrush}" BorderThickness="1" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Aperçu" Style="{StaticResource FieldLabel}" Margin="0,12,0,4"/>
+                        <views:StopTicker BadgeText="EN PANNE" Text="Ligne à l'arrêt depuis 09:42 (35 min)  ·  Panne mécanique · Mâchoires de soudure · Karim  ·  Retour prévu le 07/11 à 11:00"
+                                          BarColor="{Binding TickerPanneBrush}" TextColor="{Binding TickerTextBrush}" Speed="{Binding TickerPreviewSpeed}" Margin="0,0,0,8"/>
+                        <views:StopTicker BadgeText="EN ARRÊT" Text="Ligne à l'arrêt depuis 10:05 (12 min)  ·  Manque produit"
+                                          BarColor="{Binding TickerOtherBrush}" TextColor="{Binding TickerTextBrush}" Speed="{Binding TickerPreviewSpeed}" Margin="0,0,0,8"/>
+                        <Button Content="Valeurs par défaut" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                ToolTip="Remet la vitesse et les couleurs d'origine de la barre (appliquées à l'enregistrement)" Command="{Binding ResetTickerCommand}"/>
+                        <TextBlock Text="{Binding TickerStatusMessage}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <TextBlock Grid.Row="1" Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
+        <TextBlock Grid.Row="1" Text="Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs, barre des arrêts et la rotation des diapositives (ordre, affichage, durées) sont communs à tous les postes (enregistrés dans la base de données). Le reste ne concerne que ce poste."
                    Style="{StaticResource Hint}" Margin="0,12,0,0"/>
 
         <DockPanel Grid.Row="2" Margin="0,12,0,0">

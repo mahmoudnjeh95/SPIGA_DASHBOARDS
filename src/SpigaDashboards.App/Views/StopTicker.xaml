@@ -1,0 +1,39 @@
+<UserControl x:Class="SpigaDashboards.App.Views.StopTicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Height="48">
+
+    <!-- Scrolling stop bar (see StopTicker.xaml.cs): a fixed badge on the left
+         ("⚠ EN PANNE"), the text running right to left in a loop, and a
+         pulsing glow so it catches the eye from across the hall. Colours and
+         speed come from Parametres > Couleurs. -->
+    <Border x:Name="Bar" CornerRadius="8">
+        <Border.Effect>
+            <DropShadowEffect x:Name="Glow" ShadowDepth="0" BlurRadius="6" Opacity="0.95"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Light sweep of the pulse, over the whole bar -->
+            <Border x:Name="Shine" Grid.ColumnSpan="2" CornerRadius="8" Background="White" Opacity="0" IsHitTestVisible="False"/>
+
+            <Border Grid.Column="0" CornerRadius="8,0,0,8" Background="#40000000" Padding="14,0,16,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="Icon" Text="&#x26A0;" FontSize="26" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="BadgeBlock" FontSize="22" FontWeight="Black" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <Canvas x:Name="Track" Grid.Column="1" ClipToBounds="True" Margin="12,0,8,0">
+                <StackPanel x:Name="Strip" Orientation="Horizontal">
+                    <StackPanel.RenderTransform>
+                        <TranslateTransform x:Name="Shift"/>
+                    </StackPanel.RenderTransform>
+                </StackPanel>
+            </Canvas>
+        </Grid>
+    </Border>
+</UserControl>

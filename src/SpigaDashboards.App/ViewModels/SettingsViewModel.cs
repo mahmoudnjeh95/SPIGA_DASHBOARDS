@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -88,6 +89,20 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string qualityWarningText = "";
     [ObservableProperty] private string colorsStatusMessage = "";
 
+    // Couleurs: scrolling stop bar (StopTickerSettings), as typed, and the
+    // preview bar drawn from it.
+    [ObservableProperty] private string tickerSpeedText = "";
+    [ObservableProperty] private string tickerPanneColorText = "";
+    [ObservableProperty] private string tickerOtherColorText = "";
+    [ObservableProperty] private string tickerPlannedColorText = "";
+    [ObservableProperty] private string tickerTextColorText = "";
+    [ObservableProperty] private string tickerStatusMessage = "";
+    [ObservableProperty] private double tickerPreviewSpeed = 120;
+    [ObservableProperty] private Brush tickerPanneBrush = Brushes.Transparent;
+    [ObservableProperty] private Brush tickerOtherBrush = Brushes.Transparent;
+    [ObservableProperty] private Brush tickerPlannedBrush = Brushes.Transparent;
+    [ObservableProperty] private Brush tickerTextBrush = Brushes.White;
+
     public event EventHandler? SettingsApplied;
 
     public SettingsViewModel(
@@ -164,6 +179,7 @@ public partial class SettingsViewModel : ObservableObject
         StopThresholdText = settings.StopThresholdMinutes.ToString(CultureInfo.InvariantCulture);
 
         LoadColors(settings.Colors);
+        LoadTicker(settings.StopTicker);
 
         _ = LoadMachinesAsync();
     }
@@ -404,7 +420,7 @@ public partial class SettingsViewModel : ObservableObject
             : ParseSlides() == null ? SettingsTab.Affichage
             : ParseNominalRates() == null ? SettingsTab.Cadences
             : ParsePlannedBreaks() == null || ParseStopThreshold() == null ? SettingsTab.Pauses
-            : ParseColors() == null ? SettingsTab.Couleurs
+            : ParseColors() == null || ParseTicker() == null ? SettingsTab.Couleurs
             : null;
         if (bad is { } tab)
             SelectedTab = (int)tab;
@@ -478,6 +494,81 @@ public partial class SettingsViewModel : ObservableObject
             WeightOverWarning = _settings.Colors.WeightOverWarning,
             WeightUnderWarning = _settings.Colors.WeightUnderWarning,
             WeightUnderBad = _settings.Colors.WeightUnderBad,
+        };
+    }
+
+    private void LoadTicker(StopTickerSettings t)
+    {
+        TickerSpeedText = t.SpeedPixelsPerSecond.ToString(CultureInfo.InvariantCulture);
+        TickerPanneColorText = t.PanneColor;
+        TickerOtherColorText = t.OtherColor;
+        TickerPlannedColorText = t.PlannedColor;
+        TickerTextColorText = t.TextColor;
+        TickerStatusMessage = "";
+    }
+
+    [RelayCommand]
+    private void ResetTicker() => LoadTicker(new StopTickerSettings());
+
+    // The preview follows what is typed; a colour not understood (yet) keeps
+    // the last good one.
+    partial void OnTickerSpeedTextChanged(string value)
+    {
+        if (int.TryParse(value.Trim(), out var speed) && speed >= StopTickerSettings.MinSpeed && speed <= StopTickerSettings.MaxSpeed)
+            TickerPreviewSpeed = speed;
+    }
+    partial void OnTickerPanneColorTextChanged(string value) => TickerPanneBrush = ToBrush(value) ?? TickerPanneBrush;
+    partial void OnTickerOtherColorTextChanged(string value) => TickerOtherBrush = ToBrush(value) ?? TickerOtherBrush;
+    partial void OnTickerPlannedColorTextChanged(string value) => TickerPlannedBrush = ToBrush(value) ?? TickerPlannedBrush;
+    partial void OnTickerTextColorTextChanged(string value) => TickerTextBrush = ToBrush(value) ?? TickerTextBrush;
+
+    // "#RRGGBB", "#AARRGGBB" or a colour name ("Red", "Orange"...).
+    private static Brush? ToBrush(string text)
+    {
+        try
+        {
+            if (text.Trim().Length > 0 && ColorConverter.ConvertFromString(text.Trim()) is Color color)
+            {
+                var brush = new SolidColorBrush(color);
+                brush.Freeze();
+                return brush;
+            }
+        }
+        catch (FormatException)
+        {
+        }
+        return null;
+    }
+
+    // Couleurs tab, stop bar; null (message shown) on a bad value.
+    private StopTickerSettings? ParseTicker()
+    {
+        if (!int.TryParse(TickerSpeedText.Trim(), out var speed) || speed < StopTickerSettings.MinSpeed || speed > StopTickerSettings.MaxSpeed)
+        {
+            TickerStatusMessage = $"Vitesse invalide : « {TickerSpeedText} » ({StopTickerSettings.MinSpeed} à {StopTickerSettings.MaxSpeed} pixels par seconde).";
+            return null;
+        }
+        string? ReadColor(string text, string what)
+        {
+            if (ToBrush(text) != null)
+                return text.Trim();
+            TickerStatusMessage = $"Couleur « {what} » invalide : « {text} » (ex. #E74C3C ou Red).";
+            return null;
+        }
+        if (ReadColor(TickerPanneColorText, "Panne / sans cause") is not { } panne
+            || ReadColor(TickerOtherColorText, "Autre cause") is not { } other
+            || ReadColor(TickerPlannedColorText, "Arrêt planifié / maintenance") is not { } planned
+            || ReadColor(TickerTextColorText, "Texte") is not { } textColor)
+            return null;
+
+        TickerStatusMessage = "";
+        return new StopTickerSettings
+        {
+            SpeedPixelsPerSecond = speed,
+            PanneColor = panne,
+            OtherColor = other,
+            PlannedColor = planned,
+            TextColor = textColor,
         };
     }
 
@@ -705,6 +796,7 @@ public partial class SettingsViewModel : ObservableObject
         _settings.PlannedBreaks = ParsePlannedBreaks() ?? _settings.PlannedBreaks;
         _settings.StopThresholdMinutes = ParseStopThreshold() ?? _settings.StopThresholdMinutes;
         _settings.Colors = ParseColors() ?? _settings.Colors;
+        _settings.StopTicker = ParseTicker() ?? _settings.StopTicker;
         // Machine list not loaded (DB down): keep the targets and slides already saved.
         if (Machines.Count > 0)
         {

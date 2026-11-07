@@ -14,6 +14,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Run state photo (RunStateImage), spanning both header lines. -->
@@ -49,16 +50,14 @@
 
         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Top" Text="{Binding CurrentProductionLabel}" FontSize="16"
                    Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
-                   ToolTip="{Binding CurrentProduction.ProductionId}"
-                   Visibility="{Binding OngoingStop, Converter={StaticResource InverseNullToVisibility}}"/>
+                   ToolTip="{Binding CurrentProduction.ProductionId}"/>
 
-        <!-- Stop in progress (OngoingStopService), in place of the production
-             line: since when, how long, and its cause or "Cause à définir". -->
-        <Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" HorizontalAlignment="Left" VerticalAlignment="Top"
-                Margin="0,4,0,0" Padding="12,3" CornerRadius="8" Background="{DynamicResource DangerBrush}"
-                Visibility="{Binding OngoingStop, Converter={StaticResource NullToVisibility}}">
-            <TextBlock Text="{Binding OngoingStop.BannerText}" FontSize="17" FontWeight="Bold" Foreground="White"
-                       TextTrimming="CharacterEllipsis"/>
-        </Border>
+        <!-- Stop in progress (OngoingStopService) that doesn't take the whole
+             view (TickerStop): scrolling bar under the machine photo, the
+             full width of the slide; the figures stay visible under it. -->
+        <views:StopTicker Grid.Row="2" Grid.ColumnSpan="3" Margin="0,8,0,0" DataContext="{Binding TickerStop}"
+                          Visibility="{Binding Converter={StaticResource NullToVisibility}}"
+                          BadgeText="{Binding Title}" Text="{Binding TickerText}"
+                          BarColor="{Binding TickerColor}" TextColor="{Binding TickerTextColor}" Speed="{Binding TickerSpeed}"/>
     </Grid>
 </UserControl>

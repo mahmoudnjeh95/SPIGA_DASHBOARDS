@@ -42,9 +42,10 @@ public sealed class OngoingStop
 
     public bool IsUnqualified => Kind == OngoingStopKind.Unqualified;
 
-    // Panne / planned stop / maintenance: the machine slide gives the screen
-    // to this stop until the line runs again.
-    public bool IsDeclared => Kind is OngoingStopKind.Panne or OngoingStopKind.Planned or OngoingStopKind.Maintenance;
+    // Planned stop / maintenance (calendar or "Planifié"): the poste slide
+    // gives the whole view to it until the line runs again. Any other stop
+    // keeps the figures on screen, with the scrolling bar (StopTicker).
+    public bool TakesWholeView => Kind is OngoingStopKind.Planned or OngoingStopKind.Maintenance;
 
     public string Title => Kind switch
     {
@@ -86,6 +87,15 @@ public sealed class OngoingStop
 
     // One line for the slide header and the pop-up.
     public string BannerText => $"{Title} {SinceText} ({DurationText})  ·  {CauseText}";
+
+    // Scrolling bar (StopTicker): Title stays fixed on its left, this scrolls.
+    public string TickerText => $"Ligne à l'arrêt {SinceText} ({DurationText})  ·  {CauseText}"
+        + (ExpectedEnd != null ? "  ·  " + ExpectedEndText : "");
+
+    // Colours of the bar, from Parametres > Couleurs (StopTickerSettings).
+    public string TickerColor => StopTickerSettings.Current.ColorFor(Kind);
+    public string TickerTextColor => StopTickerSettings.Current.TextColor;
+    public double TickerSpeed => StopTickerSettings.Current.SpeedPixelsPerSecond;
 
     // "12 min", "5 h 07", "3 j 04 h"
     public static string FormatDuration(TimeSpan span)

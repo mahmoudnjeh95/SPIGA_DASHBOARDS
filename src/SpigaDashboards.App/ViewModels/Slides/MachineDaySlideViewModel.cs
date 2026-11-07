@@ -21,11 +21,13 @@ public class MachineDaySlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
-    // The line's stop in progress, if any: red banner under the header.
+    // The line's stop in progress, if any.
     public OngoingStop? OngoingStop { get; init; }
-    // A declared panne / planned stop / maintenance going on now: one big
-    // panel instead of the KPIs and charts until the line runs again.
-    public OngoingStop? DeclaredStop => OngoingStop is { IsDeclared: true } && PeriodLabel.Length == 0 ? OngoingStop : null;
+    // A planned stop / maintenance going on now: one big panel instead of the
+    // KPIs and charts until the line runs again.
+    public OngoingStop? DeclaredStop => OngoingStop is { TakesWholeView: true } && PeriodLabel.Length == 0 ? OngoingStop : null;
+    // Any other stop: scrolling bar under the machine photo, figures kept.
+    public OngoingStop? TickerStop => DeclaredStop == null ? OngoingStop : null;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";

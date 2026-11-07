@@ -30,8 +30,10 @@ public class MachinePeriodSlideViewModel
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
-    // The line's stop in progress, if any (header banner, whatever the period).
+    // The line's stop in progress, if any (scrolling bar under the machine
+    // photo, whatever the period).
     public OngoingStop? OngoingStop { get; init; }
+    public OngoingStop? TickerStop => OngoingStop;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";

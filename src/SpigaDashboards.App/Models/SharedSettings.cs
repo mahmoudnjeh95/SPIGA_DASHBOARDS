@@ -27,6 +27,9 @@ public class SharedSettings
     // Colour limits (Parametres > Couleurs). null = saved by a version
     // before they could be set: each PC keeps its own.
     public ColorThresholds? Colors { get; set; }
+    // Scrolling stop bar. null = saved by a version before it existed: each
+    // PC keeps its own.
+    public StopTickerSettings? StopTicker { get; set; }
 
     public static SharedSettings From(AppSettings settings) => new()
     {
@@ -41,6 +44,7 @@ public class SharedSettings
         Slides = settings.Slides,
         SlideDurationSeconds = settings.SlideDurationSeconds,
         Colors = settings.Colors,
+        StopTicker = settings.StopTicker,
     };
 
     public void ApplyTo(AppSettings settings)
@@ -61,6 +65,8 @@ public class SharedSettings
             settings.SlideDurationSeconds = seconds;
         if (Colors != null)
             settings.Colors = Colors;
+        if (StopTicker != null)
+            settings.StopTicker = StopTicker;
     }
 
     public static string Serialize(AppSettings settings) => JsonSerializer.Serialize(From(settings));

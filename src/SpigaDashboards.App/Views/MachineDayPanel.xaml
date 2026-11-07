@@ -96,8 +96,19 @@
 
         <views:MachineHeader Grid.Row="0"/>
         <!-- Main poste / team, on the header's second line -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,0,10,6" DataContext="{Binding Main}"
+        <StackPanel Grid.Row="0" Orientation="Horizontal" DataContext="{Binding Main}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <StackPanel.Style>
+                <Style TargetType="StackPanel">
+                    <Setter Property="Margin" Value="10,0,10,6"/>
+                    <Style.Triggers>
+                        <!-- Above the scrolling stop bar (48 px + 8 px gap) when it shows. -->
+                        <DataTrigger Binding="{Binding DataContext.TickerStop, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource NullToVisibility}}" Value="Visible">
+                            <Setter Property="Margin" Value="10,0,10,64"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </StackPanel.Style>
             <Border CornerRadius="10" Padding="12,2" VerticalAlignment="Center">
                 <Border.Style>
                     <Style TargetType="Border">
@@ -119,9 +130,10 @@
         </StackPanel>
 
 
-        <!-- Declared panne / planned stop / maintenance going on now: the whole
-             body goes to it until the line produces again (StopDetector:
-             2 min in a row), then the poste figures come back on their own. -->
+        <!-- Planned stop / maintenance going on now: the whole body goes to it
+             until the line produces again (StopDetector: 2 min in a row), then
+             the poste figures come back on their own. Any other stop keeps the
+             figures, with the scrolling bar of the header (StopTicker). -->
         <Border Grid.Row="1" Grid.RowSpan="2" Margin="10,8,10,4" CornerRadius="16" BorderThickness="4"
                 Background="{DynamicResource TileBackgroundBrush}" DataContext="{Binding DeclaredStop}"
                 Visibility="{Binding Converter={StaticResource NullToVisibility}}">
@@ -264,8 +276,10 @@
             </Border>
         </Grid>
 
-        <!-- Earlier postes of the same shift day (nothing before the first poste of the day) -->
-        <Border Grid.Row="2" Visibility="{Binding DeclaredStop, Converter={StaticResource InverseNullToVisibility}}">
+        <!-- Earlier postes of the same shift day (nothing before the first poste
+             of the day). Hidden while the line is stopped: under the big panel,
+             or to give the charts back the height of the scrolling stop bar. -->
+        <Border Grid.Row="2" Visibility="{Binding OngoingStop, Converter={StaticResource InverseNullToVisibility}}">
         <StackPanel Margin="0,4,0,0">
             <StackPanel.Style>
                 <Style TargetType="StackPanel">

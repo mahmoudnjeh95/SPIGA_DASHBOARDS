@@ -270,6 +270,19 @@ public class AppSettings
         }
     }
 
+    // Speed and colours of the scrolling stop bar (Parametres > Couleurs),
+    // published as StopTickerSettings.Current like Colors above.
+    private StopTickerSettings _stopTicker = new();
+    public StopTickerSettings StopTicker
+    {
+        get => _stopTicker;
+        set
+        {
+            _stopTicker = value ?? new StopTickerSettings();
+            StopTickerSettings.Current = _stopTicker;
+        }
+    }
+
     public double TrsTarget(string machineId)
         => MachineTrsTargets.TryGetValue(machineId, out var target) && target > 0 ? target : DefaultTrsTarget;
 
