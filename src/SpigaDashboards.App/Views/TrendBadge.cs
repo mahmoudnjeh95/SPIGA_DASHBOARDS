@@ -22,9 +22,9 @@ public sealed class TrendBadge : StackPanel
     private static readonly ImageSource Up = Icon("trend-up.png");
     private static readonly ImageSource Down = Icon("trend-down.png");
 
-    private readonly Image _icon = new() { Width = 30, Height = 30, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly Image _icon = new() { Width = 44, Height = 44, Margin = new Thickness(0, -4, 0, -4), HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TextBlock _arrow = new() { Text = "▬", FontSize = 22, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly TextBlock _label = new() { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center };
+    private readonly TextBlock _label = new() { FontSize = 12, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TranslateTransform _shift = new();
 
     public TrendBadge()
