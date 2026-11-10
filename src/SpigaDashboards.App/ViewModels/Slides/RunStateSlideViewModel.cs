@@ -16,6 +16,29 @@ public class MachineRunTile
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
     public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
     public string RunStateLabel => PlannedLabel ?? (!IsConnected ? "Pas de données" : BeltRunning ? "En marche" : "À l'arrêt");
+
+    // The line's stop in progress, and its cause pill under the name: only
+    // once the stop has a cause (qualified in Planification > Pannes, or a
+    // calendar slot). A stop nobody qualified shows nothing more than its
+    // red photo.
+    public OngoingStop? Stop { get; init; }
+    public bool HasCause => Stop is { IsUnqualified: false };
+    public string CauseLabel => Stop?.ShortCause ?? "";
+    // Wrench: panne / maintenance; calendar: planned; info: any other cause (Segoe MDL2 Assets).
+    public string CauseGlyph => Stop?.Kind switch
+    {
+        OngoingStopKind.Panne or OngoingStopKind.Maintenance => "\uE90F",
+        OngoingStopKind.Planned => "\uE787",
+        _ => "\uE946",
+    };
+    // Same colours as the scrolling stop bar (Parametres > Couleurs); a
+    // maintenance in the yellow of its photo frame, with dark text.
+    public string CauseColor => Stop == null ? "#00000000"
+        : Stop.Kind == OngoingStopKind.Maintenance ? "#FAB219" : Stop.TickerColor;
+    public string CauseTextColor => Stop?.Kind == OngoingStopKind.Maintenance ? "#1A1406" : "#FFFFFF";
+    public string CauseDuration => Stop == null ? "" : "depuis " + Stop.DurationText;
+    public string CauseReturn => Stop?.ShortReturnText is { Length: > 0 } text ? "  ·  " + text : "";
+    public bool IsOverdue => Stop?.IsOverdue ?? false;
 }
 
 // Banner of a run-state photo while the line is in a slot of the
@@ -39,6 +62,9 @@ public class RunStateSlideViewModel
     public string Title { get; init; } = "";
     public IReadOnlyList<MachineRunTile> Tiles { get; init; } = Array.Empty<MachineRunTile>();
     public int RunningCount => Tiles.Count(t => t.BeltRunning);
+    // Every caption keeps room for the cause lines as soon as one tile has
+    // them, so all the photos stay the same size.
+    public bool HasCauses => Tiles.Any(t => t.HasCause);
 
     // Up to 5 photos on one row, more on two rows (10 machines = 2 x 5).
     public int TileColumns => Tiles.Count <= 5 ? Math.Max(1, Tiles.Count) : (Tiles.Count + 1) / 2;
@@ -60,6 +86,7 @@ public class RunStateSlideViewModel
                 IsConnected = status?.IsConnected ?? false,
                 BeltRunning = (status?.BeltRunning ?? false) && !stops.ContainsKey(m.MachineId),
                 PlannedSlot = slots.TryGetValue(m.MachineId, out var slot) ? slot : null,
+                Stop = stops.GetValueOrDefault(m.MachineId),
             });
         }
         return new RunStateSlideViewModel { Title = title, Tiles = tiles };

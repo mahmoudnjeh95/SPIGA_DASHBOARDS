@@ -28,6 +28,12 @@ public class MachineDaySlideViewModel
     public OngoingStop? DeclaredStop => OngoingStop is { TakesWholeView: true } && PeriodLabel.Length == 0 ? OngoingStop : null;
     // Any other stop: scrolling bar under the machine photo, figures kept.
     public OngoingStop? TickerStop => DeclaredStop == null ? OngoingStop : null;
+    // Stop just over: green "REPRISE" bar in the stop bar's place for a few minutes.
+    public StopRecovery? Recovery { get; init; }
+    // The stop / "REPRISE" bar is under the header (the team label moves up).
+    public bool HasHeaderBar => TickerStop != null || Recovery != null;
+    // Earlier postes' cards give their height back to the charts meanwhile.
+    public bool ShowsPreviousShiftsArea => OngoingStop == null && Recovery == null;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
@@ -91,6 +97,7 @@ public class MachineDaySlideViewModel
             BeltRunning = (status?.BeltRunning ?? false) && ongoingStop == null,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
             OngoingStop = ongoingStop,
+            Recovery = ongoingStop == null ? OngoingStopService.RecentRecovery(machine.MachineId) : null,
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),

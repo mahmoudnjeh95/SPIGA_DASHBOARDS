@@ -34,6 +34,11 @@ public static class OngoingStopService
     // the next reads only look back a few hours.
     private static readonly Dictionary<string, DateTime> KnownStarts = new();
 
+    // Lines whose stop ended (in the previous read, not in this one), for the
+    // "REPRISE" bar of their slides during RecoveryShown.
+    public static readonly TimeSpan RecoveryShown = TimeSpan.FromMinutes(5);
+    private static readonly Dictionary<string, StopRecovery> Recoveries = new();
+
     public static async Task<IReadOnlyDictionary<string, OngoingStop>> GetAsync(ProductionRepository repository, AppSettings settings)
     {
         await Gate.WaitAsync();
@@ -41,7 +46,9 @@ public static class OngoingStopService
         {
             if (DateTime.Now - _readAt < CacheFor)
                 return _last;
-            _last = await ReadAsync(repository, settings);
+            var fresh = await ReadAsync(repository, settings);
+            TrackRecoveries(_last, fresh, DateTime.Now);
+            _last = fresh;
             _readAt = DateTime.Now;
             return _last;
         }
@@ -53,6 +60,33 @@ public static class OngoingStopService
         finally
         {
             Gate.Release();
+        }
+    }
+
+    // The line's stop that ended less than RecoveryShown ago, if any.
+    public static StopRecovery? RecentRecovery(string machineId)
+    {
+        lock (Recoveries)
+        {
+            return Recoveries.TryGetValue(machineId, out var recovery) && DateTime.Now - recovery.At < RecoveryShown
+                ? recovery : null;
+        }
+    }
+
+    private static void TrackRecoveries(IReadOnlyDictionary<string, OngoingStop> before,
+        IReadOnlyDictionary<string, OngoingStop> now, DateTime at)
+    {
+        lock (Recoveries)
+        {
+            foreach (var (id, stop) in before)
+            {
+                if (!now.ContainsKey(id))
+                    Recoveries[id] = new StopRecovery(stop, at);
+            }
+            foreach (var id in now.Keys)
+                Recoveries.Remove(id);
+            foreach (var id in Recoveries.Where(r => at - r.Value.At >= RecoveryShown).Select(r => r.Key).ToList())
+                Recoveries.Remove(id);
         }
     }
 
@@ -76,8 +110,16 @@ public static class OngoingStopService
             var deeper = new List<string>();
             foreach (var id in pending)
             {
-                var run = StopDetector.StoppedRuns(byLine[id].OrderBy(s => s.StartTime).ToList()).LastOrDefault();
-                if (run == null || now - run[^1].EndTime > LiveWindow)
+                var line = byLine[id].OrderBy(s => s.StartTime).ToList();
+                var run = StopDetector.StoppedRuns(line).LastOrDefault();
+                // Over as soon as the restart is confirmed (MinRestartMinutes
+                // of production after it), not LiveWindow later: the stop bar,
+                // the pop-up and the red photo stayed up to 11 min on a line
+                // producing again. LiveWindow only covers StatsViewer going quiet.
+                var restarted = run != null && line
+                    .Where(s => s.State == LineState.Producing && s.StartTime >= run[^1].EndTime)
+                    .Sum(s => (s.EndTime - s.StartTime).TotalMinutes) >= StopDetector.MinRestartMinutes;
+                if (run == null || restarted || now - run[^1].EndTime > LiveWindow)
                 {
                     KnownStarts.Remove(id);
                     continue;

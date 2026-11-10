@@ -84,6 +84,10 @@ public partial class MainViewModel : ObservableObject
     // whenever the auto-advance countdown starts over.
     [ObservableProperty] private int slideChangeCount;
     [ObservableProperty] private int rotationCycle;
+    // What the slide on screen is about: slide, period, filters, poste. The
+    // tiles' change flash (Views/TileFx) only compares figures of the same
+    // scope, and the charts (ChartCard) only move their bars within it.
+    [ObservableProperty] private string slideScope = "";
     private string? _shownKey;
     // The slide shown's duration (Parametres > Affichage, or the default one).
     public double SlideSeconds => _rotationTimer.Interval.TotalSeconds;
@@ -749,7 +753,7 @@ public partial class MainViewModel : ObservableObject
         {
             var slide = _slides[index];
             var previousType = CurrentSlide?.GetType();
-            CurrentSlide = slide switch
+            object? next = slide switch
             {
                 MachineSlideDescriptor ms when SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift
                     => await MachineDaySlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, ms.Sector,
@@ -763,6 +767,12 @@ public partial class MainViewModel : ObservableObject
                     runState.MachineIds.Select(id => _machinesById[id]).ToList()),
                 _ => null,
             };
+            // Before the slide: its figures read the scope they belong to.
+            var now = DateTime.Now;
+            var shiftId = KpiCalculator.CurrentShiftId(now);
+            SlideScope = string.Join("|", slide.Key, SelectedPeriod, CustomFrom?.ToString("yyyyMMdd"), CustomTo?.ToString("yyyyMMdd"),
+                SynthesisPeriod, _filter.Describe(), TeamScheduleService.GetShiftDate(now, shiftId).ToString("yyyyMMdd"), shiftId);
+            CurrentSlide = next;
             IsPdfSlideShown = CurrentSlide is PdfSlideViewModel;
             // Before RotationCycle moves: the timer bar reads SlideSeconds then.
             // Only on a change, as setting it restarts the countdown.

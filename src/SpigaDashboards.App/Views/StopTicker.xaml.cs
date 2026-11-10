@@ -35,6 +35,13 @@ public partial class StopTicker : UserControl
         Loaded += (_, _) => { StartPulse(); Rebuild(); };
         Unloaded += (_, _) => StopAll();
         Track.SizeChanged += (_, _) => Rebuild();
+        // A stop starting on the slide on screen: the bar drops in (not in
+        // the Parametres preview, which is never hidden).
+        IsVisibleChanged += (_, e) =>
+        {
+            if ((bool)e.NewValue && IsLoaded)
+                SlideMotion.DropIn(this);
+        };
     }
 
     private static DependencyProperty Register(string name, Type type, object defaultValue)

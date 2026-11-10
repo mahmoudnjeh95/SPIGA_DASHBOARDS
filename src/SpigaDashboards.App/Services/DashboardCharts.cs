@@ -49,13 +49,45 @@ public static class DashboardCharts
         return axis;
     }
 
+    // Round axis step at or above `raw`: 1, 2, 2.5 or 5 times a power of ten.
+    private static double NiceStep(double raw)
+    {
+        if (raw <= 0)
+            return 0;
+        var power = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var mantissa = raw / power;
+        return power * (mantissa <= 1 ? 1 : mantissa <= 2 ? 2 : mantissa <= 2.5 ? 2.5 : mantissa <= 5 ? 5 : 10);
+    }
+
+    // Points of a line chart that print their value: all of them up to 16
+    // steps; beyond (a month by day), the last one and every n-th before it,
+    // so the neighbouring values don't run into each other.
+    private static HashSet<int> LabelledPoints(IReadOnlyList<double?> values)
+    {
+        var stride = values.Count <= 16 ? 1 : (int)Math.Ceiling(values.Count / 10.0);
+        var labelled = new HashSet<int>();
+        int? last = null;
+        for (var i = values.Count - 1; i >= 0; i--)
+        {
+            if (values[i] != null && (last is not { } l || l - i >= stride))
+            {
+                labelled.Add(i);
+                last = i;
+            }
+        }
+        return labelled;
+    }
+
     // Value axis around the points with room above them for their values.
     private static Axis PaddedYAxis(IEnumerable<double?> values, Func<double, string> labeler)
     {
         var known = values.Where(v => v.HasValue).Select(v => v!.Value).DefaultIfEmpty(0).ToList();
         var (low, high) = (known.Min(), known.Max());
         var range = Math.Max(high - low, Math.Max(Math.Abs(high), 1) * 0.02);
-        return ChartHelpers.BuildYAxis(low - 0.2 * range, high + 0.35 * range, labeler: labeler);
+        // Room for a value above the highest point even in the short period
+        // tiles, and 2 or 3 axis labels (auto steps packed 5 into them).
+        var (bottom, top) = (low - 0.2 * range, high + 0.9 * range);
+        return ChartHelpers.BuildYAxis(bottom, top, minStep: NiceStep((top - bottom) / 2.5), labeler: labeler);
     }
 
     // Share of each step the line was producing over the time it was required
@@ -84,10 +116,11 @@ public static class DashboardCharts
                 DataLabelsFormatter = p => p.Coordinate.PrimaryValue > 0 ? $"{p.Coordinate.PrimaryValue * 100:0} %" : "",
             },
         };
-        // Headroom above 100 % for the labels of full bars.
+        // Headroom above 100 % for the labels of full bars (1.25 cut them
+        // off in the poste view's short tiles).
         return new ChartParts(series,
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1.25, minStep: 0.5, labeler: v => v <= 1 ? $"{v:P0}" : "") });
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 1.5, minStep: 0.5, labeler: v => v <= 1 ? $"{v:P0}" : "") });
     }
 
     // Average speed (bags / minute of steady running, KpiCalculator.AverageSpeed)
@@ -138,7 +171,10 @@ public static class DashboardCharts
         };
         return new ChartParts(series,
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: Math.Ceiling(top * 1.4), minStep: Math.Max(1, Math.Ceiling(top / 2)), labeler: v => $"{v:0}") });
+            // Room above the max line for its values (they were cut off in the
+            // short period tiles), 2 or 3 round axis labels (0, 50, 100).
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: Math.Ceiling(top * 1.9),
+                minStep: Math.Max(1, Math.Ceiling(top / 1.5 / 10) * 10), labeler: v => $"{v:0}") });
     }
 
     // Net average weight vs target per step. The target is bags-weighted like
@@ -391,7 +427,9 @@ public static class DashboardCharts
     public static ChartParts Trs(IReadOnlyList<Step> steps, double target)
     {
         var trs = steps.Select(s => KpiCalculator.Summarize(s.Lots, KpiCalculator.AvailabilityPercent(s.Lots)).TrsPercent).ToArray();
-        var top = Math.Max(100, Math.Ceiling(trs.Max(v => v ?? 0) * 1.2));
+        // Room above 100 % for the values of the tallest bars (they were cut
+        // off in the short tiles); the axis itself stops at 100 %.
+        var top = Math.Max(115, Math.Ceiling(trs.Max(v => v ?? 0) * 1.25));
         var series = new ISeries[]
         {
             new ColumnSeries<double?>
@@ -418,7 +456,7 @@ public static class DashboardCharts
         };
         return new ChartParts(series,
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: top, minStep: 50, labeler: v => $"{v:0}%") });
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: top, minStep: 50, labeler: v => v <= 100 ? $"{v:0}%" : "") });
     }
 
     // Net weight produced per step, one stacked colour per target weight, the
@@ -461,10 +499,12 @@ public static class DashboardCharts
             DataLabelsFormatter = p => p.Coordinate.PrimaryValue <= 0 ? ""
                 : useTonnes ? p.Coordinate.PrimaryValue.ToString("0.#", French) : ChartHelpers.Compact(p.Coordinate.PrimaryValue),
         });
-        // Headroom above the tallest stack for its total.
+        // Headroom above the tallest stack for its total; 3 axis labels at
+        // most (auto steps packed "0 t" to "50 t" into the short tile).
+        var top = totals.Max() > 0 ? totals.Max() * 1.6 : (double?)null;
         return new ChartParts(series.ToArray(),
             new[] { ChartHelpers.BuildXAxis(steps.Select(s => s.Label)) },
-            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: totals.Max() > 0 ? totals.Max() * 1.35 : null,
+            new[] { ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: top, minStep: top is { } t ? NiceStep(t / 2) : 0,
                 labeler: v => useTonnes ? $"{v:0.#} t" : ChartHelpers.Compact(v) + " kg") });
     }
 
@@ -474,6 +514,7 @@ public static class DashboardCharts
         var values = steps.Select(s => KpiCalculator.Summarize(s.Lots, 0).WeightDeviationPercent).ToArray();
         if (values.All(v => v == null))
             return ChartParts.Empty();
+        var labelled = LabelledPoints(values);
         var series = new ISeries[]
         {
             new LineSeries<double?>
@@ -487,10 +528,10 @@ public static class DashboardCharts
                 LineSmoothness = 0,
                 DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
                 DataLabelsPosition = DataLabelsPosition.Top,
-                DataLabelsSize = Math.Min(11, LabelSize(steps.Count)),
+                DataLabelsSize = Math.Min(11, LabelSize(labelled.Count)),
                 // Deviations are hundredths of a percent: two decimals, no
                 // "%" (the axis says it) to keep neighbouring values apart.
-                DataLabelsFormatter = p => p.Coordinate.PrimaryValue.ToString("+0.00;-0.00;0", French),
+                DataLabelsFormatter = p => labelled.Contains(p.Index) ? p.Coordinate.PrimaryValue.ToString("+0.00;-0.00;0", French) : "",
             },
             new LineSeries<double>
             {
@@ -512,6 +553,7 @@ public static class DashboardCharts
     {
         if (lines.All(l => l.Values.All(v => v == null)))
             return ChartParts.Empty();
+        var labelled = lines.Select(l => LabelledPoints(l.Values)).ToList();
         var series = lines.Select((l, i) => (ISeries)new LineSeries<double?>
         {
             Values = l.Values,
@@ -524,8 +566,8 @@ public static class DashboardCharts
             // In the line's own colour, to tell the lines' values apart.
             DataLabelsPaint = new SolidColorPaint(ChartHelpers.Palette[i % ChartHelpers.Palette.Length]),
             DataLabelsPosition = DataLabelsPosition.Top,
-            DataLabelsSize = Math.Min(11, LabelSize(labels.Count)),
-            DataLabelsFormatter = p => labeler(p.Coordinate.PrimaryValue),
+            DataLabelsSize = Math.Min(11, LabelSize(labelled[i].Count)),
+            DataLabelsFormatter = p => labelled[i].Contains(p.Index) ? labeler(p.Coordinate.PrimaryValue) : "",
         }).ToList();
         if (reference is { } r)
         {

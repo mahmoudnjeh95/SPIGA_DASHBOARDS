@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Threading;
 
 namespace SpigaDashboards.App.Views;
@@ -37,7 +38,129 @@ public static class SlideMotion
         shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(36, 0, Ms(520)) { EasingFunction = EaseOut });
 
         // The new slide's tiles exist once its template is applied.
-        host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => CascadeTiles(host));
+        host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            CascadeTiles(host);
+            EnterFigures(host);
+        });
+    }
+
+    // Figures (TileFx) count up from 0 and TRS rings fill up, with the tiles.
+    private static void EnterFigures(DependencyObject node)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        {
+            var child = VisualTreeHelper.GetChild(node, i);
+            if (child is TextBlock block && TileFx.IsFigure(block))
+                TileFx.Enter(block);
+            else if (child is TrsRing ring)
+                ring.Enter();
+            EnterFigures(child);
+        }
+    }
+
+    // ---- Scope of the slide on screen ----
+    // Set on the slide host, bound to MainViewModel.SlideScope: which slide,
+    // period, filters and poste the figures are about. TileFx compares a
+    // figure only with the last one shown in the same scope, and ChartCard
+    // moves its bars to their new values only within the same scope.
+
+    public static readonly DependencyProperty ScopeProperty = DependencyProperty.RegisterAttached(
+        "Scope", typeof(string), typeof(SlideMotion), new PropertyMetadata(null));
+
+    public static string? GetScope(DependencyObject d) => (string?)d.GetValue(ScopeProperty);
+    public static void SetScope(DependencyObject d, string? value) => d.SetValue(ScopeProperty, value);
+
+    // The Scope of the slide host `d` is in (null outside one).
+    public static string? ScopeOf(DependencyObject d)
+    {
+        for (var current = d; current != null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (GetScope(current) is { } scope)
+                return scope;
+        }
+        return null;
+    }
+
+    // ---- Bars that drop in (stop bar, "REPRISE" bar) ----
+
+    public static void DropIn(FrameworkElement element)
+    {
+        var shift = new TranslateTransform(0, -14);
+        var scale = new ScaleTransform(1, 0.6);
+        element.RenderTransformOrigin = new Point(0.5, 0);
+        element.RenderTransform = new TransformGroup { Children = { scale, shift } };
+        var back = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 };
+        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, Ms(300)) { EasingFunction = EaseOut });
+        shift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-14, 0, Ms(480)) { EasingFunction = back });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.6, 1, Ms(480)) { EasingFunction = back });
+    }
+
+    // ---- Shift change: the team / poste chip announces it ----
+    // Announce="{Binding CurrentTeamLabel}": when the value changes (not the
+    // first time it is set), the element pops, glows three times in the accent
+    // colour, and its first TextBlock flips over to the new text.
+
+    public static readonly DependencyProperty AnnounceProperty = DependencyProperty.RegisterAttached(
+        "Announce", typeof(object), typeof(SlideMotion), new PropertyMetadata(null, OnAnnounceChanged));
+
+    public static object? GetAnnounce(DependencyObject d) => d.GetValue(AnnounceProperty);
+    public static void SetAnnounce(DependencyObject d, object? value) => d.SetValue(AnnounceProperty, value);
+
+    private static void OnAnnounceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not FrameworkElement element || !element.IsLoaded
+            || e.OldValue is null or "" || Equals(e.OldValue, e.NewValue))
+            return;
+
+        var pop = new ScaleTransform(1, 1);
+        element.RenderTransformOrigin = new Point(0.5, 0.5);
+        element.RenderTransform = pop;
+        var swell = new DoubleAnimationUsingKeyFrames();
+        swell.KeyFrames.Add(new EasingDoubleKeyFrame(1.12, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(200)), EaseOut));
+        swell.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(700)),
+            new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 2, Springiness = 5 }));
+        pop.BeginAnimation(ScaleTransform.ScaleXProperty, swell);
+        pop.BeginAnimation(ScaleTransform.ScaleYProperty, swell);
+
+        // A glow for a few seconds only: an effect costs in software rendering.
+        var accent = (Application.Current.TryFindResource("AccentBrush") as SolidColorBrush)?.Color ?? Colors.DodgerBlue;
+        var glow = new DropShadowEffect { Color = accent, ShadowDepth = 0, BlurRadius = 0, Opacity = 1 };
+        element.Effect = glow;
+        var pulses = new DoubleAnimation(0, 26, Ms(450))
+        {
+            AutoReverse = true,
+            RepeatBehavior = new RepeatBehavior(3),
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        pulses.Completed += (_, _) =>
+        {
+            if (element.Effect == glow)
+                element.Effect = null;
+        };
+        glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty, pulses);
+
+        if (FirstText(element) is { } text)
+        {
+            var flip = new ScaleTransform(1, 0);
+            text.RenderTransformOrigin = new Point(0.5, 0.5);
+            text.RenderTransform = flip;
+            flip.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0, 1, Ms(520))
+                { EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.5 } });
+        }
+    }
+
+    private static TextBlock? FirstText(DependencyObject node)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        {
+            var child = VisualTreeHelper.GetChild(node, i);
+            if (child is TextBlock text)
+                return text;
+            if (FirstText(child) is { } found)
+                return found;
+        }
+        return null;
     }
 
     private static void CascadeTiles(FrameworkElement host)

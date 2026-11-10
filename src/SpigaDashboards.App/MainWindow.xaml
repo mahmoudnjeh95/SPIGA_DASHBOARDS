@@ -117,7 +117,9 @@
                        RenderOptions.BitmapScalingMode="HighQuality"/>
                 <TextBlock Text="SPIGA Dashboards" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
                 <!-- Hidden over the consignes PDF slide. -->
+                <!-- Team / poste: pops, glows and flips over at a poste change. -->
                 <Border Background="{DynamicResource HoverBackgroundBrush}" CornerRadius="12" Padding="12,4" Margin="16,0,0,0"
+                        views:SlideMotion.Announce="{Binding CurrentTeamLabel}"
                         Visibility="{Binding IsPdfSlideShown, Converter={StaticResource InverseBoolToVisibility}}">
                     <StackPanel Orientation="Horizontal">
                         <Ellipse Style="{StaticResource LiveDot}" Margin="0,0,9,0"/>
@@ -319,7 +321,8 @@
 
         <!-- Slide content: swaps DataTemplate based on the current slide's view-model type -->
         <ContentControl Grid.Row="2" Margin="14,8,14,10" Content="{Binding CurrentSlide}"
-                        views:SlideMotion.Transition="{Binding SlideChangeCount}"/>
+                        views:SlideMotion.Transition="{Binding SlideChangeCount}"
+                        views:SlideMotion.Scope="{Binding SlideScope}"/>
 
         <!-- Time left on this slide: fills up to the next auto-advance, hidden while paused. -->
         <Border Grid.Row="2" Height="3" Margin="22,2,22,0" VerticalAlignment="Top" CornerRadius="1.5"

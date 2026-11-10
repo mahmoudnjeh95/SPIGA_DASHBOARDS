@@ -61,6 +61,9 @@
         </Grid>
 
         <TextBlock x:Name="CopyrightText" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,16,0,0"/>
+        <!-- Free Flaticon licence: attribution required. -->
+        <TextBlock Text="Icônes de tendance (hausse / baisse) : Flaticon.com" FontSize="12"
+                   Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,4,0,0"/>
 
         <Button Content="Fermer" HorizontalAlignment="Right" Margin="0,16,0,0" Padding="16,8" IsDefault="True" IsCancel="True"
                 Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"

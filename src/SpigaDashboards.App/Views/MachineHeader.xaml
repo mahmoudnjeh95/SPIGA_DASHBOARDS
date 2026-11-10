@@ -27,26 +27,23 @@
                        FontSize="30" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
             <TextBlock Text="{Binding PeriodLabel}" FontSize="22" FontWeight="SemiBold" Margin="16,0,0,0"
                        Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
-            <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3" Margin="16,0,0,0" VerticalAlignment="Center"
-                    ToolTip="Aucune donnée reçue de StatsViewer pour cette ligne">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsConnected}" Value="False">
-                                <Setter Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <TextBlock Text="PAS DE DONNÉES" FontSize="18" FontWeight="Bold" Foreground="White"/>
-            </Border>
         </StackPanel>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-            <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding IsConnected, Converter={StaticResource BoolToStatusBrush}}"/>
-            <TextBlock Text="Connecté" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
-        </StackPanel>
+        <!-- Live feed of the line: green dot "Connecté", or the red "PAS DE
+             DONNÉES" pill (no snapshot from StatsViewer). Here rather than next
+             to the period, where it read as "no data for this month". -->
+        <Grid Grid.Column="2" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal"
+                        Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                <Ellipse Style="{StaticResource StatusDot}" Fill="{Binding IsConnected, Converter={StaticResource BoolToStatusBrush}}"/>
+                <TextBlock Text="Connecté" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3"
+                    ToolTip="Aucune donnée reçue de StatsViewer pour cette ligne"
+                    Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}">
+                <TextBlock Text="PAS DE DONNÉES" FontSize="18" FontWeight="Bold" Foreground="White"/>
+            </Border>
+        </Grid>
 
         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" VerticalAlignment="Top" Text="{Binding CurrentProductionLabel}" FontSize="16"
                    Foreground="{DynamicResource SecondaryTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
@@ -59,5 +56,9 @@
                           Visibility="{Binding Converter={StaticResource NullToVisibility}}"
                           BadgeText="{Binding Title}" Text="{Binding TickerText}"
                           BarColor="{Binding TickerColor}" TextColor="{Binding TickerTextColor}" Speed="{Binding TickerSpeed}"/>
+        <!-- Stop just over (Recovery): green "REPRISE" bar in the same place. -->
+        <views:RecoveryBar Grid.Row="2" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                           Visibility="{Binding Recovery, Converter={StaticResource NullToVisibility}}"
+                           Text="{Binding Recovery.Text}"/>
     </Grid>
 </UserControl>

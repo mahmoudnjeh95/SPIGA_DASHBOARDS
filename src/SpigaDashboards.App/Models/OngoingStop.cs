@@ -76,6 +76,17 @@ public sealed class OngoingStop
         }
     }
 
+    // The cause alone ("Panne mécanique"), for the run-state slide: readable
+    // from afar under ten photos, without component / technician / comment.
+    public string ShortCause => Slot != null
+        ? string.IsNullOrWhiteSpace(Slot.Task) ? (Slot.IsStop ? "Arrêt planifié" : "Maintenance") : Slot.Task.Trim()
+        : Qualification == null ? "" : StopCauses.Label(Qualification.CauseCode);
+
+    // "retour 15:30", "retour 12/11 08:00", "retour dépassé"; empty when not given.
+    public string ShortReturnText => ExpectedEnd is not { } end ? ""
+        : IsOverdue ? "retour dépassé"
+        : end.Date == DateTime.Today ? $"retour {end:HH:mm}" : $"retour {end:dd/MM HH:mm}";
+
     // Planned end of the calendar slot, else the one given when qualifying
     // the stop (Pannes); flagged once passed with the line still stopped.
     public DateTime? ExpectedEnd => Slot?.PlannedEnd ?? Qualification?.ExpectedEnd;
@@ -107,4 +118,12 @@ public sealed class OngoingStop
             return $"{minutes / 60} h {minutes % 60:00}";
         return $"{minutes / (24 * 60)} j {minutes % (24 * 60) / 60:00} h";
     }
+}
+
+// A line that was stopped at the previous read of OngoingStopService and
+// produces again: its slides show a green "REPRISE" bar for a few minutes
+// (RecoveryBar), where the stop bar was.
+public sealed record StopRecovery(OngoingStop Stop, DateTime At)
+{
+    public string Text => $"La ligne produit à nouveau  ·  arrêt de {OngoingStop.FormatDuration(At - Stop.Start)}  ·  {Stop.CauseText}";
 }

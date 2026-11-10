@@ -34,6 +34,11 @@ public class MachinePeriodSlideViewModel
     // photo, whatever the period).
     public OngoingStop? OngoingStop { get; init; }
     public OngoingStop? TickerStop => OngoingStop;
+    // Stop just over: green "REPRISE" bar in the stop bar's place for a few minutes.
+    public StopRecovery? Recovery { get; init; }
+    // No up / down arrow over a period (KpiRow binds them for the poste view).
+    public KpiTrend? TrsTrend => null;
+    public KpiTrend? SpeedTrend => null;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
@@ -116,6 +121,7 @@ public class MachinePeriodSlideViewModel
             BeltRunning = (status?.BeltRunning ?? false) && ongoingStop == null,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
             OngoingStop = ongoingStop,
+            Recovery = ongoingStop == null ? OngoingStopService.RecentRecovery(machine.MachineId) : null,
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = MachineDaySlideViewModel.FormatProduction(status?.CurrentProduction, allLots),
             Kpis = kpis,

@@ -8,12 +8,30 @@
          "Pas de donnees" placeholder instead of an empty chart. -->
     <Border Style="{StaticResource ChartTile}">
         <DockPanel>
-            <TextBlock DockPanel.Dock="Top" Text="{Binding Title, ElementName=Root}" Style="{StaticResource ChartTitle}"/>
+            <!-- Title, and the legend on the same row (ChartCard.Apply fills it):
+                 LiveCharts' own legend took a row of the short tiles' height
+                 and covered the values printed above the tallest bars. -->
+            <DockPanel DockPanel.Dock="Top">
+                <ItemsControl x:Name="Legend" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,4,4">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
+                                <Ellipse Width="11" Height="11" Fill="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding Name}" FontSize="15" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Title, ElementName=Root}" Style="{StaticResource ChartTitle}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
             <Grid>
+                <!-- Series and axes are set by ChartCard.Apply (moved in place on a refresh). -->
                 <lvc:CartesianChart x:Name="ChartView" LegendPosition="Hidden" Background="{DynamicResource TileBackgroundBrush}"
-                                    Series="{Binding Chart.Series, ElementName=Root}"
-                                    XAxes="{Binding Chart.XAxes, ElementName=Root}"
-                                    YAxes="{Binding Chart.YAxes, ElementName=Root}"
                                     LegendTextPaint="{Binding Chart.LegendTextPaint, ElementName=Root}"
                                     LegendTextSize="14">
                     <lvc:CartesianChart.Style>

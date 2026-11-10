@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -26,6 +26,9 @@
     <Resource Include="Assets\spiga-logo.png" />
     <Resource Include="Assets\machine-running.png" />
     <Resource Include="Assets\machine-stopped.png" />
+    <!-- Trend arrows (Flaticon: increase 4721635, decrease 6067145; attribution in À propos). -->
+    <Resource Include="Assets\trend-up.png" />
+    <Resource Include="Assets\trend-down.png" />
   </ItemGroup>
 
 </Project>
