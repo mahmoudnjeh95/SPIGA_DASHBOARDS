@@ -7,8 +7,9 @@ using SpigaDashboards.App.ViewModels.Slides;
 
 namespace SpigaDashboards.App.Views;
 
-// Up / down arrow beside a poste figure (KpiRow: TRS, vitesse), with the last
-// hour's value under it: green arrow rising, red arrow falling, grey dash steady.
+// Up / down arrow beside a poste figure (KpiRow: TRS, vitesse), with the change
+// over the last KpiTrend.TrendWindow under it: green arrow rising, red arrow
+// falling, grey dash when the figure on screen is the same.
 // Slides in from the way it points when it appears or turns, then stays still.
 public sealed class TrendBadge : StackPanel
 {

@@ -86,6 +86,12 @@ public class MachineDaySlideViewModel
         var lotSpans = (await repository.GetLotSpansAsync(machine.MachineId, mainStart, mainStart.AddHours(10)))
             ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
         var ongoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId);
+        // The poste in progress as it was KpiTrend.TrendWindow ago, for the
+        // TRS / vitesse up-down arrows (no weights needed for those).
+        var earlierEnd = now - KpiTrend.TrendWindow;
+        var earlierLots = !previousShift && mainId == currentShiftId && earlierEnd > mainStart
+            ? filter.Apply(await repository.GetLotsAsync(machine.MachineId, date, earlierEnd, includeWeights: false), teamSchedule)
+            : null;
         return new MachineDaySlideViewModel
         {
             SectorLabel = Machine.SectorLabel(sector),
@@ -102,7 +108,7 @@ public class MachineDaySlideViewModel
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),
             Main = ShiftSummaryViewModel.Build(mainId, date, withCharts: true,
-                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsBand, weightBand, lotSpans),
+                isRunning: !previousShift && mainId == currentShiftId, lots, teamSchedule, now, trsBand, weightBand, lotSpans, earlierLots),
             PreviousShifts = postes.Take(postes.Count - 1)
                 .Select(id => ShiftSummaryViewModel.Build(id, date, false, false, lots, teamSchedule, now, trsBand, weightBand))
                 .ToList(),

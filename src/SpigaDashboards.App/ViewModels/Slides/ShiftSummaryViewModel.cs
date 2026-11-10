@@ -46,7 +46,8 @@ public class ShiftSummaryViewModel
         DateTime now,
         TrsBand trsBand,
         WeightBand weightBand,
-        IReadOnlyList<LotSpan>? lotSpans = null)
+        IReadOnlyList<LotSpan>? lotSpans = null,
+        IReadOnlyCollection<ProductionBucket>? earlierLots = null)
     {
         // A Nuit bucket after midnight belongs to the shift date it started on.
         var lots = dayLots
@@ -76,7 +77,18 @@ public class ShiftSummaryViewModel
                 : DashboardCharts.Weight(steps);
         }
 
-        var (trsTrend, speedTrend) = withCharts && isRunning ? Trends(lots, kpis) : (null, null);
+        // Poste in progress: the same figures TrendWindow ago (earlierLots =
+        // the day read up to then), to show whether they are going up or down.
+        KpiTrend? trsTrend = null, speedTrend = null;
+        if (withCharts && isRunning && earlierLots != null)
+        {
+            var before = earlierLots
+                .Where(l => l.ShiftId == shiftId && TeamScheduleService.GetShiftDate(l.StartTime, shiftId) == shiftDate)
+                .ToList();
+            var earlier = KpiCalculator.Summarize(before, KpiCalculator.AvailabilityPercent(before));
+            trsTrend = KpiTrend.Of(kpis.TrsPercent, earlier.TrsPercent, " pt");
+            speedTrend = KpiTrend.Of(kpis.SpeedBagsPerMinute, earlier.SpeedBagsPerMinute, "");
+        }
 
         return new ShiftSummaryViewModel
         {
@@ -95,47 +107,23 @@ public class ShiftSummaryViewModel
             WeightChart = weight,
         };
     }
-
-    // The poste's figures are cumulative: they rise while the last hour does
-    // better than the poste so far, and fall while it does worse. Last hour =
-    // the latest hourly buckets covering at least 45 observed minutes; no
-    // trend before the poste has 30 more minutes than that to compare with.
-    private const double RecentMinutes = 45;
-    private const double TrsStep = 2;    // points
-    private const double SpeedStep = 1;  // bags / minute
-
-    private static (KpiTrend? Trs, KpiTrend? Speed) Trends(IReadOnlyCollection<ProductionBucket> lots, KpiSummary poste)
-    {
-        var recent = new List<ProductionBucket>();
-        double minutes = 0;
-        foreach (var hour in lots.GroupBy(l => l.StartTime).OrderByDescending(g => g.Key))
-        {
-            recent.AddRange(hour);
-            minutes += hour.Sum(l => l.ObservedMinutes);
-            if (minutes >= RecentMinutes)
-                break;
-        }
-        if (minutes < RecentMinutes || lots.Sum(l => l.ObservedMinutes) - minutes < 30)
-            return (null, null);
-
-        var recentTrs = KpiCalculator.Summarize(recent, KpiCalculator.AvailabilityPercent(recent)).TrsPercent;
-        var recentSpeed = KpiCalculator.AverageSpeed(recent);
-        return (KpiTrend.Of(recentTrs, poste.TrsPercent, TrsStep, "{0:0.0} %"),
-                KpiTrend.Of(recentSpeed, poste.SpeedBagsPerMinute, SpeedStep, "{0:0.0}"));
-    }
 }
 
-// Direction of a poste figure (+1 rising, -1 falling, 0 steady) and the last
-// hour's own value, e.g. "dern. heure 61,0 %".
+// Direction of a poste figure over the last TrendWindow, as shown on screen
+// (to 0,1): +1 up, -1 down, 0 same figure; Text = "+0,3 pt · 2 min".
 public sealed record KpiTrend(int Direction, string Text)
 {
+    public static readonly TimeSpan TrendWindow = TimeSpan.FromMinutes(2);
     private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
 
-    public static KpiTrend? Of(double? recent, double? overall, double step, string format)
+    public static KpiTrend? Of(double? now, double? before, string unit)
     {
-        if (recent is not { } r || overall is not { } o)
+        if (now is not { } n || before is not { } b)
             return null;
-        var direction = r - o >= step ? 1 : o - r >= step ? -1 : 0;
-        return new KpiTrend(direction, "dern. heure " + string.Format(French, format, r));
+        var delta = Math.Round(n, 1) - Math.Round(b, 1);
+        var minutes = $"{TrendWindow.TotalMinutes:0} min";
+        if (Math.Abs(delta) < 0.05)
+            return new KpiTrend(0, "stable · " + minutes);
+        return new KpiTrend(Math.Sign(delta), string.Format(French, "{0:+0.0;-0.0}{1} · {2}", delta, unit, minutes));
     }
 }
