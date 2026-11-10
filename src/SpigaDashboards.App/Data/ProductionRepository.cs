@@ -125,8 +125,6 @@ public class ProductionRepository
         public long BagsOverTolerance { get; set; }
         public double? AvgWeight { get; set; }
         public double? TargetNetWeight { get; set; }
-        public double? MinWeight { get; set; }
-        public double? MaxWeight { get; set; }
         public DateTime ServerNow { get; set; }
 
         // ID_produzione = line + article + start: fallback for a blank tempo_inizio.
@@ -154,8 +152,6 @@ public class ProductionRepository
                       COALESCE(p.confezioni_sopra_toll, 0) AS BagsOverTolerance,
                       CAST(p.media_totale AS {d.Float})         AS AvgWeight,
                       CAST(p.peso_netto_impostato AS {d.Float}) AS TargetNetWeight,
-                      CAST(p.peso_min_registrato AS {d.Float})  AS MinWeight,
-                      CAST(p.peso_max_registrato AS {d.Float})  AS MaxWeight,
                       {d.Now} AS ServerNow
                FROM produzione p
                LEFT JOIN Products pr ON pr.Code = RTRIM(p.codice_articolo)
@@ -239,22 +235,20 @@ public class ProductionRepository
             BagsUnderTolerance = row.BagsUnderTolerance,
             BagsOverTolerance = row.BagsOverTolerance,
             TargetNetWeight = target,
-            AvgWeight = IsPlausibleRunAverage(row.AvgWeight, target) && IsPlausibleExtremes(target, row.MinWeight, row.MaxWeight)
+            AvgWeight = IsPlausibleRunAverage(row.AvgWeight, target)
                 ? row.AvgWeight - tare
                 : null,
         };
     }
 
-    // media_totale is a running average since production START and is junk on
-    // some runs (CC01: 976.8 g on an 800 g target, min 449 g, max 7483 g). It
-    // is only trusted within 15 % of the target (same bounds as MediaBags in
-    // QueryBucketsAsync) and when the run's lifetime extremes look like real
-    // bags of that target.
+    // media_totale is a running average since production START. It is only
+    // used within 50 % of the target (same bounds as MediaBags in
+    // QueryBucketsAsync); otherwise it is thrown away. The run's lifetime
+    // min/max are no longer checked: one odd bag in a run of several weeks
+    // (CC03: 2946 g on a 1000 g target) hid a sound average on most lines.
+    // Known cost: CC01's average (968 g on an 800 g target) passes.
     private static bool IsPlausibleRunAverage(double? avg, double target)
-        => avg.HasValue && target > 0 && Math.Abs(avg.Value - target) <= 0.15 * target;
-
-    private static bool IsPlausibleExtremes(double target, double? min, double? max)
-        => target > 0 && max.HasValue && max.Value <= 2 * target && min.HasValue && min.Value >= 0.5 * target;
+        => avg is > 0 && target > 0 && Math.Abs(avg.Value - target) <= 0.5 * target;
 
     // Hourly buckets for one machine (dashboard slides, on/off chart, team
     // history). includeWeights = false skips the weight reads (lotto) for the
@@ -718,10 +712,10 @@ FROM (
            CAST(SUM(x.stdy * x.d_tot) AS BIGINT) AS SteadyBags,
            CAST(SUM(x.stdy * x.dur) AS {d.Float}) / 60 AS SteadyMinutes,
            -- Fallback weight data (used only when the line has no lot): bags
-           -- whose running average is within 15 % of the target.
-           CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.85 * x.target AND x.media <= 1.15 * x.target
+           -- whose running average is within 50 % of the target.
+           CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.5 * x.target AND x.media <= 1.5 * x.target
                          THEN x.d_tot ELSE 0 END) AS BIGINT) AS MediaBags,
-           CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.85 * x.target AND x.media <= 1.15 * x.target
+           CAST(SUM(CASE WHEN x.target > 0 AND x.media >= 0.5 * x.target AND x.media <= 1.5 * x.target
                          THEN x.media * x.d_tot ELSE 0 END) AS {d.Float}) AS MediaWeightSum
     FROM x
     WHERE x.mid_t >= @from AND x.mid_t < @to
@@ -869,19 +863,12 @@ ORDER BY l.ora_fine",
         public double WeightSum { get; set; }
     }
 
-    private sealed class ExtremesRow
-    {
-        public string ProductionId { get; set; } = "";
-        public double? MinWeight { get; set; }
-        public double? MaxWeight { get; set; }
-    }
-
     // Weight data per (line, bucket, production):
     //  - Stiavelli lots (lotto): media_effettiva weighted by dimensione,
     //    bucketed by ora_fine (lots can be uploaded late, ora_fine is the real
     //    lot time), for every line that has lots in the range;
-    //  - otherwise media_totale, only where it is within 15 % of the target
-    //    (MediaBags) and the production's lifetime extremes look sane.
+    //  - otherwise media_totale, only where it is within 50 % of the target
+    //    (MediaBags).
     // A lot's target is the peso_netto_impostato of its production's first
     // snapshot at or after the lot (the target can change inside a
     // production); lots of a production with no snapshot in the read range
@@ -938,29 +925,11 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
         if (fallback.Count == 0)
             return result;
 
-        // Lifetime extremes are only read when the fallback is needed: these
-        // columns aren't in IX_produzione_linea_fine, each row costs a lookup.
-        parameters.Add("fallbackLines", fallback.Select(p => p.MachineId).Distinct().ToList());
-        var extremes = (await connection.QueryAsync<ExtremesRow>($@"
-SELECT RTRIM(p.ID_produzione) AS ProductionId,
-       CAST(MIN(p.peso_min_registrato) AS {d.Float}) AS MinWeight,
-       CAST(MAX(p.peso_max_registrato) AS {d.Float}) AS MaxWeight
-FROM produzione p
-WHERE {string.Format(lineFilter, "p.numero_linea")}
-  AND p.numero_linea IN @fallbackLines
-  AND p.tempo_fine >= @readFrom AND p.tempo_fine < @readTo
-GROUP BY p.ID_produzione", parameters))
-            .GroupBy(e => e.ProductionId)
-            .ToDictionary(g => g.Key, g => g.First());
-
         foreach (var p in fallback)
         {
-            if (extremes.TryGetValue(p.ProductionId, out var e) && IsPlausibleExtremes(p.TargetNetWeight, e.MinWeight, e.MaxWeight))
-            {
-                var tare = _settings.FindTare(p.MachineId, p.TargetNetWeight);
-                result.Add((p.MachineId, p.StartTime,
-                    new WeightPart(p.ProductionId, p.TargetNetWeight, p.MediaBags, p.MediaWeightSum - tare * p.MediaBags)));
-            }
+            var tare = _settings.FindTare(p.MachineId, p.TargetNetWeight);
+            result.Add((p.MachineId, p.StartTime,
+                new WeightPart(p.ProductionId, p.TargetNetWeight, p.MediaBags, p.MediaWeightSum - tare * p.MediaBags)));
         }
         return result;
     }

@@ -6,7 +6,7 @@
        (SpigaDashboards-<version>-Setup.msi / .exe). A higher version is what
        lets the installer replace the one already installed. -->
   <PropertyGroup>
-    <Version>1.5.19</Version>
+    <Version>1.5.20</Version>
   </PropertyGroup>
 
 </Project>
