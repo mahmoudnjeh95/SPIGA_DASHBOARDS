@@ -330,7 +330,7 @@ public partial class SettingsViewModel : ObservableObject
                 continue;
             if (!NominalRateRowViewModel.TryParse(machine.TrsToleranceText, out var tolerance) || tolerance > 100)
             {
-                MachinesStatusMessage = $"Tolérance invalide pour {ChoiceLabel(machine)} : « {machine.TrsToleranceText} » (0 à 100 points, vide = règle de l'onglet Couleurs).";
+                MachinesStatusMessage = $"Tolérance invalide pour {ChoiceLabel(machine)} : « {machine.TrsToleranceText} » (0 à 100 %, vide = règle de l'onglet Couleurs).";
                 return null;
             }
             tolerances[machine.MachineId] = tolerance;

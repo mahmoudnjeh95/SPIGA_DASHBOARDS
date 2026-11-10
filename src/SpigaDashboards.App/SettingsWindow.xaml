@@ -187,7 +187,7 @@
                 <ScrollViewer Style="{StaticResource TabPage}">
                     <StackPanel>
                         <TextBlock Text="Machines : nom affiché, visibilité, TRS cible et écart de poids" Style="{StaticResource SectionTitle}" Margin="0,0,0,8"/>
-                        <TextBlock Text="TRS cible (%) : objectif de chaque machine, le TRS est vert quand il l'atteint. Vide = 85 %. Tolérance (points) : orange entre la cible moins la tolérance et la cible, rouge en dessous (ex. cible 50, tolérance 5 : orange de 45 à 50 %, rouge sous 45 %). Vide = règle de l'onglet Couleurs (orange à partir d'une part de la cible)."
+                        <TextBlock Text="TRS cible (%) : objectif de chaque machine, le TRS est vert quand il l'atteint. Vide = 85 %. Tolérance (%) : orange entre la cible moins la tolérance et la cible, rouge en dessous (ex. cible 50, tolérance 5 : orange de 45 à 50 %, rouge sous 45 %). Vide = règle de l'onglet Couleurs (orange à partir d'une part de la cible)."
                                    Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
                         <TextBlock Text="Écart de poids, en % du poids cible (1 g compte peu sur 5 kg, beaucoup sur 200 g). Au-dessus de la cible : vert jusqu'à la 1re limite, orange jusqu'à la 2e, rouge au-delà. En dessous (sous-dosage) : de même, avec des limites plus serrées, car c'est un risque de non-conformité alors qu'un surpoids ne fait que donner du produit."
                                    Foreground="{DynamicResource SubtleTextBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
@@ -212,7 +212,7 @@
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Column="1" Grid.RowSpan="2" Text="Nom affiché" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Bottom"/>
                             <TextBlock Grid.Column="2" Grid.RowSpan="2" Text="TRS cible (%)" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
-                            <TextBlock Grid.Column="3" Grid.RowSpan="2" Text="Tolérance (points)" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="3" Grid.RowSpan="2" Text="Tolérance (%)" Style="{StaticResource FieldLabel}" Margin="0,0,6,0" TextWrapping="Wrap" VerticalAlignment="Bottom"/>
                             <TextBlock Grid.Column="4" Grid.ColumnSpan="2" Text="Poids au-dessus (+ %)" Style="{StaticResource FieldLabel}" Margin="0"/>
                             <TextBlock Grid.Column="6" Grid.ColumnSpan="2" Text="En dessous (− %)" Style="{StaticResource FieldLabel}" Margin="0"/>
                             <TextBlock Grid.Row="1" Grid.Column="4" Text="vert ≤" FontWeight="Bold" Foreground="{DynamicResource SuccessBrush}"/>
