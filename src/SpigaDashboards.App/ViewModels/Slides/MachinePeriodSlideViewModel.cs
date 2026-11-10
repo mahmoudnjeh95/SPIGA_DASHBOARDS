@@ -103,6 +103,7 @@ public class MachinePeriodSlideViewModel
 
         var grain = PeriodRanges.GrainFor(from, to);
         var steps = DashboardCharts.Steps(PeriodRanges.Group(lots, from, to, grain, now));
+        var ongoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId);
 
         return new MachinePeriodSlideViewModel
         {
@@ -111,9 +112,10 @@ public class MachinePeriodSlideViewModel
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             IsConnected = status?.IsConnected ?? false,
-            BeltRunning = status?.BeltRunning ?? false,
+            // The photo follows the stop alert (see MachineDaySlideViewModel).
+            BeltRunning = (status?.BeltRunning ?? false) && ongoingStop == null,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
-            OngoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId),
+            OngoingStop = ongoingStop,
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = MachineDaySlideViewModel.FormatProduction(status?.CurrentProduction, allLots),
             Kpis = kpis,

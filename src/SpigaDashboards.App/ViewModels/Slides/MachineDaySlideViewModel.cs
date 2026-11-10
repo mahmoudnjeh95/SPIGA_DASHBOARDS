@@ -79,15 +79,18 @@ public class MachineDaySlideViewModel
         // (see DashboardCharts.GroupLots); the chart clips them at the end.
         var lotSpans = (await repository.GetLotSpansAsync(machine.MachineId, mainStart, mainStart.AddHours(10)))
             ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
+        var ongoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId);
         return new MachineDaySlideViewModel
         {
             SectorLabel = Machine.SectorLabel(sector),
             MachineName = machine.MachineName,
             PeriodLabel = previousShift ? "Poste précédent" : "",
             IsConnected = status?.IsConnected ?? false,
-            BeltRunning = status?.BeltRunning ?? false,
+            // The photo follows the stop alert: a few bags during a stop move
+            // the counter, but the stop lasts until 2 min of production.
+            BeltRunning = (status?.BeltRunning ?? false) && ongoingStop == null,
             PlannedSlot = (await repository.GetActiveSlotKindsAsync()).TryGetValue(machine.MachineId, out var slot) ? slot : null,
-            OngoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId),
+            OngoingStop = ongoingStop,
             CurrentProduction = status?.CurrentProduction,
             CurrentProductionLabel = FormatProduction(status?.CurrentProduction, allLots),
             FilterLabel = filter.Describe(),

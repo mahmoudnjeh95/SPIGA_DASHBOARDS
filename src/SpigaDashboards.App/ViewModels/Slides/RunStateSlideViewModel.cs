@@ -1,5 +1,6 @@
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
+using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App.ViewModels.Slides;
 
@@ -42,10 +43,13 @@ public class RunStateSlideViewModel
     // Up to 5 photos on one row, more on two rows (10 machines = 2 x 5).
     public int TileColumns => Tiles.Count <= 5 ? Math.Max(1, Tiles.Count) : (Tiles.Count + 1) / 2;
 
-    public static async Task<RunStateSlideViewModel> LoadAsync(ProductionRepository repository, string title, IReadOnlyList<Machine> machines)
+    public static async Task<RunStateSlideViewModel> LoadAsync(ProductionRepository repository, AppSettings settings, string title, IReadOnlyList<Machine> machines)
     {
         var tiles = new List<MachineRunTile>();
         var slots = await repository.GetActiveSlotKindsAsync();
+        // A line with a stop in progress is not running, even if a few bags
+        // moved its counter: photo and count follow the stop alert.
+        var stops = await OngoingStopService.GetAsync(repository, settings);
         foreach (var m in machines)
         {
             var status = await repository.GetLatestStatusAsync(m.MachineId);
@@ -54,7 +58,7 @@ public class RunStateSlideViewModel
                 MachineId = m.MachineId,
                 MachineName = m.MachineName,
                 IsConnected = status?.IsConnected ?? false,
-                BeltRunning = status?.BeltRunning ?? false,
+                BeltRunning = (status?.BeltRunning ?? false) && !stops.ContainsKey(m.MachineId),
                 PlannedSlot = slots.TryGetValue(m.MachineId, out var slot) ? slot : null,
             });
         }

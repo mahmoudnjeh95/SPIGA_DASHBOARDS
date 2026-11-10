@@ -759,7 +759,7 @@ public partial class MainViewModel : ObservableObject
                 SynthesisSlideDescriptor synthesis => await SynthesisSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings,
                     synthesis.Sector, synthesis.MachineIds.Select(id => _machinesById[id]).ToList(), SynthesisPeriod, _filter),
                 PackagingSlideDescriptor packaging => await LoadPackagingSlideAsync(packaging),
-                RunStateSlideDescriptor runState => await RunStateSlideViewModel.LoadAsync(_repository, runState.Title,
+                RunStateSlideDescriptor runState => await RunStateSlideViewModel.LoadAsync(_repository, _settings, runState.Title,
                     runState.MachineIds.Select(id => _machinesById[id]).ToList()),
                 _ => null,
             };
