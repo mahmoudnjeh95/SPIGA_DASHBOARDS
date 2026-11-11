@@ -9,7 +9,7 @@ namespace SpigaDashboards.App.Views;
 
 // Up / down arrow beside a poste figure (KpiRow: TRS, vitesse), with the change
 // over the last KpiTrend.TrendWindow under it: green arrow rising, red arrow
-// falling, grey dash when the figure on screen is the same.
+// falling, flat grey stroke when the figure on screen is the same.
 // Slides in from the way it points when it appears or turns, then stays still.
 public sealed class TrendBadge : StackPanel
 {
@@ -23,18 +23,29 @@ public sealed class TrendBadge : StackPanel
     private static readonly ImageSource Down = Icon("trend-down.png");
 
     private readonly Image _icon = new() { Width = 44, Height = 44, Margin = new Thickness(0, -4, 0, -4), HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly TextBlock _arrow = new() { Text = "▬", FontSize = 22, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center };
+    // Same figure: a flat grey stroke in the arrows' style, at their size.
+    private readonly System.Windows.Shapes.Path _flat = new()
+    {
+        Data = Geometry.Parse("M 7,18 L 37,18"),
+        StrokeThickness = 6,
+        StrokeStartLineCap = PenLineCap.Round,
+        StrokeEndLineCap = PenLineCap.Round,
+        Width = 44,
+        Height = 36,
+        Margin = new Thickness(0, -2, 0, -2),
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
     private readonly TextBlock _label = new() { FontSize = 12, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly TranslateTransform _shift = new();
 
     public TrendBadge()
     {
         VerticalAlignment = VerticalAlignment.Center;
-        Margin = new Thickness(10, 0, 0, 0);
+        Margin = new Thickness(10, 0, 6, 0);
         RenderOptions.SetBitmapScalingMode(_icon, BitmapScalingMode.HighQuality);
-        _arrow.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryTextBrush");
+        _flat.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "SecondaryTextBrush");
         Children.Add(_icon);
-        Children.Add(_arrow);
+        Children.Add(_flat);
         Children.Add(_label);
         RenderTransform = _shift;
         _label.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
@@ -54,7 +65,10 @@ public sealed class TrendBadge : StackPanel
         badge.Visibility = Visibility.Visible;
         badge._icon.Source = trend.Direction > 0 ? Up : trend.Direction < 0 ? Down : null;
         badge._icon.Visibility = trend.Direction == 0 ? Visibility.Collapsed : Visibility.Visible;
-        badge._arrow.Visibility = trend.Direction == 0 ? Visibility.Visible : Visibility.Collapsed;
+        badge._flat.Visibility = trend.Direction == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The change in the colour of what it means: green good, red bad, grey same.
+        badge._label.SetResourceReference(TextBlock.ForegroundProperty,
+            trend.Good > 0 ? "SuccessBrush" : trend.Good < 0 ? "DangerBrush" : "SecondaryTextBrush");
         badge._label.Text = trend.Text;
 
         if (old?.Direction == trend.Direction)

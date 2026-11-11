@@ -87,10 +87,10 @@ public class MachineDaySlideViewModel
             ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
         var ongoingStop = (await OngoingStopService.GetAsync(repository, settings)).GetValueOrDefault(machine.MachineId);
         // The poste in progress as it was KpiTrend.TrendWindow ago, for the
-        // TRS / vitesse up-down arrows (no weights needed for those).
+        // TRS / vitesse / poids up-down arrows.
         var earlierEnd = now - KpiTrend.TrendWindow;
         var earlierLots = !previousShift && mainId == currentShiftId && earlierEnd > mainStart
-            ? filter.Apply(await repository.GetLotsAsync(machine.MachineId, date, earlierEnd, includeWeights: false), teamSchedule)
+            ? filter.Apply(await repository.GetLotsAsync(machine.MachineId, date, earlierEnd), teamSchedule)
             : null;
         return new MachineDaySlideViewModel
         {

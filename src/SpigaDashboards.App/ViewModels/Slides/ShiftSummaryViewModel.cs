@@ -30,6 +30,7 @@ public class ShiftSummaryViewModel
     // Poste in progress: is TRS / speed going up or down? (KpiRow arrow)
     public KpiTrend? TrsTrend { get; init; }
     public KpiTrend? SpeedTrend { get; init; }
+    public KpiTrend? WeightTrend { get; init; }
 
     // Main poste only: per hour of the poste, up to now.
     public ChartParts OnOffChart { get; init; } = ChartParts.Empty();
@@ -79,7 +80,7 @@ public class ShiftSummaryViewModel
 
         // Poste in progress: the same figures TrendWindow ago (earlierLots =
         // the day read up to then), to show whether they are going up or down.
-        KpiTrend? trsTrend = null, speedTrend = null;
+        KpiTrend? trsTrend = null, speedTrend = null, weightTrend = null;
         if (withCharts && isRunning && earlierLots != null)
         {
             var before = earlierLots
@@ -88,12 +89,23 @@ public class ShiftSummaryViewModel
             var earlier = KpiCalculator.Summarize(before, KpiCalculator.AvailabilityPercent(before));
             trsTrend = KpiTrend.Of(kpis.TrsPercent, earlier.TrsPercent, " pt");
             speedTrend = KpiTrend.Of(kpis.SpeedBagsPerMinute, earlier.SpeedBagsPerMinute, "");
+            // Weight: the main (biggest) weight of the poste, when it was
+            // already the main one 2 min ago. Closer to the target is good.
+            var mainWeight = kpis.Weights.FirstOrDefault();
+            var earlierWeight = mainWeight == null ? null
+                : earlier.Weights.FirstOrDefault(w => Math.Round(w.TargetWeight) == Math.Round(mainWeight.TargetWeight));
+            if (mainWeight?.AvgWeight is { } a && earlierWeight?.AvgWeight is { } b)
+            {
+                var closer = Math.Sign(Math.Abs(b - mainWeight.TargetWeight) - Math.Abs(a - mainWeight.TargetWeight));
+                weightTrend = KpiTrend.Of(a, b, " g", goodDirection: closer);
+            }
         }
 
         return new ShiftSummaryViewModel
         {
             TrsTrend = trsTrend,
             SpeedTrend = speedTrend,
+            WeightTrend = weightTrend,
             ShiftName = KpiCalculator.ShiftName(shiftId),
             TimeRange = KpiCalculator.ShiftTimeRange(shiftId),
             TeamName = string.IsNullOrEmpty(team) ? TeamScheduleService.NoTeam : team,
@@ -110,20 +122,23 @@ public class ShiftSummaryViewModel
 }
 
 // Direction of a poste figure over the last TrendWindow, as shown on screen
-// (to 0,1): +1 up, -1 down, 0 same figure; Text = "+0,3 pt · 2 min".
-public sealed record KpiTrend(int Direction, string Text)
+// (to 0,1): +1 up, -1 down, 0 same figure; Text = "+0,3 pt · 2 min". Good is
+// the colour: +1 green, -1 red, 0 grey (TRS and speed: up is good; weight:
+// closer to the target is good whichever way it moved).
+public sealed record KpiTrend(int Direction, string Text, int Good)
 {
     public static readonly TimeSpan TrendWindow = TimeSpan.FromMinutes(2);
     private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
 
-    public static KpiTrend? Of(double? now, double? before, string unit)
+    public static KpiTrend? Of(double? now, double? before, string unit, int? goodDirection = null)
     {
         if (now is not { } n || before is not { } b)
             return null;
         var delta = Math.Round(n, 1) - Math.Round(b, 1);
         var minutes = $"{TrendWindow.TotalMinutes:0} min";
         if (Math.Abs(delta) < 0.05)
-            return new KpiTrend(0, "stable · " + minutes);
-        return new KpiTrend(Math.Sign(delta), string.Format(French, "{0:+0.0;-0.0}{1} · {2}", delta, unit, minutes));
+            return new KpiTrend(0, string.Format(French, "{0:0.0}{1} · {2}", 0.0, unit, minutes), 0);
+        var direction = Math.Sign(delta);
+        return new KpiTrend(direction, string.Format(French, "{0:+0.0;-0.0}{1} · {2}", delta, unit, minutes), goodDirection ?? direction);
     }
 }

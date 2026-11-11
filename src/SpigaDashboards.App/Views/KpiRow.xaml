@@ -35,8 +35,9 @@
                                    views:TileFx.Metric="trs" views:TileFx.Better="Up" views:TileFx.MinDelta="0.5"
                                    views:TileFx.DeltaFormat="{}{0:+0.0;-0.0} pt"/>
                     </Viewbox>
-                    <!-- Rising / falling over the last hour (poste in progress only). -->
-                    <views:TrendBadge Grid.Column="1" HorizontalAlignment="Left" Trend="{Binding TrsTrend}"/>
+                    <!-- Rising / falling over the last 2 min (poste in progress only):
+                         against the ring, away from the figure. -->
+                    <views:TrendBadge Grid.Column="1" HorizontalAlignment="Right" Trend="{Binding TrsTrend}"/>
                 </Grid>
                 <TextBlock Grid.Row="2" Style="{StaticResource KpiSubtextCompact}">
                     <Run Text="D"/> <Run Text="{Binding Kpis.AvailabilityPercent, StringFormat={}{0:0}%, Mode=OneWay, ConverterCulture=fr-FR}" Foreground="{Binding Kpis.AvailabilityPercent, Converter={StaticResource PercentBandBrush}}"/>
@@ -52,22 +53,38 @@
         <Border Style="{StaticResource KpiTileCompact}">
             <StackPanel>
                 <TextBlock Text="Vitesse moy. (sacs/min)" Style="{StaticResource KpiLabelCompact}"/>
-                <StackPanel Orientation="Horizontal">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
                     <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
                         <TextBlock Style="{StaticResource KpiValueCompact}"
                                    views:TileFx.Value="{Binding Kpis.SpeedBagsPerMinute}" views:TileFx.Format="{}{0:0.0}"
                                    views:TileFx.Metric="speed" views:TileFx.Better="Up" views:TileFx.MinDelta="0.5"
                                    views:TileFx.DeltaFormat="{}{0:+0.0;-0.0}"/>
                     </Viewbox>
-                    <views:TrendBadge Trend="{Binding SpeedTrend}"/>
-                </StackPanel>
+                    <!-- At the tile's right edge, like the TRS one. -->
+                    <views:TrendBadge Grid.Column="1" HorizontalAlignment="Right" Trend="{Binding SpeedTrend}"/>
+                </Grid>
                 <TextBlock Text="{Binding Kpis.MaxSpeedBagsPerMinute, StringFormat=Max atteinte : {0:0.0} sacs/min, TargetNullValue='Max atteinte : —'}" Style="{StaticResource KpiSubtextCompact}"/>
             </StackPanel>
         </Border>
         <Border Style="{StaticResource KpiTileCompact}">
             <StackPanel>
                 <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabelCompact}"/>
-                <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="34" SmallFontSize="20"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <!-- The badge keeps its width; the figure ("1 001,6 g / 1000 g")
+                         shrinks to fit beside it. -->
+                    <Viewbox StretchDirection="DownOnly" HorizontalAlignment="Left">
+                        <views:WeightAverages Weights="{Binding Kpis.Weights}" LargeFontSize="34" SmallFontSize="20"/>
+                    </Viewbox>
+                    <views:TrendBadge Grid.Column="1" HorizontalAlignment="Right" Trend="{Binding WeightTrend}"/>
+                </Grid>
             </StackPanel>
         </Border>
         <Border Style="{StaticResource KpiTileCompact}">

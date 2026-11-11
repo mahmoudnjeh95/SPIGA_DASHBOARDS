@@ -39,6 +39,7 @@ public class MachinePeriodSlideViewModel
     // No up / down arrow over a period (KpiRow binds them for the poste view).
     public KpiTrend? TrsTrend => null;
     public KpiTrend? SpeedTrend => null;
+    public KpiTrend? WeightTrend => null;
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";
