@@ -90,15 +90,26 @@ public partial class ChartCard : UserControl
         _scope = scope;
     }
 
+    // Bound OneTime in ChartCard.xaml: a binding that watches a property of
+    // an object without change notification goes through a static
+    // PropertyDescriptor table, and an unfrozen brush drawn by the legend dot
+    // points back at that dot, so every slide that ever showed a legend (its
+    // charts, bitmaps and the whole panel) stayed in memory: 8 GB + 3.5 GB of
+    // graphics memory after 49 h on the hall screen (15/11/2026).
     public sealed record LegendEntry(string Name, Brush Brush);
 
-    // The series' colour: its line for a line, its fill for bars.
+    // The series' colour: its line for a line, its fill for bars. Frozen (see
+    // LegendEntry).
     private static Brush SeriesBrush(ISeries series)
     {
         foreach (var name in new[] { "Stroke", "Fill" })
         {
             if (Property(series.GetType(), name)?.GetValue(series) is SolidColorPaint { Color: var c })
-                return new SolidColorBrush(Color.FromArgb(c.Alpha, c.Red, c.Green, c.Blue));
+            {
+                var brush = new SolidColorBrush(Color.FromArgb(c.Alpha, c.Red, c.Green, c.Blue));
+                brush.Freeze();
+                return brush;
+            }
         }
         return Brushes.Gray;
     }

@@ -21,8 +21,9 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
-                                <Ellipse Width="11" Height="11" Fill="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding Name}" FontSize="15" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
+                                <!-- OneTime: LegendEntry has no change notification (see ChartCard.LegendEntry). -->
+                                <Ellipse Width="11" Height="11" Fill="{Binding Brush, Mode=OneTime}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="{Binding Name, Mode=OneTime}" FontSize="15" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
