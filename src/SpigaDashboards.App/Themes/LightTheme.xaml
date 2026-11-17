@@ -16,6 +16,9 @@
     <SolidColorBrush x:Key="SuccessBrush" Color="#16A34A"/>
     <SolidColorBrush x:Key="WarningBrush" Color="#B45309"/>
     <SolidColorBrush x:Key="DangerBrush" Color="#DC2626"/>
+    <!-- Poids moyen on its target: gold outline and a soft gold fill. -->
+    <SolidColorBrush x:Key="GoldBrush" Color="#D4A017"/>
+    <SolidColorBrush x:Key="GoldTintBrush" Color="#33F2C94C"/>
 
     <!-- Card outline, button hover/press veils, soft accent fill (pills, timer track). -->
     <SolidColorBrush x:Key="CardBorderBrush" Color="#E2E6EC"/>

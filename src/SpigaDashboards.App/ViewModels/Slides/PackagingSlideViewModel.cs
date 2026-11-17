@@ -128,7 +128,9 @@ public class PackagingSlideViewModel
         // Target line only when every machine shares the same target.
         double? targetLine = targets.Distinct().Count() == 1 ? targets[0] : null;
 
-        // Always the names from Parametres (never the line codes CC03...).
+        // Always the names from Parametres (never the line codes CC03...): the
+        // table and the bars. The header names no machine on Conditionnement
+        // CC1 / Pate & CC2 (the table already does), only the count on Cumul.
         var machineLabels = machines.Select(m => m.MachineName).ToList();
 
         return new PackagingSlideViewModel
@@ -136,7 +138,7 @@ public class PackagingSlideViewModel
             Title = title,
             IsTrs = trs,
             IsCumul = cumul,
-            MachinesLabel = cumul ? $"{ids.Count} machines" : string.Join(", ", machineLabels),
+            MachinesLabel = cumul ? $" · {ids.Count} machines" : "",
             PeriodLabel = periodLabel,
             FilterLabel = filter.Describe(),
             TotalProductionText = KpiCalculator.FormatMass(total.ProductionKg),

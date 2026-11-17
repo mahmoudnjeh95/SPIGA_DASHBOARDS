@@ -128,7 +128,7 @@
                         </Style>
                     </Run.Style>
                 </Run>
-                <Run Text=" · "/><Run Text="{Binding MachinesLabel, Mode=OneWay}"/>
+                <Run Text="{Binding MachinesLabel, Mode=OneWay}"/>
                 <Run Text=" · "/><Run Text="{Binding PeriodLabel, Mode=OneWay}"/>
                 <Run Text="  ·  TRS " FontSize="18"/><Run Text="{Binding Overall.Kpis.TrsPercent, StringFormat={}{0:0.0}%, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"
                                                      FontWeight="Bold" Foreground="{Binding Overall.TrsSeverity, Converter={StaticResource SeverityBrush}}"/>                <Run Text="  ·  Production " FontSize="18"/><Run Text="{Binding TotalProductionText, Mode=OneWay}" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>

@@ -40,6 +40,7 @@ public class MachinePeriodSlideViewModel
     public KpiTrend? TrsTrend => null;
     public KpiTrend? SpeedTrend => null;
     public KpiTrend? WeightTrend => null;
+    public bool WeightOnTarget => KpiTrend.WeightOnTarget(Kpis);
     public string RunStateLabel => PlannedLabel ?? (BeltRunning ? "En marche" : "À l'arrêt");
     public ProductionInfo? CurrentProduction { get; init; }
     public string CurrentProductionLabel { get; init; } = "";

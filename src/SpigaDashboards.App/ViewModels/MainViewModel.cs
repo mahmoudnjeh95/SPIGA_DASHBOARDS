@@ -840,7 +840,7 @@ public partial class MainViewModel : ObservableObject
             from = _settings.DataStartDate.Date;
             label += $" - données depuis le {from:dd/MM/yyyy}";
         }
-        return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.Title, slide.Trs, slide.Cumul,
+        return PackagingSlideViewModel.LoadAsync(_repository, _teamSchedule, _settings, slide.DisplayTitle, slide.Trs, slide.Cumul,
             slide.MachineIds.Select(id => _machinesById[id]).ToList(), from, to, label, _filter);
     }
 

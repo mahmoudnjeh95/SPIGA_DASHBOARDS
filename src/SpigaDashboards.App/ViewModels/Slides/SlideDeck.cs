@@ -94,8 +94,8 @@ public static class SlideDeck
         MachineSlideDescriptor m => $"Machine - {machineName(m.MachineId)} ({Machine.SectorLabel(m.Sector)})",
         PdfSlideDescriptor => "Document externe (PDF)",
         SynthesisSlideDescriptor s => $"Synthèse - {Machine.SectorLabel(s.Sector)}",
-        PackagingSlideDescriptor { Trs: true } p => $"{p.Title} - TRS",
-        PackagingSlideDescriptor p => $"{p.Title} - Production",
+        PackagingSlideDescriptor { Trs: true } p => $"{p.DisplayTitle} - TRS",
+        PackagingSlideDescriptor p => $"{p.DisplayTitle} - Production",
         RunStateSlideDescriptor r => $"{r.Title} - État des machines",
         _ => slide.Key,
     };

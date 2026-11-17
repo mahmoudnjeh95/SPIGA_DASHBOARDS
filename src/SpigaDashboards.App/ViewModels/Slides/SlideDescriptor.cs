@@ -29,10 +29,19 @@ public sealed record SynthesisSlideDescriptor(string Sector, IReadOnlyList<strin
 
 // Conditionnement 1 / 2 / Cumul: production of a group of machines per
 // machine and team; Trs = the TRS slide that follows it, Cumul = every
-// machine of both groups.
+// machine of both groups. Title is the internal name the saved slide settings
+// key on; DisplayTitle is what the slide and Parametres show (renamed
+// 2026-11-17 without touching the keys, so saved order / on-off still apply).
 public sealed record PackagingSlideDescriptor(string Title, IReadOnlyList<string> MachineIds, bool Trs = false, bool Cumul = false) : SlideDescriptor
 {
     public override string Key => $"{(Trs ? "trs" : "production")}:{Title}";
+
+    public string DisplayTitle => Title switch
+    {
+        "Conditionnement 1" => "Conditionnement CC1",
+        "Conditionnement 2" => "Conditionnement Pâte & CC2",
+        _ => Title,
+    };
 }
 
 // Run-state photos of every Cumul machine, the slide before Cumul.

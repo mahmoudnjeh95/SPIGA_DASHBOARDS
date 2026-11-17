@@ -85,6 +85,8 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                     <Border Style="{StaticResource SegTrack}">
                         <StackPanel Orientation="Horizontal">
+                            <RadioButton GroupName="StatsPeriod" Content="Aujourd'hui" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding PeriodKey, Converter={StaticResource ValueToBool}, ConverterParameter=1}"/>
                             <RadioButton GroupName="StatsPeriod" Content="7 jours" Style="{StaticResource Seg}"
                                          IsChecked="{Binding PeriodKey, Converter={StaticResource ValueToBool}, ConverterParameter=7}"/>
                             <RadioButton GroupName="StatsPeriod" Content="30 jours" Style="{StaticResource Seg}"
