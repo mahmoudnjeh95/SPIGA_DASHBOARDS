@@ -26,6 +26,7 @@ public partial class App : Application
         FrameworkElement.LanguageProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(french));
 
         base.OnStartup(e);
+        _startArgs = e.Args;
 
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
@@ -109,6 +110,9 @@ public partial class App : Application
     private const int MaxErrorsPerMinute = 20;
     private bool _restarting;
 
+    // Given again on a restart: a TV PC started with --kiosk stays in kiosk.
+    private string[] _startArgs = Array.Empty<string>();
+
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         e.Handled = true;
@@ -129,7 +133,7 @@ public partial class App : Application
         try
         {
             if (Environment.ProcessPath is { } exe)
-                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = AppContext.BaseDirectory });
+                Process.Start(new ProcessStartInfo(exe, _startArgs) { UseShellExecute = true, WorkingDirectory = AppContext.BaseDirectory });
         }
         catch (Exception ex)
         {
