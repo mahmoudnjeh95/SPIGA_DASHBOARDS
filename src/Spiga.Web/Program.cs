@@ -22,7 +22,10 @@ if (!string.IsNullOrWhiteSpace(productionConnection))
 }
 else
 {
-    production = new SqliteConnectionFactory(DatabasePathResolver.ResolveSqlitePath());
+    // Development: database\spiga_dashboards.db, or another copy (a demo
+    // replayed to the present day) given in Spiga:Production:SqliteFile.
+    var sqliteFile = builder.Configuration["Spiga:Production:SqliteFile"];
+    production = new SqliteConnectionFactory(string.IsNullOrWhiteSpace(sqliteFile) ? DatabasePathResolver.ResolveSqlitePath() : sqliteFile);
 }
 
 // The site's shared settings (nominal rates, TRS targets, teams), as the
