@@ -41,7 +41,7 @@ public partial class App : Application
         var repository = new ProductionRepository(activeFactory, settings);
         var teamSchedule = new TeamScheduleService(settings);
         var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(activeFactory), settings, settingsService);
-        MainWindow CreateDashboard()
+        DashboardView CreateDashboard()
             => new(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
                 settingsService, settings, activeFactory, repository, sharedSettings);
 
@@ -49,7 +49,7 @@ public partial class App : Application
         // dashboard directly, without sign-in, as before.
         if (e.Args.Any(a => string.Equals(a, "--kiosk", StringComparison.OrdinalIgnoreCase)))
         {
-            ShowWindow(CreateDashboard());
+            ShowWindow(new KioskWindow(CreateDashboard()));
             return;
         }
 
@@ -70,7 +70,7 @@ public partial class App : Application
                 "La base de SPIGA Suivi Production est injoignable :\n" + ex.Message +
                 "\n\nLe tableau de bord s'ouvre seul, sans connexion utilisateur.",
                 "SPIGA Suivi Production", MessageBoxButton.OK, MessageBoxImage.Warning);
-            ShowWindow(CreateDashboard());
+            ShowWindow(new KioskWindow(CreateDashboard()));
             return;
         }
 
@@ -80,8 +80,11 @@ public partial class App : Application
         services.AddBlazorWebViewDeveloperTools();
 #endif
         services.AddSpigaSuivi(appDb, activeFactory, settings);
-        services.AddSingleton<IDesktopBridge>(new DesktopBridge(CreateDashboard));
-        ShowWindow(new ShellWindow(services.BuildServiceProvider()));
+        var bridge = new DesktopBridge(CreateDashboard);
+        services.AddSingleton<IDesktopBridge>(bridge);
+        var shell = new ShellWindow(services.BuildServiceProvider());
+        bridge.Attach(shell);
+        ShowWindow(shell);
     }
 
     private void ShowWindow(Window window)

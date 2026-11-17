@@ -7,7 +7,7 @@
 @inject PlantData Plant
 @inject IDesktopBridge Desktop
 
-<ActivityZone>
+<ActivityZone Class="@(RailOnly ? "app rail-only" : "app")">
     <aside class="rail">
         <Brand />
         <nav class="navwrap" aria-label="Modules">
@@ -33,6 +33,13 @@
             <b>@Session.Actor?.DisplayName</b>
             <small>@Session.Actor?.RoleNames</small>
             <small>Périmètre : @Session.Actor?.ScopeSummary</small>
+            @if (RailOnly)
+            {
+                <span class="me-links">
+                    <a class="link" href="compte">Mon compte</a>
+                    <button type="button" class="link" @onclick="Session.SignOutAsync">Se déconnecter</button>
+                </span>
+            }
         </div>
     </aside>
     <div class="main">
@@ -61,12 +68,25 @@
     {
         Nav.LocationChanged += OnLocationChanged;
         Session.Changed += OnSessionChanged;
+        Desktop.UserActivity += Session.Touch;
         UpdateShift();
+    }
+
+    // The classic dashboard page: in the Windows application, the window
+    // shows the rail here and the dashboard beside it.
+    private bool RailOnly
+        => Desktop.IsAvailable && Session.Can(Perm.TableauDetaille)
+           && Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/') == "production/tableau-de-bord";
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Desktop.ApplyTheme(Session.Theme == "dark");
+        Desktop.ShowDashboard(RailOnly, Session.Can(Perm.ParametresPoste));
     }
 
     private IEnumerable<IGrouping<string?, NavItem>> VisibleGroups()
         => ModuleCatalog.Navigation
-            .Where(n => Session.Can(n.Module, AppAction.Voir))
+            .Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable))
             .GroupBy(n => n.Group);
 
     private string Crumb()
@@ -109,5 +129,6 @@
     {
         Nav.LocationChanged -= OnLocationChanged;
         Session.Changed -= OnSessionChanged;
+        Desktop.UserActivity -= Session.Touch;
     }
 }

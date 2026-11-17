@@ -14,14 +14,22 @@ namespace Spiga.UI.Services;
 // What only the desktop app can do: open the SPIGA Dashboards windows that
 // are not yet Razor screens. The web host registers NoDesktop.
 // allowSettings: whether the user may open the station's Paramètres from
-// those windows (Paramètres > Administrer).
+// the dashboard (Paramètres > Administrer).
 public interface IDesktopBridge
 {
     bool IsAvailable { get; }
-    void OpenDashboard(bool allowSettings);
+
+    // The classic dashboard, in the main window beside the navigation rail.
+    void ShowDashboard(bool visible, bool allowSettings);
     void OpenTvScreen(bool allowSettings);
     void OpenStops(bool allowSettings);
     void OpenPlanning(bool allowSettings);
+
+    // The dashboard follows the signed-in user's light / dark choice.
+    void ApplyTheme(bool dark);
+
+    // Clicks and keys in the dashboard (not seen by the Razor screens).
+    event Action? UserActivity;
 }
 
 // Keeps the sign-in across a page reload (web host: the browser tab's
@@ -43,10 +51,12 @@ public sealed class NoSessionStore : ISessionStore
 public sealed class NoDesktop : IDesktopBridge
 {
     public bool IsAvailable => false;
-    public void OpenDashboard(bool allowSettings) { }
+    public void ShowDashboard(bool visible, bool allowSettings) { }
     public void OpenTvScreen(bool allowSettings) { }
     public void OpenStops(bool allowSettings) { }
     public void OpenPlanning(bool allowSettings) { }
+    public void ApplyTheme(bool dark) { }
+    public event Action? UserActivity { add { } remove { } }
 }
 
 public static class SpigaServices

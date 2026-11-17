@@ -5,12 +5,23 @@
         xmlns:ui="clr-namespace:Spiga.UI;assembly=Spiga.UI"
         Title="SPIGA Suivi Production" Icon="/Assets/spiga-logo.png"
         Width="1440" Height="900" MinWidth="1024" MinHeight="640"
-        WindowStartupLocation="CenterScreen" WindowState="Maximized">
-    <!-- The main view of the application: the Razor screens of Spiga.UI,
-         the same ones the web host serves. -->
-    <blazor:BlazorWebView x:Name="WebView" HostPage="wwwroot\index.html">
-        <blazor:BlazorWebView.RootComponents>
-            <blazor:RootComponent Selector="#app" ComponentType="{x:Type ui:Routes}" />
-        </blazor:BlazorWebView.RootComponents>
-    </blazor:BlazorWebView>
+        WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        Background="{DynamicResource WindowBackgroundBrush}">
+    <!-- The main view of the application. Left: the Razor screens of
+         Spiga.UI (the same ones the web host serves). When the classic
+         dashboard is opened, the web view keeps only its navigation rail and
+         the dashboard (DashboardView, WPF) fills the right-hand side: WPF
+         cannot draw over a web view, so they sit side by side. -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="WebColumn" Width="*" />
+            <ColumnDefinition x:Name="DashboardColumn" Width="0" />
+        </Grid.ColumnDefinitions>
+        <blazor:BlazorWebView x:Name="WebView" Grid.Column="0" HostPage="wwwroot\index.html">
+            <blazor:BlazorWebView.RootComponents>
+                <blazor:RootComponent Selector="#app" ComponentType="{x:Type ui:Routes}" />
+            </blazor:BlazorWebView.RootComponents>
+        </blazor:BlazorWebView>
+        <Border x:Name="DashboardHost" Grid.Column="1" Visibility="Collapsed" />
+    </Grid>
 </Window>

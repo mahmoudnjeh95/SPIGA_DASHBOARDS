@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
@@ -8,7 +9,7 @@ using SpigaDashboards.App.ViewModels.Planning;
 
 namespace SpigaDashboards.App;
 
-public partial class MainWindow : Window
+public partial class DashboardView : UserControl
 {
     private readonly MainViewModel _viewModel;
     private readonly SettingsService _settingsService;
@@ -17,8 +18,9 @@ public partial class MainWindow : Window
     private readonly ProductionRepository _repository;
     private readonly SharedSettingsSync _sharedSettings;
     private TvWindow? _tvWindow;
+    private bool _initialized;
 
-    public MainWindow(
+    public DashboardView(
         MainViewModel viewModel,
         SettingsService settingsService,
         AppSettings settings,
@@ -35,7 +37,8 @@ public partial class MainWindow : Window
         _sharedSettings = sharedSettings;
 
         DataContext = viewModel;
-        KeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
+        // Escape closes the kiosk window (KioskWindow), never the main application.
+        KeyDown += (_, e) => { if (e.Key == Key.Escape && Window.GetWindow(this) is KioskWindow kiosk) kiosk.Close(); };
 
         // Stop pop-up: at its saved place each time it comes up (moved on the
         // other window, or put back in Parametres), saved where it is dropped.
@@ -50,10 +53,17 @@ public partial class MainWindow : Window
             _settings.StopAlertOffsetY = y;
             _settingsService.Save(_settings);
         };
-        Loaded += async (_, _) => await viewModel.InitializeAsync();
-        // Back on the TV after a restart, if it was left open there.
-        ContentRendered += (_, _) => { if (_settings.TvScreen.IsOpen) OpenTvWindow(activate: false); };
-        Closed += (_, _) => _tvWindow?.CloseForShutdown();
+        // Loaded comes again each time the view is put back on screen: once only.
+        Loaded += async (_, _) =>
+        {
+            if (_initialized)
+                return;
+            _initialized = true;
+            await viewModel.InitializeAsync();
+            // Back on the TV after a restart, if it was left open there.
+            if (_settings.TvScreen.IsOpen)
+                OpenTvWindow(activate: false);
+        };
 
         UpdateThemeToggleLabel();
     }
@@ -81,7 +91,7 @@ public partial class MainWindow : Window
                 _ = _tvWindow?.ReconnectAsync();
             });
 
-        var window = new SettingsWindow(settingsViewModel) { Owner = this };
+        var window = new SettingsWindow(settingsViewModel) { Owner = OwnerWindow };
         window.ShowDialog();
     }
 
@@ -108,14 +118,14 @@ public partial class MainWindow : Window
     {
         var historyViewModel = new HistoryViewModel(_repository, new TeamScheduleService(_settings), _settings,
             _viewModel.CurrentFilter, _viewModel.CurrentRange);
-        var window = new HistoryWindow(historyViewModel) { Owner = this };
+        var window = new HistoryWindow(historyViewModel) { Owner = OwnerWindow };
         window.ShowDialog();
     }
 
     private void StopsButton_Click(object sender, RoutedEventArgs e)
     {
         var stopsViewModel = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
-        var window = new StopsWindow(stopsViewModel) { Owner = this };
+        var window = new StopsWindow(stopsViewModel) { Owner = OwnerWindow };
         window.ShowDialog();
     }
 
@@ -123,15 +133,27 @@ public partial class MainWindow : Window
     {
         var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
             new TeamScheduleService(_settings));
-        new PlanningWindow(new PlanningViewModel(context)) { Owner = this }.ShowDialog();
+        new PlanningWindow(new PlanningViewModel(context)) { Owner = OwnerWindow }.ShowDialog();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)
     {
-        new AboutWindow { Owner = this }.ShowDialog();
+        new AboutWindow { Owner = OwnerWindow }.ShowDialog();
     }
 
-    // ---- Opened from SPIGA Suivi Production (ShellWindow) ----
+    // The window the dialogs belong to: the one showing this view, else the
+    // application's main window (view not on screen yet).
+    private Window? OwnerWindow => Window.GetWindow(this) ?? Application.Current.MainWindow;
+
+    // The application closes: the TV window remembers it was open.
+    public void CloseTvForShutdown() => _tvWindow?.CloseForShutdown();
+
+    // ---- Used by SPIGA Suivi Production (ShellWindow) ----
+
+    // Embedded in the main window, the theme follows the signed-in user's
+    // choice: no theme button of its own.
+    public void SetEmbedded(bool embedded)
+        => ThemeToggleButton.Visibility = embedded ? Visibility.Collapsed : Visibility.Visible;
 
     // The station's settings (database connection, TV, cadences) stay with
     // the roles that have Paramètres > Administrer.

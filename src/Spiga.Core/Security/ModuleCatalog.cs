@@ -29,9 +29,14 @@ public sealed record ModuleInfo(string Key, string Label, string Domain, string 
 
 // One entry of the navigation rail. Ready = the screen exists in this
 // version; the others open a page that says what the screen will hold.
+// Shown when the user holds Permission (default: the module's "voir");
+// DesktopOnly entries only in the Windows application.
 public sealed record NavItem(
     string Key, string Label, string? Group, string Module, string Route, bool Ready,
-    string Content = "", string Filters = "", string Origin = "");
+    string Content = "", string Filters = "", string Origin = "", string? Permission = null, bool DesktopOnly = false)
+{
+    public string RequiredPermission => Permission ?? Perm.View(Module);
+}
 
 public static class ModuleCatalog
 {
@@ -64,6 +69,8 @@ public static class ModuleCatalog
         new NavItem("vue-ensemble", "Vue d'ensemble", null, Modules.VueEnsemble, "", true),
 
         new NavItem("conditionnement", "Conditionnement", "Production", Modules.Conditionnement, "production/conditionnement", true),
+        new NavItem("tableau", "Tableau de bord", "Production", Modules.Conditionnement, "production/tableau-de-bord", true,
+            Permission: Perm.TableauDetaille, DesktopOnly: true),
         new NavItem("rendement", "Rendement matière", "Production", Modules.Rendement, "module/rendement", false,
             "Rendement par secteur et usine : matière versée, en-cours, semi-fini en silo, produit fini.",
             "Période, secteur", "Nouveau (cahier des charges 4.9)"),

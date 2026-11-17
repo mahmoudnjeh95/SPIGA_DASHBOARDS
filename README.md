@@ -9,7 +9,7 @@ Suivi Production**, the application of the cahier des charges of 12 November
 
 | Project | What it is |
 |---|---|
-| `src/SpigaDashboards.App` | The Windows application (WPF, .NET 8). Starts on the SPIGA Suivi Production shell (`ShellWindow`); the classic dashboard, TV screen, Arrêts and Planification windows open from it. |
+| `src/SpigaDashboards.App` | The Windows application (WPF, .NET 8). One window (`ShellWindow`): the SPIGA Suivi Production screens, and the classic dashboard (`DashboardView`) shown inside it under Production › Tableau de bord, beside the menu. `--kiosk` shows the dashboard alone (`KioskWindow`) for TV / hall PCs. |
 | `src/SpigaDashboards.Production` | Production database access (Stiavelli `stats`, read only), KPI / TRS calculation, team roster, station settings. Moved out of the app unchanged, so the dashboard and the new screens compute the same figures. |
 | `src/Spiga.Core` | Domain rules with no UI and no SQL: modules and permissions, users and roles, data scope, authentication and lockout, waste entry workflow, audit trail. |
 | `src/Spiga.Data` | The application database (separate from `stats`): SQLite on a dev PC, SQL Server on site. Versioned migrations run at start-up. |

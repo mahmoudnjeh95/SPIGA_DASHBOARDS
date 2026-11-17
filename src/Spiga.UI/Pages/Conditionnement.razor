@@ -12,9 +12,9 @@
         </div>
         @if (Desktop.IsAvailable && Session.Can(Perm.TableauDetaille))
         {
-            <button type="button" class="bar" @onclick="() => Desktop.OpenDashboard(CanEditStationSettings)" title="Diapositives, détail par machine, synthèse secteur, historique">
+            <a class="bar" href="production/tableau-de-bord" title="Diapositives, détail par machine, synthèse secteur, historique">
                 Tableau de bord détaillé
-            </button>
+            </a>
         }
     </div>
 
