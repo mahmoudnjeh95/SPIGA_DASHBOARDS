@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/Spiga.UI/spiga.css" />
+    <link rel="icon" type="image/png" href="_content/Spiga.UI/img/spiga-logo.png" />
+    <title>SPIGA Suivi Production</title>
+</head>
+<body>
+    <Routes @rendermode="Interactive" Workstation="@HttpContext?.Connection.RemoteIpAddress?.ToString()" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>
+
+@code {
+    // No prerendering: the session (sign-in) lives in the interactive circuit.
+    private static readonly IComponentRenderMode Interactive = new InteractiveServerRenderMode(prerender: false);
+
+    [CascadingParameter] public HttpContext? HttpContext { get; set; }
+}

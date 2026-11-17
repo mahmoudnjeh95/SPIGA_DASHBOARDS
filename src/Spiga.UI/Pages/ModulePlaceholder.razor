@@ -1,0 +1,46 @@
+@page "/module/{Key}"
+@inherits SpigaPage
+@inject IRoleStore Roles
+
+@if (_item == null)
+{
+    <div class="card" style="max-width:640px"><h2>Module inconnu</h2></div>
+}
+else
+{
+    <RequireAccess Module="@_item.Module">
+        <div class="head">
+            <div>
+                <span class="pre">@_item.Group</span><h1>@_item.Label</h1>
+                <p>Écran prévu dans une prochaine version. Voici ce qu'il contiendra, pour validation.</p>
+            </div>
+            <span class="chip warn">À venir</span>
+        </div>
+        <section class="card" style="max-width:820px">
+            <dl class="kv">
+                <dt>Contenu</dt><dd>@_item.Content</dd>
+                <dt>Filtres</dt><dd>@_item.Filters</dd>
+                <dt>Origine</dt><dd>@_item.Origin</dd>
+                <dt>Droit</dt><dd>@(ModuleCatalog.Find(_item.Module)?.Label) : @AppActions.Describe(ModuleCatalog.Find(_item.Module)?.Allowed ?? AppAction.None)</dd>
+                <dt>Rôles ayant accès</dt><dd>@string.Join(", ", _roles)</dd>
+            </dl>
+        </section>
+    </RequireAccess>
+}
+
+@code {
+    [Parameter] public string Key { get; set; } = "";
+
+    private NavItem? _item;
+    private List<string> _roles = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _item = ModuleCatalog.FindNav(Key);
+        if (_item == null)
+            return;
+        _roles = (await Roles.ListAsync())
+            .Where(r => r.IsSystem || r.Permissions.Can(_item.Module, AppAction.Voir))
+            .Select(r => r.Name).ToList();
+    }
+}

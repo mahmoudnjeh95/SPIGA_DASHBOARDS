@@ -1,0 +1,513 @@
+@page "/admin/acces"
+@inherits SpigaPage
+@inject AccessAdminService Admin
+@inject PlantData Plant
+
+<RequireAccess Module="@Modules.Utilisateurs">
+    <div class="head">
+        <div>
+            <span class="pre">Administration</span><h1>Utilisateurs et rôles</h1>
+            <p>Un rôle donne des droits par module et par action. Un utilisateur reçoit un rôle et un périmètre de données. Chaque modification est tracée.</p>
+        </div>
+        @if (!CanAdmin)
+        {
+            <span class="chip">Consultation seule</span>
+        }
+    </div>
+
+    <div class="tabrow" role="tablist">
+        <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" aria-selected="@(_tab == 0)" @onclick="() => _tab = 0">Rôles et droits</button>
+        <button type="button" role="tab" class="tab @(_tab == 1 ? "on" : "")" aria-selected="@(_tab == 1)" @onclick="() => _tab = 1">Utilisateurs (@_users.Count)</button>
+        <button type="button" role="tab" class="tab @(_tab == 2 ? "on" : "")" aria-selected="@(_tab == 2)" @onclick="() => _tab = 2">Règles de sécurité</button>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+    @if (_secret != null)
+    {
+        <div class="notice info" role="status">
+            <div>
+                Mot de passe temporaire de <b>@_secret.Value.Login</b> : <span class="secret">@_secret.Value.Password</span><br />
+                <span style="font-weight:400">À remettre à l'utilisateur ; il ne sera plus affiché. Il devra le changer à la connexion.</span>
+            </div>
+            <button type="button" class="x" @onclick="() => _secret = null" aria-label="Fermer">✕</button>
+        </div>
+    }
+
+    @if (_tab == 0)
+    {
+        <div class="row">
+            <section class="card" style="flex:1 1 230px;max-width:300px">
+                <h2>Rôles</h2>
+                <div class="rolelist">
+                    @foreach (var r in _roles)
+                    {
+                        <button type="button" class="rolebtn @(r.Id == _role?.Id ? "on" : "")" @onclick="() => SelectRole(r)">
+                            <span>@r.Name @if (r.IsSystem) { <span class="chip" style="margin-left:4px">système</span> }</span>
+                            <small title="Utilisateurs">@r.UserCount</small>
+                        </button>
+                    }
+                </div>
+                @if (CanAdmin)
+                {
+                    <form class="form" style="border-top:1px solid var(--line);padding-top:10px" @onsubmit="CreateRoleAsync">
+                        <div class="f grow"><label for="new-role">Nouveau rôle</label><input id="new-role" @bind="_newRoleName" @bind:event="oninput" placeholder="ex. Magasinier" /></div>
+                        <button class="bar small" type="submit">Créer</button>
+                    </form>
+                }
+            </section>
+
+            @if (_role != null)
+            {
+                <section class="card" style="flex:3 1 560px">
+                    <div class="card-head">
+                        <h2>@_role.Name <small>@_role.UserCount utilisateur(s)</small></h2>
+                        @if (CanAdmin)
+                        {
+                            <div class="segs">
+                                <button type="button" class="bar small" @onclick="DuplicateRoleAsync">Dupliquer</button>
+                                @if (!_role.IsSystem)
+                                {
+                                    <button type="button" class="bar small danger" @onclick="DeleteRoleAsync" disabled="@(_role.UserCount > 0)"
+                                            title="@(_role.UserCount > 0 ? "Attribuez un autre rôle à ses utilisateurs d'abord" : "")">Supprimer</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                    @if (_role.IsSystem)
+                    {
+                        <div class="notice info">Rôle système : tous les droits, non modifiable. L'application garde ainsi toujours un administrateur.</div>
+                    }
+                    else if (CanAdmin)
+                    {
+                        <div class="form">
+                            <div class="f"><label for="role-name">Nom</label><input id="role-name" @bind="_roleName" @bind:event="oninput" /></div>
+                            <div class="f grow"><label for="role-desc">Description</label><input id="role-desc" @bind="_roleDescription" @bind:event="oninput" /></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <p>@_role.Description</p>
+                    }
+
+                    <div class="scroll">
+                        <table class="t matrix">
+                            <thead>
+                                <tr>
+                                    <th>Module</th>
+                                    @foreach (var a in AppActions.All)
+                                    {
+                                        <th class="c">@AppActions.Label(a)</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var domain in ModuleCatalog.All.GroupBy(m => m.Domain))
+                                {
+                                    <tr><td class="dom" colspan="6">@domain.Key</td></tr>
+                                    @foreach (var m in domain)
+                                    {
+                                        <tr>
+                                            <td class="mod">@m.Label<small>@m.Description</small></td>
+                                            @foreach (var a in AppActions.All)
+                                            {
+                                                <td class="c">
+                                                    @if (m.Allowed.HasFlag(a))
+                                                    {
+                                                        <input type="checkbox" aria-label="@m.Label : @AppActions.Label(a)" checked="@_draft[m.Key].HasFlag(a)"
+                                                               disabled="@(_role.IsSystem || !CanAdmin)" @onchange="e => Toggle(m.Key, a, e.Value is true)" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="na" title="Action sans objet pour ce module">—</span>
+                                                    }
+                                                </td>
+                                            }
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (CanAdmin && !_role.IsSystem)
+                    {
+                        <div class="segs" style="justify-content:flex-end">
+                            <span class="nd" style="align-self:center;margin-right:8px">@(RoleDirty ? "Modifications non enregistrées" : "")</span>
+                            <button type="button" class="bar" @onclick="() => SelectRole(_role)" disabled="@(!RoleDirty)">Annuler</button>
+                            <button type="button" class="bar acc" @onclick="SaveRoleAsync" disabled="@(!RoleDirty)">Enregistrer le rôle</button>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+    else if (_tab == 1)
+    {
+        <div class="row">
+            <section class="card" style="flex:3 1 560px">
+                <div class="card-head">
+                    <h2>Comptes</h2>
+                    @if (CanAdmin)
+                    {
+                        <button type="button" class="bar acc small" @onclick="NewUser">Nouvel utilisateur</button>
+                    }
+                </div>
+                <div class="scroll">
+                    <table class="t">
+                        <thead><tr><th>Identifiant</th><th>Rôle</th><th>Périmètre</th><th>Dernière connexion</th><th>État</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var u in _users)
+                            {
+                                <tr class="@(_user?.Id == u.Id ? "sel" : "")">
+                                    <td>@u.Login<small>@u.DisplayName</small></td>
+                                    <td class="n">@u.RoleName</td>
+                                    <td class="n">@u.Scope.Describe()</td>
+                                    <td class="n">@Fmt.Ago(u.LastLoginAt, Now)</td>
+                                    <td>
+                                        @if (!u.IsActive)
+                                        {
+                                            <span class="chip">Désactivé</span>
+                                        }
+                                        else if (u.IsLocked(Now))
+                                        {
+                                            <span class="chip bad">Bloqué</span>
+                                        }
+                                        else if (u.MustChangePassword)
+                                        {
+                                            <span class="chip warn">Mot de passe à changer</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="chip ok">Actif</span>
+                                        }
+                                    </td>
+                                    <td><div class="actions"><button type="button" class="link" @onclick="() => EditUser(u)">@(CanAdmin ? "Modifier" : "Détail")</button></div></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            @if (_userForm != null)
+            {
+                <section class="card" style="flex:2 1 360px">
+                    <div class="card-head">
+                        <h2>@(_user == null ? "Nouvel utilisateur" : _user.Login)</h2>
+                        <button type="button" class="link" @onclick="() => { _userForm = null; _user = null; }">Fermer</button>
+                    </div>
+                    <form @onsubmit="SaveUserAsync" style="display:flex;flex-direction:column;gap:12px">
+                        <div class="form">
+                            @if (_user == null)
+                            {
+                                <div class="f"><label for="u-login">Identifiant</label><input id="u-login" @bind="_userForm.Login" @bind:event="oninput" placeholder="prenom.nom" /></div>
+                            }
+                            <div class="f grow"><label for="u-name">Nom affiché</label><input id="u-name" @bind="_userForm.Name" @bind:event="oninput" disabled="@(!CanAdmin)" /></div>
+                            <div class="f">
+                                <label for="u-role">Rôle</label>
+                                <select id="u-role" @bind="_userForm.RoleId" disabled="@(!CanAdmin)">
+                                    @foreach (var r in _roles)
+                                    {
+                                        <option value="@r.Id">@r.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="f">
+                            <span>Périmètre : secteurs</span>
+                            <div class="checks">
+                                @foreach (var s in Sectors.All)
+                                {
+                                    <label class="check"><input type="checkbox" checked="@_userForm.Sectors.Contains(s)" disabled="@(!CanAdmin)"
+                                                                @onchange="e => ToggleIn(_userForm.Sectors, s, e.Value is true)" />@Sectors.Label(s)</label>
+                                }
+                            </div>
+                            <small class="nd">Aucun coché = tous les secteurs.</small>
+                        </div>
+                        <div class="f">
+                            <span>Périmètre : machines</span>
+                            <div class="checks">
+                                @foreach (var m in _machines.Where(m => _userForm.Sectors.Count == 0 || _userForm.Sectors.Contains(m.Sector)))
+                                {
+                                    <label class="check"><input type="checkbox" checked="@_userForm.Machines.Contains(m.Id)" disabled="@(!CanAdmin)"
+                                                                @onchange="e => ToggleIn(_userForm.Machines, m.Id, e.Value is true)" />@m.Id</label>
+                                }
+                            </div>
+                            <small class="nd">Aucune cochée = toutes les machines des secteurs choisis.</small>
+                        </div>
+                        <div class="f">
+                            <label for="u-team">Périmètre : équipe</label>
+                            <select id="u-team" @bind="_userForm.Team" disabled="@(!CanAdmin)" style="max-width:220px">
+                                <option value="">Toutes les équipes</option>
+                                @foreach (var t in Plant.Teams)
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <label class="check"><input type="checkbox" @bind="_userForm.Active" disabled="@(!CanAdmin)" />Compte actif</label>
+
+                        @if (_user != null)
+                        {
+                            <dl class="kv">
+                                <dt>Créé le</dt><dd>@Fmt.Date(_user.CreatedAt)</dd>
+                                <dt>Mot de passe</dt><dd>@(_user.MustChangePassword ? "temporaire, à changer" : "changé le " + Fmt.Date(_user.PasswordChangedAt))</dd>
+                                <dt>Blocage</dt><dd>@(_user.IsLocked(Now) ? (_user.LockedUntil >= DataScope.Forever.AddDays(-1) ? "bloqué jusqu'au déblocage" : "bloqué jusqu'à " + Fmt.Date(_user.LockedUntil)) : "non")</dd>
+                            </dl>
+                        }
+
+                        @if (CanAdmin)
+                        {
+                            <div class="segs">
+                                <button class="bar acc" type="submit">@(_user == null ? "Créer le compte" : "Enregistrer")</button>
+                                @if (_user != null)
+                                {
+                                    <button type="button" class="bar" @onclick="ResetPasswordAsync">Réinitialiser le mot de passe</button>
+                                    @if (_user.IsLocked(Now))
+                                    {
+                                        <button type="button" class="bar" @onclick="UnlockAsync">Débloquer</button>
+                                    }
+                                }
+                            </div>
+                        }
+                    </form>
+                </section>
+            }
+        </div>
+    }
+    else if (_policy != null)
+    {
+        <section class="card" style="max-width:760px">
+            <h2>Règles de sécurité <small>appliquées à tous les comptes</small></h2>
+            <form @onsubmit="SavePolicyAsync" style="display:flex;flex-direction:column;gap:14px">
+                <div class="form">
+                    <div class="f"><label for="p-len">Longueur minimale du mot de passe</label><input id="p-len" type="number" min="8" max="64" @bind="_policy.MinPasswordLength" disabled="@(!CanAdmin)" /></div>
+                    <div class="f"><label for="p-fail">Échecs avant blocage</label><input id="p-fail" type="number" min="3" max="20" @bind="_policy.MaxFailedAttempts" disabled="@(!CanAdmin)" /></div>
+                    <div class="f"><label for="p-lock">Durée du blocage (min, 0 = déblocage par un administrateur)</label><input id="p-lock" type="number" min="0" max="1440" @bind="_policy.LockoutMinutes" disabled="@(!CanAdmin)" /></div>
+                    <div class="f"><label for="p-idle">Verrouillage après inactivité (min, 0 = jamais)</label><input id="p-idle" type="number" min="0" max="480" @bind="_policy.SessionTimeoutMinutes" disabled="@(!CanAdmin)" /></div>
+                </div>
+                <label class="check"><input type="checkbox" @bind="_policy.RequireLetterAndDigit" disabled="@(!CanAdmin)" />Le mot de passe contient au moins une lettre et un chiffre</label>
+                <label class="check"><input type="checkbox" @bind="_policy.RequireSecondValidator" disabled="@(!CanAdmin)" />Une saisie est validée par une autre personne que son auteur</label>
+                <p class="nd" style="font-size:13px">Les mots de passe sont stockés hachés (PBKDF2-SHA256), jamais en clair. Un identifiant inconnu et un mauvais mot de passe donnent la même réponse.</p>
+                @if (CanAdmin)
+                {
+                    <div><button class="bar acc" type="submit">Enregistrer les règles</button></div>
+                }
+            </form>
+        </section>
+    }
+</RequireAccess>
+
+@code {
+    private sealed class UserForm
+    {
+        public string Login { get; set; } = "";
+        public string Name { get; set; } = "";
+        public int RoleId { get; set; }
+        public List<string> Sectors { get; set; } = new();
+        public List<string> Machines { get; set; } = new();
+        public string Team { get; set; } = "";
+        public bool Active { get; set; } = true;
+    }
+
+    private int _tab;
+    private IReadOnlyList<Role> _roles = Array.Empty<Role>();
+    private IReadOnlyList<AppUser> _users = Array.Empty<AppUser>();
+    private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+    private Role? _role;
+    private PermissionSet _draft = new();
+    private string _roleName = "";
+    private string _roleDescription = "";
+    private string _newRoleName = "";
+    private AppUser? _user;
+    private UserForm? _userForm;
+    private SecurityPolicy? _policy;
+    private (string Login, string Password)? _secret;
+
+    private bool CanAdmin => Session.Can(Modules.Utilisateurs, AppAction.Administrer);
+
+    private bool RoleDirty => _role != null && !_role.IsSystem
+        && (PermissionSet.Diff(_role.Permissions, _draft).Length > 0 || _roleName != _role.Name || _roleDescription != _role.Description);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.Can(Modules.Utilisateurs, AppAction.Voir))
+            return;
+        try
+        {
+            _machines = await Plant.GetMachinesAsync();
+        }
+        catch (Exception)
+        {
+            _machines = Array.Empty<PlantMachine>();
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync(int? selectRoleId = null)
+    {
+        await Run(async () =>
+        {
+            _roles = await Admin.ListRolesAsync(Actor);
+            _users = await Admin.ListUsersAsync(Actor);
+            _policy = (await Admin.GetPolicyAsync(Actor)).Clone();
+        });
+        var keep = selectRoleId ?? _role?.Id;
+        SelectRole(_roles.FirstOrDefault(r => r.Id == keep) ?? _roles.FirstOrDefault(r => !r.IsSystem) ?? _roles.FirstOrDefault());
+        if (_user != null)
+            _user = _users.FirstOrDefault(u => u.Id == _user.Id);
+    }
+
+    // ---------- roles ----------
+
+    private void SelectRole(Role? role)
+    {
+        _role = role;
+        _draft = role?.IsSystem == true ? PermissionSet.Full() : role?.Permissions.Clone() ?? new PermissionSet();
+        _roleName = role?.Name ?? "";
+        _roleDescription = role?.Description ?? "";
+    }
+
+    private void Toggle(string module, AppAction action, bool on)
+    {
+        var current = _draft[module];
+        var next = on ? current | action : current & ~action;
+        // Removing Voir removes everything; granting anything grants Voir.
+        if (!on && action == AppAction.Voir)
+            next = AppAction.None;
+        _draft.Set(module, next);
+    }
+
+    private async Task SaveRoleAsync()
+    {
+        var role = _role!;
+        if (await Run(() => Admin.UpdateRoleAsync(Actor, role.Id, _roleName, _roleDescription, _draft), $"Rôle « {_roleName.Trim()} » enregistré."))
+        {
+            await ReloadAsync(role.Id);
+            await Session.RefreshAsync();
+        }
+    }
+
+    private async Task CreateRoleAsync()
+    {
+        Role? created = null;
+        if (await Run(async () => created = await Admin.CreateRoleAsync(Actor, _newRoleName, "", null), "Rôle créé, sans droit : cochez ce qu'il peut faire."))
+        {
+            _newRoleName = "";
+            await ReloadAsync(created!.Id);
+        }
+    }
+
+    private async Task DuplicateRoleAsync()
+    {
+        var source = _role!;
+        Role? created = null;
+        var name = UniqueName($"{source.Name} (copie)");
+        if (await Run(async () => created = await Admin.CreateRoleAsync(Actor, name, source.Description, source.Id), $"Rôle « {name} » créé."))
+            await ReloadAsync(created!.Id);
+    }
+
+    private async Task DeleteRoleAsync()
+    {
+        var role = _role!;
+        if (await Run(() => Admin.DeleteRoleAsync(Actor, role.Id), $"Rôle « {role.Name} » supprimé."))
+        {
+            _role = null;
+            await ReloadAsync();
+        }
+    }
+
+    private string UniqueName(string name)
+    {
+        var candidate = name;
+        for (var i = 2; _roles.Any(r => string.Equals(r.Name, candidate, StringComparison.OrdinalIgnoreCase)); i++)
+            candidate = $"{name} {i}";
+        return candidate.Length > 60 ? candidate[..60] : candidate;
+    }
+
+    // ---------- users ----------
+
+    private void NewUser()
+    {
+        _user = null;
+        _userForm = new UserForm { RoleId = _roles.FirstOrDefault(r => r.Code == "operateur")?.Id ?? _roles.Last().Id };
+        Error = Info = null;
+    }
+
+    private void EditUser(AppUser u)
+    {
+        _user = u;
+        _userForm = new UserForm
+        {
+            Login = u.Login,
+            Name = u.DisplayName,
+            RoleId = u.RoleId,
+            Sectors = u.Scope.Sectors.ToList(),
+            Machines = u.Scope.Machines.ToList(),
+            Team = u.Scope.Team ?? "",
+            Active = u.IsActive,
+        };
+        Error = Info = null;
+    }
+
+    private static void ToggleIn(List<string> list, string value, bool on)
+    {
+        list.Remove(value);
+        if (on)
+            list.Add(value);
+    }
+
+    private async Task SaveUserAsync()
+    {
+        var form = _userForm!;
+        var machines = form.Machines.Where(id => form.Sectors.Count == 0 || _machines.Any(m => m.Id == id && form.Sectors.Contains(m.Sector))).ToList();
+        var scope = new DataScope(form.Sectors.ToList(), string.IsNullOrEmpty(form.Team) ? null : form.Team, machines);
+        var draft = new UserDraft(form.Login, form.Name, form.RoleId, scope, form.Active);
+        if (_user == null)
+        {
+            string? password = null;
+            if (await Run(async () => password = await Admin.CreateUserAsync(Actor, draft), "Compte créé."))
+            {
+                _secret = (AccessAdminService.CheckLogin(form.Login), password!);
+                _userForm = null;
+                await ReloadAsync();
+            }
+        }
+        else
+        {
+            var id = _user.Id;
+            if (await Run(() => Admin.UpdateUserAsync(Actor, id, draft), "Compte enregistré."))
+            {
+                await ReloadAsync();
+                EditUser(_users.First(u => u.Id == id));
+            }
+        }
+    }
+
+    private async Task ResetPasswordAsync()
+    {
+        var user = _user!;
+        string? password = null;
+        if (await Run(async () => password = await Admin.ResetPasswordAsync(Actor, user.Id), "Mot de passe réinitialisé, compte débloqué."))
+        {
+            _secret = (user.Login, password!);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task UnlockAsync()
+    {
+        var user = _user!;
+        if (await Run(() => Admin.UnlockAsync(Actor, user.Id), $"Compte {user.Login} débloqué."))
+            await ReloadAsync();
+    }
+
+    // ---------- policy ----------
+
+    private async Task SavePolicyAsync()
+    {
+        var policy = _policy!.Clone();
+        if (await Run(() => Admin.SavePolicyAsync(Actor, policy), "Règles de sécurité enregistrées. Elles s'appliquent à la prochaine connexion."))
+            await ReloadAsync();
+    }
+}

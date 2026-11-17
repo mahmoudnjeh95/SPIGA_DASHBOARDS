@@ -1,1 +1,55 @@
 # SPIGA_DASHBOARDS
+
+Production tracking for the SPIGA pasta plant: the **SPIGA Dashboards** kiosk
+(packaging line slides, TV screen) and, on the development branch, **SPIGA
+Suivi Production**, the application of the cahier des charges of 12 November
+2026, which becomes the main view and contains the dashboard.
+
+## Structure
+
+| Project | What it is |
+|---|---|
+| `src/SpigaDashboards.App` | The Windows application (WPF, .NET 8). Starts on the SPIGA Suivi Production shell (`ShellWindow`); the classic dashboard, TV screen, Arrêts and Planification windows open from it. |
+| `src/SpigaDashboards.Production` | Production database access (Stiavelli `stats`, read only), KPI / TRS calculation, team roster, station settings. Moved out of the app unchanged, so the dashboard and the new screens compute the same figures. |
+| `src/Spiga.Core` | Domain rules with no UI and no SQL: modules and permissions, users and roles, data scope, authentication and lockout, waste entry workflow, audit trail. |
+| `src/Spiga.Data` | The application database (separate from `stats`): SQLite on a dev PC, SQL Server on site. Versioned migrations run at start-up. |
+| `src/Spiga.UI` | The screens, as Razor components. The same components run in the desktop app (BlazorWebView) and in a browser. |
+| `src/Spiga.Web` | Browser host (Blazor Server). Development and demonstrations today; the deployment path if the company moves to web applications. |
+| `tests/Spiga.Tests` | Tests of the security and waste rules against a real SQLite database. |
+
+Moving to the web changes the host (`Spiga.Web`), not the screens.
+
+## Run
+
+```powershell
+dotnet build SpigaDashboards.sln
+dotnet run --project src/SpigaDashboards.App            # desktop app, sign-in first
+dotnet run --project src/SpigaDashboards.App -- --kiosk # classic dashboard only, no sign-in (TV PCs)
+dotnet run --project src/Spiga.Web                      # same screens in a browser
+dotnet test tests/Spiga.Tests
+```
+
+On the first start, with an empty application database, the application
+asks for the first administrator account. On a dev PC the application
+database is `database/spiga_suivi.db` (created automatically, not in git).
+On site, IT runs `database/spiga_suivi.sql` once on the SQL Server.
+
+The desktop shell needs the Microsoft Edge WebView2 runtime (present on
+Windows 10 and 11).
+
+## Access control
+
+* A **role** grants, per module, any of Voir, Saisir, Valider, Exporter,
+  Administrer (`ModuleCatalog`, `DefaultRoles`). The built-in Administrateur
+  role cannot be edited, and no change may leave the application without an
+  active administrator.
+* A **user** has one role and a **data scope**: sectors, machines, team.
+  Lists, figures and entries outside the scope are hidden and refused.
+* Every service checks the rights itself; the screens only hide what the
+  user cannot use.
+* Passwords: PBKDF2-SHA256; temporary passwords must be changed at first
+  sign-in; lockout after repeated failures; screen lock after inactivity.
+  Rules are set in Utilisateurs et rôles › Règles de sécurité.
+* Waste entries (interfaces A1 / A2): draft, then validated by another
+  person, then locked; a correction needs a reason. Everything goes to the
+  audit trail (who, when, which PC, old and new value).

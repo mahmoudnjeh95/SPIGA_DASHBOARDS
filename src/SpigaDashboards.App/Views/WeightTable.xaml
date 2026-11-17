@@ -1,7 +1,7 @@
 <UserControl x:Class="SpigaDashboards.App.Views.WeightTable"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:models="clr-namespace:SpigaDashboards.App.Models"
+             xmlns:models="clr-namespace:SpigaDashboards.App.Models;assembly=SpigaDashboards.Production"
              x:Name="Root">
 
     <!-- "Production par poids": one row per target weight the line ran

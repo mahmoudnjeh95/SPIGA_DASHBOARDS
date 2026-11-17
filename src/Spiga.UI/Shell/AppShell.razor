@@ -1,0 +1,113 @@
+@* The frame of every screen: navigation rail (only what the role may see),
+   context bar (where you are, which team is on shift, your account). *@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject UserSession Session
+@inject NavigationManager Nav
+@inject PlantData Plant
+@inject IDesktopBridge Desktop
+
+<ActivityZone>
+    <aside class="rail">
+        <Brand />
+        <nav class="navwrap" aria-label="Modules">
+            @foreach (var group in VisibleGroups())
+            {
+                @if (group.Key != null)
+                {
+                    <div class="grp">@group.Key</div>
+                }
+                @foreach (var item in group)
+                {
+                    <NavLink class="nav" ActiveClass="active" href="@item.Route" Match="@(item.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                        <span>@item.Label</span>
+                        @if (!item.Ready)
+                        {
+                            <span class="soon" title="Écran prévu dans une prochaine version">à venir</span>
+                        }
+                    </NavLink>
+                }
+            }
+        </nav>
+        <div class="me">
+            <b>@Session.Actor?.DisplayName</b>
+            <small>@Session.Actor?.Role.Name</small>
+            <small>Périmètre : @Session.Actor?.Scope.Describe()</small>
+        </div>
+    </aside>
+    <div class="main">
+        <header class="ctx">
+            <span class="crumb">@((MarkupString)Crumb())</span>
+            <span class="pill" title="Équipe en poste selon le roulement"><span class="dot"></span>@_shift</span>
+            <span class="sp"></span>
+            @if (Desktop.IsAvailable && Session.Can(Modules.Conditionnement, AppAction.Voir))
+            {
+                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Modules.Parametres, AppAction.Administrer))">Écran TV</button>
+            }
+            <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
+            <a class="bar" href="compte">Mon compte</a>
+            <button type="button" class="bar" @onclick="Session.SignOutAsync">Se déconnecter</button>
+        </header>
+        <main class="view">
+            @Body
+        </main>
+    </div>
+</ActivityZone>
+
+@code {
+    private string _shift = "";
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        Session.Changed += OnSessionChanged;
+        UpdateShift();
+    }
+
+    private IEnumerable<IGrouping<string?, NavItem>> VisibleGroups()
+        => ModuleCatalog.Navigation
+            .Where(n => Session.Can(n.Module, AppAction.Voir))
+            .GroupBy(n => n.Group);
+
+    private string Crumb()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+        if (path == "compte")
+            return "Usine › <b>Mon compte</b>";
+        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path);
+        if (item == null)
+            return "Usine";
+        var label = System.Net.WebUtility.HtmlEncode(item.Label);
+        return item.Group == null ? $"Usine › <b>{label}</b>" : $"Usine › {System.Net.WebUtility.HtmlEncode(item.Group)} › <b>{label}</b>";
+    }
+
+    private void UpdateShift()
+    {
+        try
+        {
+            var (team, shift) = Plant.CurrentShift();
+            _shift = $"{team} - Poste {Shifts.Label(shift)}";
+        }
+        catch (Exception)
+        {
+            _shift = "Roulement indisponible";
+        }
+    }
+
+    // Each navigation re-reads the account: a right removed by an
+    // administrator disappears without signing out.
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateShift();
+        await Session.RefreshAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Session.Changed -= OnSessionChanged;
+    }
+}

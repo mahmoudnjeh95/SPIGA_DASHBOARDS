@@ -1,7 +1,7 @@
 <UserControl x:Class="SpigaDashboards.App.Views.WeightAverages"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:models="clr-namespace:SpigaDashboards.App.Models"
+             xmlns:models="clr-namespace:SpigaDashboards.App.Models;assembly=SpigaDashboards.Production"
              x:Name="Root">
 
     <!-- Net average weight per target weight, one line each ("503,6 g / 500 g"):

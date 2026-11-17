@@ -1,0 +1,40 @@
+<div class="f">
+    <span>Période</span>
+    <div class="segs" role="group" aria-label="Période">
+        @foreach (var kind in Kinds)
+        {
+            <button type="button" class="seg @(Value.Kind == kind ? "on" : "")" aria-pressed="@(Value.Kind == kind)"
+                    @onclick="() => Pick(kind)">@Period.KindLabel(kind)</button>
+        }
+    </div>
+</div>
+@if (Value.Kind == PeriodKind.Custom)
+{
+    <div class="f">
+        <label for="@($"{Id}-from")">Du</label>
+        <input id="@($"{Id}-from")" type="date" value="@Value.CustomFrom.ToString("yyyy-MM-dd")" @onchange="e => SetFrom(e.Value)" />
+    </div>
+    <div class="f">
+        <label for="@($"{Id}-to")">Au</label>
+        <input id="@($"{Id}-to")" type="date" value="@Value.CustomTo.ToString("yyyy-MM-dd")" @onchange="e => SetTo(e.Value)" />
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Period Value { get; set; } = default!;
+    [Parameter] public EventCallback<Period> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<PeriodKind> Kinds { get; set; } = Enum.GetValues<PeriodKind>();
+    [Parameter] public string Id { get; set; } = "period";
+
+    private Task Pick(PeriodKind kind) => ValueChanged.InvokeAsync(Value with { Kind = kind });
+
+    private Task SetFrom(object? value)
+        => DateTime.TryParse(value?.ToString(), CultureInfo.InvariantCulture, out var d)
+            ? ValueChanged.InvokeAsync(Value with { CustomFrom = d, CustomTo = Value.CustomTo < d ? d : Value.CustomTo })
+            : Task.CompletedTask;
+
+    private Task SetTo(object? value)
+        => DateTime.TryParse(value?.ToString(), CultureInfo.InvariantCulture, out var d)
+            ? ValueChanged.InvokeAsync(Value with { CustomTo = d, CustomFrom = Value.CustomFrom > d ? d : Value.CustomFrom })
+            : Task.CompletedTask;
+}

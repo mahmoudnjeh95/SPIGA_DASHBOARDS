@@ -120,7 +120,9 @@ switch ($Action) {
             return
         }
         if (-not (Test-Path $ExePath)) { throw "Exe not found at $ExePath - run -Action build first." }
-        $p = Start-Process -FilePath $ExePath -PassThru -WorkingDirectory (Split-Path $ExePath)
+        # --kiosk: the classic dashboard window this driver knows, without the
+        # SPIGA Suivi Production sign-in shell (a WebView2 page, not UIA controls).
+        $p = Start-Process -FilePath $ExePath -ArgumentList '--kiosk' -PassThru -WorkingDirectory (Split-Path $ExePath)
         $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
         do {
             Start-Sleep -Milliseconds 300

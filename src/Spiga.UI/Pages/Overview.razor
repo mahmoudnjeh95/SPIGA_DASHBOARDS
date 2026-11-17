@@ -1,0 +1,223 @@
+@page "/"
+@inherits SpigaPage
+@inject DashboardQueries Queries
+@inject WasteService Waste
+@inject UiState Ui
+
+@if (Session.Can(Modules.VueEnsemble, AppAction.Voir))
+{
+    <div class="head">
+        <div>
+            <span class="pre">Usine</span><h1>Vue d'ensemble</h1>
+            <p>@_period.Label(Now)@Subtitle()</p>
+        </div>
+        <div class="filters" style="padding:6px 12px 8px">
+            <PeriodPicker Value="_period" ValueChanged="OnPeriodAsync" Kinds="Kinds" Id="ov-period" />
+        </div>
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_snap == null)
+    {
+        <div class="loading">Chargement des indicateurs…</div>
+    }
+    else
+    {
+        @if (_snap.ProductionError != null)
+        {
+            <div class="notice warn">@_snap.ProductionError</div>
+        }
+        var total = _snap.Total;
+        <div class="row">
+            <KpiTile Label="TRS" Hint="@($"cible {Fmt.Num(_snap.TrsTarget)} %")" Value="@Fmt.Pct(total?.TrsPercent)"
+                     Css="@Fmt.Css(TrsBand.ForTarget(_snap.TrsTarget).Severity(total?.TrsPercent))"
+                     Sub="@($"D {Fmt.Pct(total?.AvailabilityPercent, 0)} · P {Fmt.Pct(total?.PerformancePercent, 0)} · Q {Fmt.Pct(total?.QualityPercent, 0)}")" />
+            <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(total?.WeightDeviationPercent)"
+                     Css="@Fmt.Css(WeightBand.Default.Severity(total?.WeightDeviationPercent))"
+                     Sub="@(total?.GiveawayKg is { } g ? $"surpoids {Fmt.Mass(Math.Abs(g))}{(g < 0 ? " (sous-poids)" : "")}" : "pas de pesée sur la période")" />
+            <KpiTile Label="Production" Hint="conditionnement" Value="@(total == null ? Fmt.Missing : Fmt.Mass(total.ProductionKg))"
+                     Sub="@(total == null ? "" : $"{Fmt.Num(total.TotalBags)} sacs · conformité {Fmt.Pct(total.QualityPercent)}")" />
+            <KpiTile Label="Déchet emballage" Value="@Fmt.Kg(_snap.PackagingWasteKg)"
+                     Css="@(_snap.PackagingWasteKg > 0 ? "" : "nd")"
+                     Sub="@($"{(_snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "aucune production")}{(_snap.DraftEntries > 0 ? $" · {_snap.DraftEntries} non validée(s)" : "")}")" />
+            <KpiTile Label="Déchet produit" Value="@Fmt.Kg(_snap.ProductWasteKg)" Css="@(_snap.ProductWasteKg > 0 ? "" : "nd")"
+                     Sub="@string.Join(" · ", _snap.Sectors.Where(s => s.ProductWasteKg > 0).Select(s => $"{Sectors.Label(s.Sector)} {Fmt.Kg(s.ProductWasteKg)}"))" />
+            <KpiTile Label="Rendement usine" Value="Non disponible" Missing="true" Sub="Saisie des quantités : module à venir" />
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:4 1 360px">
+                <div class="card-head"><h2>À traiter <small>@(_alerts.Count == 0 ? "rien à signaler" : $"{_alerts.Count} point(s)")</small></h2></div>
+                @if (_alerts.Count == 0)
+                {
+                    <p class="empty">Aucun point ouvert sur la période.</p>
+                }
+                @foreach (var a in _alerts)
+                {
+                    <div class="alert">
+                        <span class="dot @a.Css"></span>
+                        <div><b>@a.Title</b><small>@a.Detail</small></div>
+                        @if (a.Href != null)
+                        {
+                            <a class="link" href="@a.Href">@a.Action</a>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="card" style="flex:6 1 520px">
+                <div class="card-head"><h2>Par secteur <small>cliquer pour le détail par machine</small></h2></div>
+                <div class="scroll">
+                    <table class="t">
+                        <thead><tr><th>Secteur</th><th>TRS</th><th>Production</th><th>Écart poids</th><th>Déchet emballage</th><th>Déchet produit</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in _snap.Sectors)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (Session.Can(Modules.Conditionnement, AppAction.Voir))
+                                        {
+                                            <a class="link" style="font-size:16px;font-weight:800;color:var(--fg)" href="@SectorHref(s.Sector)">@Sectors.Label(s.Sector)</a>
+                                        }
+                                        else
+                                        {
+                                            @Sectors.Label(s.Sector)
+                                        }
+                                        <small>@s.Machines machines</small>
+                                    </td>
+                                    <td class="@Fmt.Css(TrsBand.ForTarget(s.TrsTarget).Severity(s.Kpi?.TrsPercent))">@Fmt.Pct(s.Kpi?.TrsPercent)</td>
+                                    <td>@(s.Kpi == null ? Fmt.Missing : Fmt.Mass(s.Kpi.ProductionKg))</td>
+                                    <td class="@Fmt.Css(WeightBand.Default.Severity(s.Kpi?.WeightDeviationPercent))">@Fmt.SignedPct(s.Kpi?.WeightDeviationPercent)</td>
+                                    <td>@Fmt.Kg(s.PackagingWasteKg)</td>
+                                    <td>@Fmt.Kg(s.ProductWasteKg)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (_otherDomains.Count > 0)
+                {
+                    <div class="row" style="border-top:1px solid var(--line);padding-top:10px;gap:10px 28px">
+                        @foreach (var (label, source) in _otherDomains)
+                        {
+                            <div class="mini"><span class="l">@label</span><span class="v nd">N/D</span><span class="s">@source</span></div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    }
+}
+
+@code {
+    private static readonly PeriodKind[] Kinds = { PeriodKind.Today, PeriodKind.Yesterday, PeriodKind.Last7Days, PeriodKind.Month, PeriodKind.Custom };
+
+    [SupplyParameterFromQuery(Name = "date")] public string? DateParam { get; set; }
+
+    private Period _period = default!;
+    private PlantSnapshot? _snap;
+    private List<Alert> _alerts = new();
+    private List<(string Label, string Source)> _otherDomains = new();
+
+    private sealed record Alert(string Css, string Title, string Detail, string? Href, string Action);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // A role without the overview lands on its first screen instead.
+        if (!Session.Can(Modules.VueEnsemble, AppAction.Voir))
+        {
+            var first = ModuleCatalog.Navigation.FirstOrDefault(n => Session.Can(n.Module, AppAction.Voir) && n.Ready);
+            Nav.NavigateTo(first?.Route ?? "compte", replace: true);
+            return;
+        }
+        _period = DateTime.TryParse(DateParam, CultureInfo.InvariantCulture, out var d)
+            ? new Period(PeriodKind.Custom, d, d)
+            : Ui.OverviewPeriod ?? Period.Today(Now);
+        await LoadAsync();
+    }
+
+    private async Task OnPeriodAsync(Period period)
+    {
+        _period = period;
+        Ui.OverviewPeriod = period;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _snap = null;
+        var (from, to) = _period.Range(Now);
+        await Run(async () =>
+        {
+            _snap = await Queries.LoadAsync(Actor, from, to, null, null);
+            _alerts = await BuildAlertsAsync(_snap, from, to);
+        });
+        _otherDomains = new List<(string, string, string)>
+            {
+                (Modules.Energie, "Électricité (kWh / t)", "Compteurs non connectés"),
+                (Modules.Qualite, "Humidité moyenne", "Base Qualité non connectée"),
+                (Modules.Maintenance, "Préventif réalisé", "GMAO non connectée"),
+                (Modules.Rh, "Absentéisme", "Base RH non connectée"),
+            }
+            .Where(x => Session.Can(x.Item1, AppAction.Voir))
+            .Select(x => (x.Item2, x.Item3))
+            .ToList();
+    }
+
+    private string Subtitle()
+    {
+        if (_snap?.Total is not { } t)
+            return "";
+        var running = _snap.Machines.Count(m => m.State?.Running == true);
+        return _snap.IsLive
+            ? $" · production {Fmt.Mass(t.ProductionKg)} · {running} machine(s) en marche sur {_snap.Machines.Count}"
+            : $" · production {Fmt.Mass(t.ProductionKg)}";
+    }
+
+    private string SectorHref(string sector)
+    {
+        var (from, to) = _period.Range(Now);
+        var query = $"production/conditionnement?secteur={Uri.EscapeDataString(sector)}";
+        return _period.Kind == PeriodKind.Today ? query : query + $"&du={from:yyyy-MM-dd}&au={to.AddDays(-1):yyyy-MM-dd}";
+    }
+
+    private async Task<List<Alert>> BuildAlertsAsync(PlantSnapshot snap, DateTime from, DateTime to)
+    {
+        var alerts = new List<Alert>();
+        var packaging = Session.Can(Modules.Conditionnement, AppAction.Voir) ? "production/conditionnement" : null;
+
+        foreach (var m in snap.Machines.Where(m => m.State != null))
+        {
+            if (!m.State!.Connected)
+                alerts.Add(new("off", $"{m.Machine.Id} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(m.State.LastData, Now)}", packaging, "Voir"));
+            else if (!m.State.Running)
+                alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt", $"Conditionnement · {m.State.Product ?? "production en cours"}", packaging, "Voir"));
+        }
+
+        var lowTrs = snap.Machines.Where(m => m.Figures.HasProduction && m.Figures.TrsSeverity == KpiSeverity.Bad)
+            .OrderBy(m => m.Figures.Kpi.TrsPercent).ToList();
+        foreach (var m in lowTrs.Take(3))
+            alerts.Add(new("bad", $"{m.Machine.Id} : TRS {Fmt.Pct(m.Figures.Kpi.TrsPercent)}",
+                $"Cible {Fmt.Num(m.Figures.TrsTarget)} % · {Sectors.Label(m.Machine.Sector)}", packaging, "Voir"));
+        if (lowTrs.Count > 3)
+            alerts.Add(new("bad", $"{lowTrs.Count - 3} autre(s) machine(s) loin de la cible TRS", "Conditionnement", packaging, "Voir"));
+
+        var pending = await Waste.PendingValidationCountAsync(Actor, from, to.AddDays(-1));
+        if (pending > 0)
+            alerts.Add(new("warn", $"{pending} saisie(s) de déchets à valider", "Saisie · brouillons de la période dans votre périmètre",
+                "saisie/dechets-emballage", "Valider"));
+
+        if (Session.Can(Modules.SaisieDechets, AppAction.Saisir) && to <= Now.Date)
+        {
+            foreach (var s in snap.Sectors.Where(s => s.ProductWasteKg == 0 && s.Machines > 0))
+                alerts.Add(new("warn", $"Déchet produit non saisi : {Sectors.Label(s.Sector)}", "Saisie · aucune saisie sur la période",
+                    "saisie/dechets-produit", "Saisir"));
+        }
+
+        if (Session.Can(Modules.Sources, AppAction.Voir))
+            alerts.Add(new("off", "5 sources de données non connectées", "Banderoleuse, Qualité, GMAO, RH, énergie : indicateurs non disponibles",
+                "admin/sources", "Voir"));
+        return alerts;
+    }
+}

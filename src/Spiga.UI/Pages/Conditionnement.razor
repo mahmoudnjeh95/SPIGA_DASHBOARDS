@@ -1,0 +1,206 @@
+@page "/production/conditionnement"
+@inherits SpigaPage
+@inject DashboardQueries Queries
+@inject UiState Ui
+@inject IDesktopBridge Desktop
+
+<RequireAccess Module="@Modules.Conditionnement">
+    <div class="head">
+        <div>
+            <span class="pre">Production</span><h1>Conditionnement</h1>
+            <p>@_period.Label(Now)@(_sector == null ? "" : " · " + Sectors.Label(_sector))@(_shift == null ? "" : " · poste " + Shifts.Label(_shift.Value))</p>
+        </div>
+        @if (Desktop.IsAvailable)
+        {
+            <button type="button" class="bar" @onclick="() => Desktop.OpenDashboard(CanEditStationSettings)" title="Diapositives, détail par machine, synthèse secteur, historique">
+                Tableau de bord détaillé
+            </button>
+        }
+    </div>
+
+    @* The filters of this module apply here only. *@
+    <div class="filters">
+        <PeriodPicker Value="_period" ValueChanged="OnPeriodAsync" Id="cond-period" />
+        <div class="f">
+            <span>Secteur</span>
+            <div class="segs" role="group" aria-label="Secteur">
+                <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => OnSectorAsync(null)">Tous</button>
+                @foreach (var s in Sectors.All.Where(Actor.Scope.AllowsSector))
+                {
+                    <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => OnSectorAsync(s)">@Sectors.Label(s)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_shift == null ? "on" : "")" @onclick="() => OnShiftAsync(null)">Tous</button>
+                @foreach (var s in Shifts.All)
+                {
+                    <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => OnShiftAsync(s)">@Shifts.Label(s)</button>
+                }
+            </div>
+        </div>
+        @if (Actor.Scope.Team != null)
+        {
+            <div class="f"><span>Équipe</span><span class="chip acc" title="Votre périmètre">@Actor.Scope.Team</span></div>
+        }
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_snap == null)
+    {
+        <div class="loading">Chargement…</div>
+    }
+    else
+    {
+        @if (_snap.ProductionError != null)
+        {
+            <div class="notice warn">@_snap.ProductionError</div>
+        }
+        var total = _snap.Total;
+        <div class="row">
+            <KpiTile Label="TRS" Hint="@($"cible {Fmt.Num(_snap.TrsTarget)} %")" Value="@Fmt.Pct(total?.TrsPercent)"
+                     Css="@Fmt.Css(TrsBand.ForTarget(_snap.TrsTarget).Severity(total?.TrsPercent))"
+                     Sub="@($"D {Fmt.Pct(total?.AvailabilityPercent, 0)} · P {Fmt.Pct(total?.PerformancePercent, 0)} · Q {Fmt.Pct(total?.QualityPercent, 0)}")" />
+            <KpiTile Label="Vitesse moy." Hint="sacs/min" Value="@Fmt.Num(total?.SpeedBagsPerMinute, 1)"
+                     Sub="@($"max atteinte {Fmt.Num(total?.MaxSpeedBagsPerMinute, 1)}")" />
+            <KpiTile Label="Taux conformité" Value="@Fmt.Pct(total?.QualityPercent)" Css="@(total?.QualityPercent >= 98 ? "ok" : total?.QualityPercent == null ? "nd" : "warn")"
+                     Sub="@($"sous tol. {Fmt.Num(total?.BagsUnderTolerance)} · sur tol. {Fmt.Num(total?.BagsOverTolerance)}")" />
+            <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(total?.WeightDeviationPercent)"
+                     Css="@Fmt.Css(WeightBand.Default.Severity(total?.WeightDeviationPercent))"
+                     Sub="@(total?.GiveawayKg is { } g ? $"surpoids {Fmt.Mass(g)}" : "")" />
+            <KpiTile Label="Production" Value="@(total == null ? Fmt.Missing : Fmt.Mass(total.ProductionKg))" Sub="@($"{Fmt.Num(total?.TotalBags)} sacs")" />
+            <KpiTile Label="Déchet emballage" Value="@Fmt.Kg(_snap.PackagingWasteKg)" Css="@(_snap.PackagingWasteKg > 0 ? "" : "nd")"
+                     Sub="@(_snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "")" />
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:6 1 560px">
+                <div class="card-head"><h2>Machines <small>@_snap.Machines.Count dans votre périmètre</small></h2></div>
+                <div class="scroll">
+                    <table class="t">
+                        <thead>
+                            <tr>
+                                <th>Machine</th>
+                                @if (_snap.IsLive)
+                                {
+                                    <th>État</th>
+                                }
+                                <th>TRS</th><th>D · P · Q</th><th class="r">Production</th><th class="r">Écart poids</th><th class="r">Conformité</th><th class="r">Déchet emb.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in _snap.Machines)
+                            {
+                                var k = m.Figures.Kpi;
+                                <tr>
+                                    <td><span class="machine-id">@m.Machine.Id</span><small>@Sectors.Label(m.Machine.Sector)</small></td>
+                                    @if (_snap.IsLive)
+                                    {
+                                        <td>
+                                            @if (m.State == null)
+                                            {
+                                                <span class="state"><span class="dot off"></span>Inconnu</span>
+                                            }
+                                            else if (!m.State.Connected)
+                                            {
+                                                <span class="state" title="Dernière donnée @Fmt.Date(m.State.LastData)"><span class="dot off"></span>Déconnectée</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="state"><span class="dot @(m.State.Running ? "ok" : "bad")"></span>@(m.State.Running ? "En marche" : "À l'arrêt")</span>
+                                            }
+                                        </td>
+                                    }
+                                    <td class="@Fmt.Css(m.Figures.TrsSeverity)">@Fmt.Pct(k.TrsPercent)<small>cible @Fmt.Num(m.Figures.TrsTarget) %</small></td>
+                                    <td class="n">@Fmt.Pct(k.AvailabilityPercent, 0) · @Fmt.Pct(k.PerformancePercent, 0) · @Fmt.Pct(k.QualityPercent, 0)</td>
+                                    <td class="r">@(m.Figures.HasProduction ? Fmt.Mass(k.ProductionKg) : "—")<small>@Fmt.Num(k.TotalBags) sacs</small></td>
+                                    <td class="r @Fmt.Css(m.Figures.WeightSeverity)">@Fmt.Grams(k.WeightDeviationGrams)<small>@Fmt.SignedPct(k.WeightDeviationPercent)</small></td>
+                                    <td class="r">@Fmt.Pct(k.QualityPercent)</td>
+                                    <td class="r">@(m.WasteKg > 0 ? Fmt.Kg(m.WasteKg) : "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card" style="flex:4 1 380px">
+                <div class="card-head"><h2>TRS par machine</h2></div>
+                <div class="legend"><span><i></i>TRS</span><span><u></u>Cible @Fmt.Num(_snap.TrsTarget) %</span></div>
+                <div class="bars" role="img" aria-label="TRS par machine comparé à la cible">
+                    <u style="bottom:@(_snap.TrsTarget.ToString(CultureInfo.InvariantCulture))%"></u>
+                    @foreach (var m in _snap.Machines)
+                    {
+                        var trs = Math.Clamp(m.Figures.Kpi.TrsPercent ?? 0, 0, 100);
+                        <i style="height:@(trs.ToString("0.#", CultureInfo.InvariantCulture))%" title="@m.Machine.Id : @Fmt.Pct(m.Figures.Kpi.TrsPercent)"></i>
+                    }
+                </div>
+                <div class="xl">
+                    @foreach (var m in _snap.Machines)
+                    {
+                        <span>@m.Machine.Id</span>
+                    }
+                </div>
+                <p class="nd" style="font-size:12px">Calcul identique au tableau de bord SPIGA : TRS = disponibilité × performance × qualité, arrêts planifiés déduits.</p>
+            </section>
+        </div>
+    }
+</RequireAccess>
+
+@code {
+    [SupplyParameterFromQuery(Name = "secteur")] public string? SectorParam { get; set; }
+    [SupplyParameterFromQuery(Name = "du")] public string? FromParam { get; set; }
+    [SupplyParameterFromQuery(Name = "au")] public string? ToParam { get; set; }
+
+    private Period _period = default!;
+    private string? _sector;
+    private int? _shift;
+    private PlantSnapshot? _snap;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _period = Ui.PackagingPeriod ?? Period.Today(Now);
+        _sector = Ui.PackagingSector;
+        _shift = Ui.PackagingShift;
+        if (SectorParam != null && Sectors.All.Contains(SectorParam))
+            _sector = SectorParam;
+        if (DateTime.TryParse(FromParam, CultureInfo.InvariantCulture, out var from))
+        {
+            var to = DateTime.TryParse(ToParam, CultureInfo.InvariantCulture, out var t) ? t : from;
+            _period = new Period(PeriodKind.Custom, from, to);
+        }
+        if (_sector != null && !Actor.Scope.AllowsSector(_sector))
+            _sector = null;
+        await LoadAsync();
+    }
+
+    private async Task OnPeriodAsync(Period p)
+    {
+        _period = Ui.PackagingPeriod = p;
+        await LoadAsync();
+    }
+
+    private async Task OnSectorAsync(string? sector)
+    {
+        _sector = Ui.PackagingSector = sector;
+        await LoadAsync();
+    }
+
+    private async Task OnShiftAsync(int? shift)
+    {
+        _shift = Ui.PackagingShift = shift;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Modules.Conditionnement, AppAction.Voir))
+            return;
+        _snap = null;
+        var (from, to) = _period.Range(Now);
+        await Run(async () => _snap = await Queries.LoadAsync(Actor, from, to, _sector, _shift));
+    }
+}

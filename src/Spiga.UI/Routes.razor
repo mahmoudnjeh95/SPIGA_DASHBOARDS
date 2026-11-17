@@ -1,0 +1,87 @@
+@* Root component of both hosts. Nothing of the application is reachable
+   before the gate: first installation, sign-in, forced password change,
+   inactivity lock. *@
+@implements IDisposable
+@inject UserSession Session
+@inject AuthService Auth
+@inject ClientInfo Client
+
+<div class="spiga-root" data-theme="@Session.Theme">
+    @if (_error != null)
+    {
+        <div class="gate"><div class="gate-card"><Brand /><h1>Démarrage impossible</h1><div class="notice error">@_error</div></div></div>
+    }
+    else if (!_ready)
+    {
+        <div class="loading">Chargement…</div>
+    }
+    else if (_needsSetup)
+    {
+        <Setup OnDone="() => _needsSetup = false" />
+    }
+    else if (Session.Actor == null)
+    {
+        <Login />
+    }
+    else if (Session.Actor.User.MustChangePassword)
+    {
+        <div class="gate">
+            <div class="gate-card">
+                <Brand />
+                <h1>Nouveau mot de passe</h1>
+                <p>Bonjour @Session.Actor.DisplayName. Votre mot de passe est temporaire : choisissez le vôtre pour continuer.</p>
+                <ChangePasswordForm />
+                <button type="button" class="link" @onclick="Session.SignOutAsync">Se déconnecter</button>
+            </div>
+        </div>
+    }
+    else if (Session.IsLocked)
+    {
+        <LockScreen />
+    }
+    else
+    {
+        <Router AppAssembly="typeof(Routes).Assembly">
+            <Found Context="routeData">
+                <RouteView RouteData="routeData" DefaultLayout="typeof(AppShell)" />
+            </Found>
+            <NotFound>
+                <LayoutView Layout="typeof(AppShell)">
+                    <div class="card" style="max-width:640px"><h2>Page introuvable</h2><p>Cette adresse ne correspond à aucun écran. <a href="">Retour à l'accueil</a></p></div>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    }
+</div>
+
+@code {
+    // Web host: the client's address, written in the audit trail. The
+    // desktop host leaves it null (the PC name is used).
+    [Parameter] public string? Workstation { get; set; }
+
+    private bool _ready;
+    private bool _needsSetup;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Workstation))
+            Client.Workstation = Workstation;
+        Session.Changed += OnSessionChanged;
+        try
+        {
+            _needsSetup = await Auth.NeedsSetupAsync();
+            if (!_needsSetup && Session.Actor == null)
+                await Session.TryResumeAsync();
+            _ready = true;
+        }
+        catch (Exception ex)
+        {
+            _error = "La base applicative est injoignable : " + ex.Message;
+        }
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Session.Changed -= OnSessionChanged;
+}

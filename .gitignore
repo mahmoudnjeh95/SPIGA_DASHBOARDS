@@ -22,3 +22,6 @@ Machine d’emballage à l’arrêt ou en marche.png
 
 # Release builds (Setup.exe / portable zip), kept out of git
 release/
+
+# Application database of SPIGA Suivi Production (created at first start)
+database/spiga_suivi.db*

@@ -1,0 +1,20 @@
+@inject UserSession Session
+
+@if (Session.Can(Module, Action))
+{
+    @ChildContent
+}
+else
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Votre rôle (@Session.Actor?.Role.Name) ne donne pas le droit « @AppActions.Label(Action) » sur
+            « @(ModuleCatalog.Find(Module)?.Label ?? Module) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Module { get; set; } = "";
+    [Parameter] public AppAction Action { get; set; } = AppAction.Voir;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

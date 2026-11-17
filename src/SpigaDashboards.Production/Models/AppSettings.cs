@@ -220,6 +220,10 @@ public class AppSettings
 
     public const double DefaultTrsTarget = 85;
 
+    // SPIGA Suivi Production: its own database on the same SQL Server
+    // (accounts, roles, entries, audit), never the Stiavelli "stats" one.
+    public string AppDatabaseName { get; set; } = "spiga_suivi";
+
     // TRS tolerance (points) per machine: orange from target - tolerance,
     // red below. Machines not listed use the Couleurs share of the target.
     public Dictionary<string, double> MachineTrsTolerances { get; set; } = new();

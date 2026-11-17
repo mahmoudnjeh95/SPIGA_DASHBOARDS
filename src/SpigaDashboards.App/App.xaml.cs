@@ -5,6 +5,9 @@ using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
+using Spiga.Data;
+using Spiga.UI.Services;
 
 namespace SpigaDashboards.App;
 
@@ -35,10 +38,75 @@ public partial class App : Application
         var repository = new ProductionRepository(activeFactory, settings);
         var teamSchedule = new TeamScheduleService(settings);
         var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(activeFactory), settings, settingsService);
-        var mainViewModel = new MainViewModel(repository, settings, teamSchedule, sharedSettings);
+        MainWindow CreateDashboard()
+            => new(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
+                settingsService, settings, activeFactory, repository, sharedSettings);
 
-        var window = new MainWindow(mainViewModel, settingsService, settings, activeFactory, repository, sharedSettings);
+        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk" opens the
+        // dashboard directly, without sign-in, as before.
+        if (e.Args.Any(a => string.Equals(a, "--kiosk", StringComparison.OrdinalIgnoreCase)))
+        {
+            ShowWindow(CreateDashboard());
+            return;
+        }
+
+        // The site's shared settings (nominal rates, TRS targets, teams), as
+        // the dashboard pulls them, so both compute with the same values.
+        Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
+
+        var appDb = AppDatabaseOptions(settings);
+        try
+        {
+            // Off the UI thread: the awaits inside must not wait for it.
+            Task.Run(() => new Migrator(new AppDb(appDb)).MigrateAsync()).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Base applicative SPIGA Suivi Production injoignable : " + ex);
+            MessageBox.Show(
+                "La base de SPIGA Suivi Production est injoignable :\n" + ex.Message +
+                "\n\nLe tableau de bord s'ouvre seul, sans connexion utilisateur.",
+                "SPIGA Suivi Production", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowWindow(CreateDashboard());
+            return;
+        }
+
+        var services = new ServiceCollection();
+        services.AddWpfBlazorWebView();
+#if DEBUG
+        services.AddBlazorWebViewDeveloperTools();
+#endif
+        services.AddSpigaSuivi(appDb, activeFactory, settings);
+        services.AddSingleton<IDesktopBridge>(new DesktopBridge(CreateDashboard));
+        ShowWindow(new ShellWindow(services.BuildServiceProvider()));
+    }
+
+    private void ShowWindow(Window window)
+    {
+        MainWindow = window;
         window.Show();
+    }
+
+    // SQL Server on site: same server and credentials as the production
+    // database, database AppSettings.AppDatabaseName (created by IT, see
+    // database\spiga_suivi.sql). Dev PC: a SQLite file beside the settings.
+    private static AppDbOptions AppDatabaseOptions(AppSettings settings)
+    {
+        if (settings.Provider == DatabaseProvider.SqlServer)
+        {
+            var factory = new SqlServerConnectionFactory(settings.SqlServer);
+            return new AppDbOptions { Provider = AppDbProvider.SqlServer, ConnectionString = factory.ConnectionStringFor(settings.AppDatabaseName) };
+        }
+        string folder;
+        try
+        {
+            folder = Path.GetDirectoryName(DatabasePathResolver.ResolveSqlitePath())!;
+        }
+        catch (FileNotFoundException)
+        {
+            folder = SettingsService.SettingsFolder;
+        }
+        return AppDbOptions.ForSqliteFile(Path.Combine(folder, "spiga_suivi.db"));
     }
 
     private static IDbConnectionFactory BuildFactory(AppSettings settings)

@@ -1,0 +1,14 @@
+<div class="card kpi @(Missing ? "na" : "")">
+    <span class="l">@Label @if (!string.IsNullOrEmpty(Hint)) { <small>(@Hint)</small> }</span>
+    <span class="v @Css">@Value</span>
+    <span class="s">@Sub</span>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public string? Css { get; set; }
+    [Parameter] public string? Sub { get; set; }
+    [Parameter] public bool Missing { get; set; }
+}

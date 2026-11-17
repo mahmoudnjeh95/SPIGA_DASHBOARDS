@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain of SPIGA Suivi Production: modules and permissions, users and
+       roles, authentication rules, waste entry workflow, audit trail.
+       No UI and no database code: every host (desktop, web) and the tests
+       use the same rules. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Spiga.Tests" />
+  </ItemGroup>
+
+</Project>

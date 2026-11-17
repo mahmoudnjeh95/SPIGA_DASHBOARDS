@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The SPIGA Dashboards data and calculation code with no WPF in it:
+       production database access (Stiavelli "stats", read only), KPI / TRS
+       calculation, team roster, settings. Shared by the WPF app and by the
+       new Suivi Production screens (desktop and web hosts).
+       The namespaces stay SpigaDashboards.App.* on purpose: the files were
+       moved, not edited, so changes made on main still merge cleanly. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SpigaDashboards.App</RootNamespace>
+    <!-- PasswordProtector uses DPAPI (Windows only); it is only called on Windows. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

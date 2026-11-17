@@ -1,0 +1,59 @@
+@page "/admin/sources"
+@inherits SpigaPage
+@inject SourceStatusService Sources
+
+<RequireAccess Module="@Modules.Sources">
+    <div class="head">
+        <div>
+            <span class="pre">Administration</span><h1>Sources de données</h1>
+            <p>Toutes les sources sont lues en lecture seule. Un indicateur dont la source n'est pas connectée est affiché « N/D », jamais estimé.</p>
+        </div>
+        <button type="button" class="bar" @onclick="LoadAsync" disabled="@_busy">Tester les connexions</button>
+    </div>
+    <section class="card">
+        @if (_sources == null)
+        {
+            <div class="loading">Test des connexions…</div>
+        }
+        else
+        {
+            <div class="scroll">
+                <table class="t">
+                    <thead><tr><th>Source</th><th>Alimente</th><th>État</th><th>Dernière donnée</th><th>Détail</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in _sources)
+                        {
+                            <tr>
+                                <td>@s.Name</td>
+                                <td class="n">@s.Feeds</td>
+                                <td><span class="state"><span class="dot @SourceStatusService.Css(s.State)"></span>@SourceStatusService.Label(s.State)</span></td>
+                                <td class="n">@(s.LastData == null ? "—" : Fmt.Ago(s.LastData, Now))</td>
+                                <td class="n">@s.Detail</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="nd" style="font-size:12px">Vérifié @Fmt.Date(_checkedAt).</p>
+        }
+    </section>
+</RequireAccess>
+
+@code {
+    private IReadOnlyList<SourceStatus>? _sources;
+    private DateTime _checkedAt;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Modules.Sources, AppAction.Voir))
+            return;
+        _busy = true;
+        _sources = null;
+        _sources = await Sources.CheckAsync();
+        _checkedAt = Now;
+        _busy = false;
+    }
+}

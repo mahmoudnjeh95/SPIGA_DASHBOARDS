@@ -39,6 +39,12 @@ this repo; if it's ever missing, regenerate it with
 
 ## Run (agent path)
 
+Since SPIGA Suivi Production, the exe starts on a sign-in shell (WebView2,
+Razor screens from `src/Spiga.UI`). The driver's `launch` passes
+`--kiosk`, which opens the classic dashboard window directly as before.
+To see or drive the new screens, run `src/Spiga.Web` and use a browser
+(Playwright), which serves the very same components.
+
 The driver is a **stateless** PowerShell script - every invocation is
 a fresh process that re-locates the running app by process name via
 UI Automation (`System.Windows.Automation`). There's no REPL/session

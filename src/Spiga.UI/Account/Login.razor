@@ -1,0 +1,50 @@
+@inject AuthService Auth
+@inject UserSession Session
+@inject ClientInfo Client
+
+<div class="gate">
+    <form class="gate-card" @onsubmit="SubmitAsync">
+        <Brand />
+        <h1>Connexion</h1>
+        @if (_error != null)
+        {
+            <div class="notice error" role="alert">@_error</div>
+        }
+        <div class="f">
+            <label for="login">Identifiant</label>
+            <input id="login" @bind="_login" @bind:event="oninput" autocomplete="username" autofocus />
+        </div>
+        <div class="f">
+            <label for="password">Mot de passe</label>
+            <input id="password" type="password" @bind="_password" @bind:event="oninput" autocomplete="current-password" />
+        </div>
+        <button class="bar acc" type="submit" disabled="@_busy">Se connecter</button>
+        <p class="gate-foot">Poste @Client.Workstation · mot de passe oublié : un administrateur peut le réinitialiser.</p>
+    </form>
+</div>
+
+@code {
+    private string _login = "";
+    private string _password = "";
+    private string? _error;
+    private bool _busy;
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Auth.LoginAsync(_login, _password);
+            _password = "";
+            if (result.Status == LoginStatus.Success)
+                await Session.SignInAsync(result.Actor!);
+            else
+                _error = result.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

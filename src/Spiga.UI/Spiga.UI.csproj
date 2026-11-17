@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The screens of SPIGA Suivi Production, as Razor components. The same
+       components run inside the desktop app (BlazorWebView in the WPF
+       window) and in a browser (Spiga.Web): moving to a web deployment
+       changes the host, not the screens. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Spiga.Core\Spiga.Core.csproj" />
+    <ProjectReference Include="..\Spiga.Data\Spiga.Data.csproj" />
+    <ProjectReference Include="..\SpigaDashboards.Production\SpigaDashboards.Production.csproj" />
+  </ItemGroup>
+
+</Project>

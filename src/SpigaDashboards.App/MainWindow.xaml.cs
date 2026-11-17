@@ -131,6 +131,19 @@ public partial class MainWindow : Window
         new AboutWindow { Owner = this }.ShowDialog();
     }
 
+    // ---- Opened from SPIGA Suivi Production (ShellWindow) ----
+
+    // The station's settings (database connection, TV, cadences) stay with
+    // the roles that have Paramètres > Administrer.
+    public void AllowSettings(bool allowed)
+        => SettingsButton.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
+
+    public void OpenTvScreen() => OpenTvWindow(activate: true);
+
+    public void ShowStops() => StopsButton_Click(this, new RoutedEventArgs());
+
+    public void ShowPlanning() => PlanningButton_Click(this, new RoutedEventArgs());
+
     private void NoteTextBox_GotFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = true;
 
     private void NoteTextBox_LostFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = false;

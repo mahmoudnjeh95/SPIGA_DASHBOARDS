@@ -1,0 +1,29 @@
+@inject UserSession Session
+
+<div class="gate">
+    <form class="gate-card" @onsubmit="UnlockAsync">
+        <Brand />
+        <h1>Session verrouillée</h1>
+        <p>@Session.Actor?.DisplayName (@Session.Actor?.Login) · verrouillée après @Session.Policy.SessionTimeoutMinutes min sans activité.</p>
+        @if (_error != null)
+        {
+            <div class="notice error" role="alert">@_error</div>
+        }
+        <div class="f"><label for="unlock">Mot de passe</label><input id="unlock" type="password" @bind="_password" @bind:event="oninput" autocomplete="current-password" autofocus /></div>
+        <button class="bar acc" type="submit">Déverrouiller</button>
+        <button class="link" type="button" @onclick="Session.SignOutAsync">Changer d'utilisateur</button>
+    </form>
+</div>
+
+@code {
+    private string _password = "";
+    private string? _error;
+
+    private async Task UnlockAsync()
+    {
+        var result = await Session.UnlockAsync(_password);
+        _password = "";
+        if (result.Status != LoginStatus.Success)
+            _error = result.Message;
+    }
+}
