@@ -39,17 +39,33 @@ Windows 10 and 11).
 
 ## Access control
 
-* A **role** grants, per module, any of Voir, Saisir, Valider, Exporter,
-  Administrer (`ModuleCatalog`, `DefaultRoles`). The built-in Administrateur
-  role cannot be edited, and no change may leave the application without an
-  active administrator.
-* A **user** has one role and a **data scope**: sectors, machines, team.
-  Lists, figures and entries outside the scope are hidden and refused.
+Roles are data, not code: administrators create as many as they need in
+Utilisateurs et rôles, without a developer.
+
+* **Permissions** are declared per module in `PermissionCatalog` (Consulter,
+  Exporter, and each module's own: corriger une saisie validée, saisir au-delà
+  de 7 jours, débloquer un compte, gérer les rôles...). A new feature adds its
+  permissions there; administrators then give them to roles.
+* **Roles** are named sets of permissions. They can be created from scratch
+  or duplicated, renamed, deactivated (their holders lose them at once) or
+  deleted when nobody holds them. Only Administrateur is built in (all
+  permissions, not editable). The role templates (direction, responsables,
+  chef d'équipe, opérateur) are optional, offered at installation and in
+  the roles list, and are ordinary roles once created.
+* **Users** hold one or more roles, each with its own **scope** (sectors,
+  machines, team) and optional **validity dates** (temporary staff,
+  replacements). A right applies where one of the user's roles gives it.
+* **Delegated administration:** a role with « Créer et modifier des
+  comptes » can give only the roles listed as assignable on it, only inside
+  its holder's own scope, and only to accounts holding nothing else. « Gérer
+  les rôles » defines roles and gives any role; only an administrator gives
+  Administrateur. No change can leave the application without an active
+  administrator.
 * Every service checks the rights itself; the screens only hide what the
   user cannot use.
 * Passwords: PBKDF2-SHA256; temporary passwords must be changed at first
-  sign-in; lockout after repeated failures; screen lock after inactivity.
-  Rules are set in Utilisateurs et rôles › Règles de sécurité.
+  sign-in; lockout after repeated failures; screen lock after inactivity
+  (Utilisateurs et rôles › Règles de sécurité).
 * Waste entries (interfaces A1 / A2): draft, then validated by another
-  person, then locked; a correction needs a reason. Everything goes to the
-  audit trail (who, when, which PC, old and new value).
+  person, then locked; a correction needs its own permission and a reason.
+  Everything goes to the audit trail (who, when, which PC, old and new value).

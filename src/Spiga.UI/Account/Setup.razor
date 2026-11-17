@@ -5,7 +5,7 @@
     <form class="gate-card" @onsubmit="SubmitAsync">
         <Brand />
         <h1>Première mise en service</h1>
-        <p>Aucun compte n'existe encore. Créez le compte administrateur : il gérera ensuite les utilisateurs, les rôles et les règles de sécurité.</p>
+        <p>Aucun compte n'existe encore. Créez le compte administrateur : il définira ensuite les rôles, les comptes et les règles de sécurité.</p>
         @if (_error != null)
         {
             <div class="notice error" role="alert">@_error</div>
@@ -15,6 +15,7 @@
         <div class="f"><label for="setup-pwd">Mot de passe</label><input id="setup-pwd" type="password" @bind="_password" @bind:event="oninput" autocomplete="new-password" /></div>
         <div class="f"><label for="setup-pwd2">Confirmation</label><input id="setup-pwd2" type="password" @bind="_confirm" @bind:event="oninput" autocomplete="new-password" /></div>
         <p class="gate-foot">Au moins 10 caractères, avec au moins une lettre et un chiffre.</p>
+        <label class="check"><input type="checkbox" @bind="_templates" />Créer les rôles types (direction, responsables, chef d'équipe, opérateur), modifiables ensuite</label>
         <button class="bar acc" type="submit" disabled="@_busy">Créer le compte et se connecter</button>
     </form>
 </div>
@@ -23,6 +24,7 @@
     [Parameter] public EventCallback OnDone { get; set; }
 
     private string _login = "admin";
+    private bool _templates = true;
     private string _name = "";
     private string _password = "";
     private string _confirm = "";
@@ -40,7 +42,7 @@
         _busy = true;
         try
         {
-            var actor = await Auth.CreateFirstAdminAsync(_login, _name, _password);
+            var actor = await Auth.CreateFirstAdminAsync(_login, _name, _password, _templates);
             await Session.SignInAsync(actor);
             await OnDone.InvokeAsync();
         }

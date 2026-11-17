@@ -5,33 +5,36 @@ using Spiga.Core.Security;
 namespace Spiga.Core.Waste;
 
 // Interfaces A1 / A2 of the specification: daily waste entries with a
-// two-step check (entered, then validated by someone else), the user's
-// data scope enforced on every read and write.
+// two-step check (entered, then validated by someone else). Each operation
+// needs its permission at the entry's place (sector, machine, team on shift).
 public sealed class WasteService(
     IWasteStore store, IPlantReferential plant, ISettingsStore settings, IAuditLog audit, TimeProvider clock, ClientInfo client)
 {
-    // Entries older than this need the Valider right (late entries are a
-    // supervisor's call, not an operator's).
+    // Entries older than this need "Saisir au-delà de 7 jours".
     public const int LateEntryDays = 7;
     private const double MaxQuantityKg = 100_000;
+
+    private static readonly string ViewEntries = Perm.View(Modules.SaisieDechets);
+
+    private static readonly string[] DashboardViews =
+        { Perm.View(Modules.VueEnsemble), Perm.View(Modules.Conditionnement), Perm.View(Modules.Dechets), ViewEntries };
 
     private DateTime Now => clock.GetLocalNow().DateTime;
 
     public Task<IReadOnlyList<WasteReason>> ReasonsAsync(WasteKind kind) => store.ListReasonsAsync(kind);
 
-    // The machines the actor may enter waste for.
+    // The machines / sectors the actor may enter waste for.
     public async Task<IReadOnlyList<PlantMachine>> MachinesFor(Actor actor)
-        => (await plant.GetMachinesAsync()).Where(m => actor.Scope.AllowsMachine(m.Id, m.Sector)).ToList();
+        => (await plant.GetMachinesAsync()).Where(m => actor.Allows(Perm.DechetsSaisir, m.Sector, m.Id)).ToList();
 
-    public IReadOnlyList<string> SectorsFor(Actor actor) => Sectors.All.Where(actor.Scope.AllowsSector).ToList();
+    public IReadOnlyList<string> SectorsFor(Actor actor) => Sectors.All.Where(s => actor.Allows(Perm.DechetsSaisir, s)).ToList();
 
     public async Task<IReadOnlyList<WasteEntry>> ListAsync(Actor actor, WasteKind kind, DateTime productionDate, int? shiftId)
     {
-        actor.Demand(Modules.SaisieDechets, AppAction.Voir);
-        var machines = await plant.GetMachinesAsync();
+        actor.Demand(ViewEntries);
         return (await store.ListAsync(kind, productionDate.Date, productionDate.Date))
             .Where(e => shiftId == null || e.ShiftId == shiftId)
-            .Where(e => InScope(actor, e, machines))
+            .Where(e => At(actor, ViewEntries, e))
             .OrderBy(e => e.ShiftId).ThenBy(e => e.CreatedAt)
             .ToList();
     }
@@ -39,50 +42,46 @@ public sealed class WasteService(
     // Read-only totals for the dashboards (all statuses, flagged by caller).
     public async Task<IReadOnlyList<WasteEntry>> ForDashboardAsync(Actor actor, DateTime fromDate, DateTime toDate)
     {
-        if (!actor.Permissions.CanSeeAny(new[] { Modules.VueEnsemble, Modules.Conditionnement, Modules.Dechets, Modules.SaisieDechets }))
-            throw new AccessDeniedException("Votre rôle ne permet pas de consulter les déchets.");
-        var machines = await plant.GetMachinesAsync();
-        return (await store.ListAsync(null, fromDate.Date, toDate.Date)).Where(e => InScope(actor, e, machines)).ToList();
+        if (!DashboardViews.Any(actor.Can))
+            throw new AccessDeniedException("Vos rôles ne permettent pas de consulter les déchets.");
+        return (await store.ListAsync(null, fromDate.Date, toDate.Date))
+            .Where(e => actor.AllowsAny(DashboardViews, e.Sector, e.MachineId, e.Team))
+            .ToList();
     }
 
     public async Task<int> PendingValidationCountAsync(Actor actor, DateTime fromDate, DateTime toDate)
     {
-        if (!actor.Can(Modules.SaisieDechets, AppAction.Valider))
+        if (!actor.Can(Perm.DechetsValider))
             return 0;
-        var machines = await plant.GetMachinesAsync();
-        return (await store.ListAsync(null, fromDate.Date, toDate.Date))
-            .Count(e => e.Status == WasteStatus.Brouillon && InScope(actor, e, machines) && CanValidate(actor, e, null));
+        var policy = await Policy();
+        return (await store.ListAsync(null, fromDate.Date, toDate.Date)).Count(e => CanValidate(actor, e, policy));
     }
 
     public async Task<WasteEntry> AddAsync(Actor actor, WasteDraft draft)
     {
-        actor.Demand(Modules.SaisieDechets, AppAction.Saisir);
+        actor.Demand(Perm.DechetsSaisir);
         var entry = new WasteEntry { Kind = draft.Kind, Status = WasteStatus.Brouillon, CreatedBy = actor.Login, CreatedAt = Now };
-        await Apply(actor, entry, draft);
+        await Apply(actor, entry, draft, Perm.DechetsSaisir);
         entry.Id = await store.InsertAsync(entry);
         await Write(actor, AuditActions.EntryCreated, entry, "", null, entry.Describe());
         return entry;
     }
 
-    // Draft: its author, or a validator, may edit it. Validated: only a
-    // validator, with a reason that goes to the audit trail.
+    // Own draft: "Saisir". Someone else's draft: "Modifier le brouillon d'un
+    // autre". Validated entry: "Corriger", with a reason kept in the journal.
     public async Task UpdateAsync(Actor actor, long id, WasteDraft draft, string? correctionReason)
     {
-        actor.Demand(Modules.SaisieDechets, AppAction.Saisir);
-        var entry = await Load(actor, id);
-        var before = entry.Describe();
-        if (entry.Status == WasteStatus.Validee)
-        {
-            actor.Demand(Modules.SaisieDechets, AppAction.Valider);
-            if (string.IsNullOrWhiteSpace(correctionReason))
-                throw new RuleViolationException("Une saisie validée ne peut être corrigée qu'avec un motif de correction.");
-        }
-        else if (entry.CreatedBy != actor.Login && !actor.Can(Modules.SaisieDechets, AppAction.Valider))
-        {
-            throw new AccessDeniedException("Seul l'auteur de la saisie ou un validateur peut la modifier.");
-        }
+        var entry = await Load(id);
+        var permission = EditPermission(actor, entry);
+        if (!At(actor, permission, entry))
+            throw new AccessDeniedException(entry.Status == WasteStatus.Validee
+                ? "Vos rôles ne permettent pas de corriger une saisie validée à cet endroit."
+                : "Seul l'auteur de la saisie, ou un rôle autorisé à modifier les brouillons d'autrui, peut la modifier.");
+        if (entry.Status == WasteStatus.Validee && string.IsNullOrWhiteSpace(correctionReason))
+            throw new RuleViolationException("Une saisie validée ne peut être corrigée qu'avec un motif de correction.");
 
-        await Apply(actor, entry, draft);
+        var before = entry.Describe();
+        await Apply(actor, entry, draft, permission);
         entry.UpdatedBy = actor.Login;
         entry.UpdatedAt = Now;
         await store.UpdateAsync(entry);
@@ -92,12 +91,13 @@ public sealed class WasteService(
 
     public async Task ValidateAsync(Actor actor, long id)
     {
-        actor.Demand(Modules.SaisieDechets, AppAction.Valider);
-        var entry = await Load(actor, id);
+        actor.Demand(Perm.DechetsValider);
+        var entry = await Load(id);
         if (entry.Status == WasteStatus.Validee)
             return;
-        var policy = await settings.GetAsync<SecurityPolicy>(SettingKeys.SecurityPolicy) ?? new SecurityPolicy();
-        if (!CanValidate(actor, entry, policy))
+        if (!At(actor, Perm.DechetsValider, entry))
+            throw new AccessDeniedException("Cette saisie est hors du périmètre où vous pouvez valider.");
+        if (!CanValidate(actor, entry, await Policy()))
             throw new RuleViolationException("Une saisie doit être validée par une autre personne que son auteur.");
         entry.Status = WasteStatus.Validee;
         entry.ValidatedBy = actor.Login;
@@ -108,35 +108,40 @@ public sealed class WasteService(
 
     public async Task DeleteAsync(Actor actor, long id)
     {
-        actor.Demand(Modules.SaisieDechets, AppAction.Saisir);
-        var entry = await Load(actor, id);
+        var entry = await Load(id);
         if (entry.Status == WasteStatus.Validee)
             throw new RuleViolationException("Une saisie validée ne peut pas être supprimée : corrigez-la avec un motif.");
-        if (entry.CreatedBy != actor.Login && !actor.Can(Modules.SaisieDechets, AppAction.Valider))
-            throw new AccessDeniedException("Seul l'auteur de la saisie ou un validateur peut la supprimer.");
+        if (!CanDelete(actor, entry))
+            throw new AccessDeniedException("Seul l'auteur de la saisie, ou un rôle autorisé à modifier les brouillons d'autrui, peut la supprimer.");
         await store.DeleteAsync(id, actor.Login, Now);
         await Write(actor, AuditActions.EntryDeleted, entry, "", entry.Describe(), null);
     }
 
     public bool CanValidate(Actor actor, WasteEntry entry, SecurityPolicy? policy)
-        => actor.Can(Modules.SaisieDechets, AppAction.Valider)
-           && entry.Status == WasteStatus.Brouillon
+        => entry.Status == WasteStatus.Brouillon
+           && At(actor, Perm.DechetsValider, entry)
            && !((policy?.RequireSecondValidator ?? true) && entry.CreatedBy == actor.Login);
 
-    public bool CanEdit(Actor actor, WasteEntry entry)
-        => entry.Status == WasteStatus.Brouillon
-            ? actor.Can(Modules.SaisieDechets, AppAction.Saisir) && (entry.CreatedBy == actor.Login || actor.Can(Modules.SaisieDechets, AppAction.Valider))
-            : actor.Can(Modules.SaisieDechets, AppAction.Valider);
+    public bool CanEdit(Actor actor, WasteEntry entry) => At(actor, EditPermission(actor, entry), entry);
 
-    private async Task<WasteEntry> Load(Actor actor, long id)
-    {
-        var entry = await store.GetAsync(id) ?? throw new RuleViolationException("Saisie introuvable (supprimée entre-temps ?).");
-        if (!InScope(actor, entry, await plant.GetMachinesAsync()))
-            throw new AccessDeniedException("Cette saisie est hors de votre périmètre.");
-        return entry;
-    }
+    public bool CanDelete(Actor actor, WasteEntry entry) => entry.Status == WasteStatus.Brouillon && CanEdit(actor, entry);
 
-    private async Task Apply(Actor actor, WasteEntry entry, WasteDraft draft)
+    private static string EditPermission(Actor actor, WasteEntry entry)
+        => entry.Status == WasteStatus.Validee ? Perm.DechetsCorriger
+            : entry.CreatedBy == actor.Login ? Perm.DechetsSaisir
+            : Perm.DechetsAutrui;
+
+    private static bool At(Actor actor, string permission, WasteEntry e) => actor.Allows(permission, e.Sector, e.MachineId, e.Team);
+
+    private async Task<SecurityPolicy> Policy()
+        => await settings.GetAsync<SecurityPolicy>(SettingKeys.SecurityPolicy) ?? new SecurityPolicy();
+
+    private async Task<WasteEntry> Load(long id)
+        => await store.GetAsync(id) ?? throw new RuleViolationException("Saisie introuvable (supprimée entre-temps ?).");
+
+    // Checks the draft and writes it into the entry; `permission` must hold
+    // at the new place too (an entry cannot be moved out of one's scope).
+    private async Task Apply(Actor actor, WasteEntry entry, WasteDraft draft, string permission)
     {
         if (draft.Kind != entry.Kind)
             throw new RuleViolationException("Le type de déchet ne peut pas changer.");
@@ -144,8 +149,6 @@ public sealed class WasteService(
         var today = Shifts.ProductionDate(Now);
         if (date > today)
             throw new RuleViolationException("La date de production ne peut pas être dans le futur.");
-        if (date < today.AddDays(-LateEntryDays) && !actor.Can(Modules.SaisieDechets, AppAction.Valider))
-            throw new RuleViolationException($"Une saisie de plus de {LateEntryDays} jours doit être faite par un validateur.");
         if (!Shifts.All.Contains(draft.ShiftId))
             throw new RuleViolationException("Choisissez le poste.");
         if (!WasteUnits.All.Contains(draft.Unit))
@@ -164,21 +167,21 @@ public sealed class WasteService(
         {
             var machine = (await plant.GetMachinesAsync()).FirstOrDefault(m => m.Id == draft.MachineId)
                 ?? throw new RuleViolationException("Choisissez la machine.");
-            if (!actor.Scope.AllowsMachine(machine.Id, machine.Sector))
-                throw new AccessDeniedException($"La machine {machine.Id} est hors de votre périmètre.");
             sector = machine.Sector;
             machineId = machine.Id;
         }
         else
         {
             sector = Sectors.All.FirstOrDefault(s => s == draft.Sector) ?? throw new RuleViolationException("Choisissez le secteur.");
-            if (!actor.Scope.AllowsSector(sector))
-                throw new AccessDeniedException($"Le secteur {Sectors.Label(sector)} est hors de votre périmètre.");
         }
-
         var team = plant.TeamOnShift(date, draft.ShiftId);
-        if (!actor.Scope.AllowsTeam(team))
-            throw new AccessDeniedException($"Ce poste a été travaillé par {team} : hors de votre périmètre ({actor.Scope.Team}).");
+        var place = machineId ?? Sectors.Label(sector);
+        if (!actor.Allows(permission, sector, machineId))
+            throw new AccessDeniedException($"{place} est hors de votre périmètre.");
+        if (!actor.Allows(permission, sector, machineId, team))
+            throw new AccessDeniedException($"Ce poste a été travaillé par {team} : hors de votre périmètre.");
+        if (date < today.AddDays(-LateEntryDays) && !actor.Allows(Perm.DechetsTardif, sector, machineId, team))
+            throw new RuleViolationException($"Une saisie de plus de {LateEntryDays} jours demande le droit « Saisir au-delà de 7 jours ».");
 
         entry.ProductionDate = date;
         entry.ShiftId = draft.ShiftId;
@@ -189,13 +192,6 @@ public sealed class WasteService(
         entry.Unit = draft.Unit;
         entry.Reason = draft.Reason;
         entry.Comment = (draft.Comment ?? "").Trim();
-    }
-
-    private static bool InScope(Actor actor, WasteEntry e, IReadOnlyList<PlantMachine> machines)
-    {
-        if (!actor.Scope.AllowsTeam(e.Team))
-            return false;
-        return e.MachineId == null ? actor.Scope.AllowsSector(e.Sector) : actor.Scope.AllowsMachine(e.MachineId, e.Sector);
     }
 
     private Task Write(Actor actor, string action, WasteEntry entry, string details, string? oldValue, string? newValue)

@@ -19,6 +19,19 @@ public sealed record DataScope(IReadOnlyList<string> Sectors, string? Team, IRea
     public bool AllowsTeam(string? team)
         => string.IsNullOrEmpty(Team) || string.Equals(Team, team, StringComparison.OrdinalIgnoreCase);
 
+    // True when everything this scope allows, outer allows too (a delegated
+    // administrator can only give access inside their own scope).
+    public bool IsWithin(DataScope outer)
+    {
+        if (outer.Sectors.Count > 0 && (Sectors.Count == 0 || !Sectors.All(outer.AllowsSector)))
+            return false;
+        if (!string.IsNullOrEmpty(outer.Team) && !string.Equals(Team, outer.Team, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (outer.Machines.Count > 0 && (Machines.Count == 0 || !Machines.All(m => outer.Machines.Contains(m, StringComparer.OrdinalIgnoreCase))))
+            return false;
+        return true;
+    }
+
     public string Describe()
     {
         if (IsUnrestricted)

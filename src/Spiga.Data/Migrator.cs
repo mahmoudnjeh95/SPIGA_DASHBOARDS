@@ -8,8 +8,8 @@ namespace Spiga.Data;
 
 // Brings the application database to the current version at start-up:
 // runs the embedded scripts Migrations/<provider>/NNNN_*.sql not yet in
-// SchemaVersion, each in its own transaction, then seeds the default roles
-// and waste reasons when the tables are empty. Safe to run on every start.
+// SchemaVersion, each in its own transaction, then seeds the Administrateur
+// role and the waste reasons when missing. Safe to run on every start.
 public sealed partial class Migrator(AppDb db)
 {
     public const int CurrentVersion = 1;
@@ -53,12 +53,11 @@ public sealed partial class Migrator(AppDb db)
 
     private async Task SeedAsync()
     {
+        // Only the built-in Administrateur role. Every other role is defined
+        // in the application (from scratch or from the optional templates).
         var roles = new RoleStore(db);
-        if ((await roles.ListAsync()).Count == 0)
-        {
-            foreach (var role in DefaultRoles.Create())
-                await roles.InsertAsync(role);
-        }
+        if (await roles.GetByCodeAsync(RoleTemplates.AdminCode) == null)
+            await roles.InsertAsync(RoleTemplates.Administrator());
 
         using var connection = await db.OpenAsync();
         if (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM WasteReasons") == 0)

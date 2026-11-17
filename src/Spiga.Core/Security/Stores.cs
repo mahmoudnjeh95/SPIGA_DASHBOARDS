@@ -4,6 +4,7 @@ namespace Spiga.Core.Security;
 
 public interface IRoleStore
 {
+    // With permissions, assignable roles and holder counts.
     Task<IReadOnlyList<Role>> ListAsync();
     Task<Role?> GetAsync(int id);
     Task<Role?> GetByCodeAsync(string code);
@@ -15,11 +16,17 @@ public interface IRoleStore
 public interface IUserStore
 {
     Task<int> CountAsync();
+
+    // With their role assignments.
     Task<IReadOnlyList<AppUser>> ListAsync();
     Task<AppUser?> GetAsync(int id);
     Task<AppUser?> GetByLoginAsync(string login);
     Task<int> InsertAsync(AppUser user);
+
+    // The account row only (sign-in counters, password, name, state).
     Task UpdateAsync(AppUser user);
+
+    Task SetAssignmentsAsync(int userId, IReadOnlyList<RoleAssignment> assignments);
 }
 
 public interface ISettingsStore

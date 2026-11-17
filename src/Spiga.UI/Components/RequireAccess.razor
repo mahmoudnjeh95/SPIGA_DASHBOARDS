@@ -8,7 +8,7 @@ else
 {
     <div class="card" style="max-width:640px">
         <h2>Accès refusé</h2>
-        <p>Votre rôle (@Session.Actor?.Role.Name) ne donne pas le droit « @AppActions.Label(Action) » sur
+        <p>Vos rôles (@Session.Actor?.RoleNames) ne donnent pas le droit « @AppActions.Label(Action) » sur
             « @(ModuleCatalog.Find(Module)?.Label ?? Module) ». Demandez-le à un administrateur.</p>
     </div>
 }

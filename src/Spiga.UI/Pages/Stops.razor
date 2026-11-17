@@ -21,7 +21,7 @@
         <section class="card" style="flex:1 1 320px;max-width:460px">
             <h2>Planification</h2>
             <p>Tableau de planification, pannes, statistiques, plans de maintenance. Modification réservée au droit « Saisir » de la maintenance.</p>
-            @if (Desktop.IsAvailable && Session.Can(Modules.Maintenance, AppAction.Saisir))
+            @if (Desktop.IsAvailable && Session.Can("maintenance:saisir"))
             {
                 <div><button type="button" class="bar acc" @onclick="() => Desktop.OpenPlanning(CanEditStationSettings)">Ouvrir la planification</button></div>
             }

@@ -24,7 +24,8 @@ public static class Modules
     public const string Parametres = "parametres";
 }
 
-public sealed record ModuleInfo(string Key, string Label, string Domain, AppAction Allowed, string Description);
+// A module groups permissions (PermissionCatalog) and screens (Navigation).
+public sealed record ModuleInfo(string Key, string Label, string Domain, string Description);
 
 // One entry of the navigation rail. Ready = the screen exists in this
 // version; the others open a page that says what the screen will hold.
@@ -34,32 +35,26 @@ public sealed record NavItem(
 
 public static class ModuleCatalog
 {
-    private const AppAction V = AppAction.Voir;
-    private const AppAction S = AppAction.Saisir;
-    private const AppAction A = AppAction.Valider;
-    private const AppAction E = AppAction.Exporter;
-    private const AppAction X = AppAction.Administrer;
-
     public static readonly IReadOnlyList<ModuleInfo> All = new[]
     {
-        new ModuleInfo(Modules.VueEnsemble, "Vue d'ensemble", "Tableaux de bord", V | E, "Synthèse usine et points à traiter."),
-        new ModuleInfo(Modules.Conditionnement, "Conditionnement", "Production", V | E, "TRS, écart de poids, production par machine."),
-        new ModuleInfo(Modules.Rendement, "Rendement matière", "Production", V | E, "Rendement par secteur et usine."),
-        new ModuleInfo(Modules.Silos, "Silos", "Production", V | S | A | E, "Niveaux, produits et conformité ; Saisir = mise à jour manuelle, Valider = conformité."),
-        new ModuleInfo(Modules.Dechets, "Déchets (tableau de bord)", "Production", V | E, "Déchets emballage et produit consolidés."),
-        new ModuleInfo(Modules.Qualite, "Qualité", "Qualité", V | E, "Humidité par produit et par ligne."),
-        new ModuleInfo(Modules.Maintenance, "Maintenance", "Maintenance", V | S | A | E, "Indicateurs, arrêts, planification, pièces et consommables."),
-        new ModuleInfo(Modules.Energie, "Énergie", "Énergie", V | E, "Électricité et vapeur par tonne."),
-        new ModuleInfo(Modules.Rh, "Ressources humaines (agrégé)", "Ressources humaines", V | E, "Taux d'absence par équipe."),
-        new ModuleInfo(Modules.RhNominatif, "Ressources humaines (nominatif)", "Ressources humaines", V | E, "Taux d'absence par ouvrier. Donnée personnelle."),
-        new ModuleInfo(Modules.SaisieDechets, "Saisie des déchets", "Saisie", V | S | A, "Déchets emballage et produit."),
-        new ModuleInfo(Modules.SaisieQuantites, "Saisie quantités et relevés", "Saisie", V | S | A, "Quantités du rendement, relevés énergie."),
-        new ModuleInfo(Modules.Objectifs, "Objectifs", "Administration", V | S, "Cibles et objectifs de coûts et consommations."),
-        new ModuleInfo(Modules.Referentiels, "Référentiels", "Administration", V | S, "Machines, produits, équipes, motifs."),
-        new ModuleInfo(Modules.Utilisateurs, "Utilisateurs et rôles", "Administration", V | X, "Comptes, rôles, règles de sécurité."),
-        new ModuleInfo(Modules.Sources, "Sources de données", "Administration", V | X, "Connexions aux systèmes de l'usine."),
-        new ModuleInfo(Modules.Audit, "Journal d'audit", "Administration", V | E, "Traçabilité des actions."),
-        new ModuleInfo(Modules.Parametres, "Paramètres", "Administration", V | X, "Paramètres du poste et de l'affichage TV."),
+        new ModuleInfo(Modules.VueEnsemble, "Vue d'ensemble", "Tableaux de bord", "Synthèse usine et points à traiter."),
+        new ModuleInfo(Modules.Conditionnement, "Conditionnement", "Production", "TRS, écart de poids, production par machine."),
+        new ModuleInfo(Modules.Rendement, "Rendement matière", "Production", "Rendement par secteur et usine."),
+        new ModuleInfo(Modules.Silos, "Silos", "Production", "Niveaux, produits et conformité ; Saisir = mise à jour manuelle, Valider = conformité."),
+        new ModuleInfo(Modules.Dechets, "Déchets (tableau de bord)", "Production", "Déchets emballage et produit consolidés."),
+        new ModuleInfo(Modules.Qualite, "Qualité", "Qualité", "Humidité par produit et par ligne."),
+        new ModuleInfo(Modules.Maintenance, "Maintenance", "Maintenance", "Indicateurs, arrêts, planification, pièces et consommables."),
+        new ModuleInfo(Modules.Energie, "Énergie", "Énergie", "Électricité et vapeur par tonne."),
+        new ModuleInfo(Modules.Rh, "Ressources humaines (agrégé)", "Ressources humaines", "Taux d'absence par équipe."),
+        new ModuleInfo(Modules.RhNominatif, "Ressources humaines (nominatif)", "Ressources humaines", "Taux d'absence par ouvrier. Donnée personnelle."),
+        new ModuleInfo(Modules.SaisieDechets, "Saisie des déchets", "Saisie", "Déchets emballage et produit."),
+        new ModuleInfo(Modules.SaisieQuantites, "Saisie quantités et relevés", "Saisie", "Quantités du rendement, relevés énergie."),
+        new ModuleInfo(Modules.Objectifs, "Objectifs", "Administration", "Cibles et objectifs de coûts et consommations."),
+        new ModuleInfo(Modules.Referentiels, "Référentiels", "Administration", "Machines, produits, équipes, motifs."),
+        new ModuleInfo(Modules.Utilisateurs, "Utilisateurs et rôles", "Administration", "Comptes, rôles, règles de sécurité."),
+        new ModuleInfo(Modules.Sources, "Sources de données", "Administration", "Connexions aux systèmes de l'usine."),
+        new ModuleInfo(Modules.Audit, "Journal d'audit", "Administration", "Traçabilité des actions."),
+        new ModuleInfo(Modules.Parametres, "Paramètres", "Administration", "Paramètres du poste et de l'affichage TV."),
     };
 
     public static ModuleInfo? Find(string key) => All.FirstOrDefault(m => m.Key == key);

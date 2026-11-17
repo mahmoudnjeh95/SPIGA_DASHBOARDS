@@ -31,8 +31,8 @@
         </nav>
         <div class="me">
             <b>@Session.Actor?.DisplayName</b>
-            <small>@Session.Actor?.Role.Name</small>
-            <small>Périmètre : @Session.Actor?.Scope.Describe()</small>
+            <small>@Session.Actor?.RoleNames</small>
+            <small>Périmètre : @Session.Actor?.ScopeSummary</small>
         </div>
     </aside>
     <div class="main">
@@ -40,9 +40,9 @@
             <span class="crumb">@((MarkupString)Crumb())</span>
             <span class="pill" title="Équipe en poste selon le roulement"><span class="dot"></span>@_shift</span>
             <span class="sp"></span>
-            @if (Desktop.IsAvailable && Session.Can(Modules.Conditionnement, AppAction.Voir))
+            @if (Desktop.IsAvailable && Session.Can(Perm.EcranTv))
             {
-                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Modules.Parametres, AppAction.Administrer))">Écran TV</button>
+                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Perm.ParametresPoste))">Écran TV</button>
             }
             <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
             <a class="bar" href="compte">Mon compte</a>

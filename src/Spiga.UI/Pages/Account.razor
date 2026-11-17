@@ -3,22 +3,24 @@
 
 <div class="head"><div><span class="pre">Usine</span><h1>Mon compte</h1></div></div>
 <div class="row">
-    <section class="card" style="flex:1 1 320px;max-width:520px">
-        <h2>Identité et droits</h2>
+    <section class="card" style="flex:2 1 460px">
+        <h2>Identité et rôles</h2>
         <dl class="kv">
             <dt>Identifiant</dt><dd>@Actor.Login</dd>
             <dt>Nom</dt><dd>@Actor.DisplayName</dd>
-            <dt>Rôle</dt><dd>@Actor.Role.Name</dd>
-            <dt>Périmètre</dt><dd>@Actor.Scope.Describe()</dd>
             <dt>Dernière connexion</dt><dd>@Fmt.Date(Actor.User.LastLoginAt)</dd>
-            <dt>Modules</dt>
-            <dd>
-                @foreach (var m in ModuleCatalog.All.Where(m => Actor.Can(m.Key, AppAction.Voir)))
-                {
-                    <div>@m.Label <span class="nd">· @AppActions.Describe(Actor.Permissions[m.Key])</span></div>
-                }
-            </dd>
         </dl>
+        <table class="t">
+            <thead><tr><th>Rôle</th><th>Périmètre</th><th>Validité</th></tr></thead>
+            <tbody>
+                @foreach (var g in Actor.Grants)
+                {
+                    <tr><td>@g.Role.Name</td><td class="n">@g.Scope.Describe()</td><td class="n">@g.Assignment.Validity()</td></tr>
+                }
+            </tbody>
+        </table>
+        <h2 style="margin-top:6px">Droits effectifs</h2>
+        <EffectiveRights Grants="Actor.Grants" />
     </section>
     <section class="card" style="flex:1 1 320px;max-width:420px">
         <h2>Changer de mot de passe</h2>

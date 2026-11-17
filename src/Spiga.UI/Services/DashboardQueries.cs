@@ -45,7 +45,9 @@ public sealed class PlantSnapshot
 // (read only) and the waste entries, inside the actor's data scope.
 public sealed class DashboardQueries(PlantData plant, WasteService waste, TimeProvider clock)
 {
-    public async Task<PlantSnapshot> LoadAsync(Actor actor, DateTime from, DateTime to, string? sector, int? shiftId)
+    // `permission`: the "voir" of the calling screen; its scope decides
+    // which machines, sectors and postes are counted.
+    public async Task<PlantSnapshot> LoadAsync(Actor actor, string permission, DateTime from, DateTime to, string? sector, int? shiftId)
     {
         var now = clock.GetLocalNow().DateTime;
         var live = now >= from && now < to;
@@ -62,8 +64,8 @@ public sealed class DashboardQueries(PlantData plant, WasteService waste, TimePr
         List<ProductionBucket> lots = new();
         try
         {
-            machines = await plant.MachinesFor(actor, sector);
-            lots = await plant.LotsAsync(actor, machines, from, to, shiftId);
+            machines = await plant.MachinesFor(actor, permission, sector);
+            lots = await plant.LotsAsync(actor, permission, machines, from, to, shiftId);
             total = PlantData.Total(lots);
             foreach (var machine in machines)
             {
@@ -83,7 +85,7 @@ public sealed class DashboardQueries(PlantData plant, WasteService waste, TimePr
         }
 
         var sectors = Core.Plant.Sectors.All
-            .Where(s => (sector == null || s == sector) && actor.Scope.AllowsSector(s))
+            .Where(s => (sector == null || s == sector) && actor.Allows(permission, s))
             .Select(s =>
             {
                 var sectorMachines = machines.Where(m => m.Sector == s).ToList();

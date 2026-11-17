@@ -34,6 +34,8 @@ public sealed class UserSession : IDisposable
 
     public bool Can(string module, AppAction action) => Actor?.Can(module, action) == true;
 
+    public bool Can(string permission) => Actor?.Can(permission) == true;
+
     public async Task SignInAsync(Actor actor)
     {
         Actor = actor;
@@ -105,8 +107,8 @@ public sealed class UserSession : IDisposable
             return;
         }
         await _store.SaveAsync(fresh.User.Id, _lastActivity);
-        var changed = fresh.Role.Name != Actor.Role.Name || PermissionSet.Diff(Actor.Permissions, fresh.Permissions).Length > 0
-                      || fresh.Scope.Describe() != Actor.Scope.Describe();
+        var changed = fresh.RoleNames != Actor.RoleNames || !fresh.Permissions.SameAs(Actor.Permissions)
+                      || fresh.ScopeSummary != Actor.ScopeSummary;
         Actor = fresh;
         if (changed)
             Notify();

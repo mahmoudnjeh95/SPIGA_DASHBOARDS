@@ -167,7 +167,7 @@
                                         {
                                             <button type="button" class="link" @onclick="() => Edit(e)">@(e.Status == WasteStatus.Validee ? "Corriger" : "Modifier")</button>
                                         }
-                                        @if (e.Status == WasteStatus.Brouillon && Waste.CanEdit(Actor, e))
+                                        @if (Waste.CanDelete(Actor, e))
                                         {
                                             @if (_confirmDelete == e.Id)
                                             {
@@ -186,7 +186,7 @@
                 </table>
             </div>
         }
-        @if (Session.Policy.RequireSecondValidator && Session.Can(Modules.SaisieDechets, AppAction.Valider))
+        @if (Session.Policy.RequireSecondValidator && Session.Can(Perm.DechetsValider))
         {
             <p class="nd" style="font-size:12px">Vos propres saisies doivent être validées par une autre personne.</p>
         }

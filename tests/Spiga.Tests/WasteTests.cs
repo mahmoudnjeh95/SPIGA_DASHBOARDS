@@ -17,8 +17,7 @@ public class WasteTests
     {
         using var app = new TestApp();
         var admin = await app.SetupAdminAsync();
-        var op = await app.UserAsync(admin, "operateur.pc", "operateur",
-            new DataScope(new[] { Sectors.PateCourte }, null, Array.Empty<string>()));
+        var op = await app.UserAsync(admin, "operateur.pc", "operateur", TestApp.Sector(Sectors.PateCourte));
 
         var entry = await app.WasteService.AddAsync(op, Emballage("PC01"));
         Assert.Equal(Sectors.PateCourte, entry.Sector);
@@ -34,7 +33,7 @@ public class WasteTests
     {
         using var app = new TestApp();
         var admin = await app.SetupAdminAsync();
-        var chef = await app.UserAsync(admin, "chef.b", "chef-equipe", new DataScope(Array.Empty<string>(), "Equipe B", Array.Empty<string>()));
+        var chef = await app.UserAsync(admin, "chef.b", "chef-equipe", TestApp.Team("Equipe B"));
         await app.WasteService.AddAsync(chef, Emballage("PC01", shift: 1));
         await Assert.ThrowsAsync<AccessDeniedException>(() => app.WasteService.AddAsync(chef, Emballage("PC01", shift: 3)));
     }
@@ -58,11 +57,13 @@ public class WasteTests
         Assert.Equal(WasteStatus.Validee, validated!.Status);
         Assert.Equal("chef.b", validated.ValidatedBy);
 
-        // Locked for its author; no deletion; correction only with a reason.
+        // Locked: no deletion; correction only with the "corriger" right and a reason.
         await Assert.ThrowsAsync<AccessDeniedException>(() => app.WasteService.UpdateAsync(op, entry.Id, Emballage("PC01", 20), null));
+        await Assert.ThrowsAsync<AccessDeniedException>(() => app.WasteService.UpdateAsync(chef, entry.Id, Emballage("PC01", 20), "Pesée refaite"));
         await Assert.ThrowsAsync<RuleViolationException>(() => app.WasteService.DeleteAsync(chef, entry.Id));
-        await Assert.ThrowsAsync<RuleViolationException>(() => app.WasteService.UpdateAsync(chef, entry.Id, Emballage("PC01", 20), " "));
-        await app.WasteService.UpdateAsync(chef, entry.Id, Emballage("PC01", 20), "Pesée refaite");
+        var prod = await app.UserAsync(admin, "resp.prod", "resp-production");
+        await Assert.ThrowsAsync<RuleViolationException>(() => app.WasteService.UpdateAsync(prod, entry.Id, Emballage("PC01", 20), " "));
+        await app.WasteService.UpdateAsync(prod, entry.Id, Emballage("PC01", 20), "Pesée refaite");
 
         var correction = Assert.Single(await app.AuditAsync(), e => e.Action == AuditActions.EntryCorrected);
         Assert.Contains("12,5 kg", correction.OldValue);
@@ -98,9 +99,11 @@ public class WasteTests
         await Assert.ThrowsAsync<RuleViolationException>(() => app.WasteService.AddAsync(op,
             new WasteDraft(WasteKind.Emballage, Today, 1, "PC01", null, 5, WasteUnits.Kg, "Motif libre", "")));
 
-        // A validator may enter late.
+        // Late entries need their own right.
         var chef = await app.UserAsync(admin, "chef.b", "chef-equipe");
-        await app.WasteService.AddAsync(chef, Emballage("PC01", date: Today.AddDays(-8)));
+        await Assert.ThrowsAsync<RuleViolationException>(() => app.WasteService.AddAsync(chef, Emballage("PC01", date: Today.AddDays(-8))));
+        var prod = await app.UserAsync(admin, "resp.prod", "resp-production");
+        await app.WasteService.AddAsync(prod, Emballage("PC01", date: Today.AddDays(-8)));
     }
 
     [Fact]
@@ -123,8 +126,12 @@ public class WasteTests
         var admin = await app.SetupAdminAsync();
         await app.WasteService.AddAsync(admin, Emballage("PC01"));
         await app.WasteService.AddAsync(admin, Emballage("CC01"));
-        var op = await app.UserAsync(admin, "operateur.cc", "operateur",
-            new DataScope(new[] { Sectors.Couscous }, null, Array.Empty<string>()));
+        var op = await app.UserAsync(admin, "operateur.cc", "operateur", TestApp.Sector(Sectors.Couscous));
+        // The operator template cannot consult entries: give the right, then list.
+        var role = await app.RoleAsync("operateur");
+        await app.Admin.UpdateRoleAsync(admin, role.Id, new RoleChange(role.Name, role.Description, true,
+            role.Permissions.With(Perm.View(Modules.SaisieDechets)), role.AssignableRoleIds));
+        op = (await app.Auth.RefreshAsync(op))!;
         var visible = await app.WasteService.ListAsync(op, WasteKind.Emballage, Today, null);
         Assert.Equal("CC01", Assert.Single(visible).MachineId);
     }

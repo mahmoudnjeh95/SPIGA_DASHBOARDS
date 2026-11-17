@@ -150,7 +150,7 @@
         var (from, to) = _period.Range(Now);
         await Run(async () =>
         {
-            _snap = await Queries.LoadAsync(Actor, from, to, null, null);
+            _snap = await Queries.LoadAsync(Actor, Perm.View(Modules.VueEnsemble), from, to, null, null);
             _alerts = await BuildAlertsAsync(_snap, from, to);
         });
         _otherDomains = new List<(string, string, string)>

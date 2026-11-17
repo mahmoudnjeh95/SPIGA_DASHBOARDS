@@ -1,22 +1,27 @@
 namespace Spiga.Core.Security;
 
-// What a role may do in a module. A role holds a combination per module
-// (RolePermissions.Actions); Voir is implied by every other action.
-[Flags]
+// The usual verbs of a module. Each maps to the permission "<module>:<verb>"
+// when the module offers it (PermissionCatalog); modules also declare their
+// own specific permissions (corriger, débloquer...).
 public enum AppAction
 {
-    None = 0,
-    Voir = 1,
-    Saisir = 2,
-    Valider = 4,
-    Exporter = 8,
-    Administrer = 16,
+    Voir,
+    Saisir,
+    Valider,
+    Exporter,
+    Administrer,
 }
 
 public static class AppActions
 {
-    public static readonly IReadOnlyList<AppAction> All =
-        new[] { AppAction.Voir, AppAction.Saisir, AppAction.Valider, AppAction.Exporter, AppAction.Administrer };
+    public static string Verb(AppAction action) => action switch
+    {
+        AppAction.Voir => "voir",
+        AppAction.Saisir => "saisir",
+        AppAction.Valider => "valider",
+        AppAction.Exporter => "exporter",
+        _ => "administrer",
+    };
 
     public static string Label(AppAction action) => action switch
     {
@@ -24,14 +29,6 @@ public static class AppActions
         AppAction.Saisir => "Saisir",
         AppAction.Valider => "Valider",
         AppAction.Exporter => "Exporter",
-        AppAction.Administrer => "Administrer",
-        _ => action.ToString(),
+        _ => "Administrer",
     };
-
-    public static string Describe(AppAction actions)
-    {
-        if (actions == AppAction.None)
-            return "Aucun accès";
-        return string.Join(", ", All.Where(a => actions.HasFlag(a)).Select(Label));
-    }
 }

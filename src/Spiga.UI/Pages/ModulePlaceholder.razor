@@ -21,7 +21,7 @@ else
                 <dt>Contenu</dt><dd>@_item.Content</dd>
                 <dt>Filtres</dt><dd>@_item.Filters</dd>
                 <dt>Origine</dt><dd>@_item.Origin</dd>
-                <dt>Droit</dt><dd>@(ModuleCatalog.Find(_item.Module)?.Label) : @AppActions.Describe(ModuleCatalog.Find(_item.Module)?.Allowed ?? AppAction.None)</dd>
+                <dt>Permissions</dt><dd>@(ModuleCatalog.Find(_item.Module)?.Label) : @string.Join(", ", PermissionCatalog.ForModule(_item.Module).Select(p => p.Label))</dd>
                 <dt>Rôles ayant accès</dt><dd>@string.Join(", ", _roles)</dd>
             </dl>
         </section>
@@ -40,7 +40,7 @@ else
         if (_item == null)
             return;
         _roles = (await Roles.ListAsync())
-            .Where(r => r.IsSystem || r.Permissions.Can(_item.Module, AppAction.Voir))
+            .Where(r => r.EffectivePermissions.HasModule(_item.Module))
             .Select(r => r.Name).ToList();
     }
 }

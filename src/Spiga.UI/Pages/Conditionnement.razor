@@ -10,7 +10,7 @@
             <span class="pre">Production</span><h1>Conditionnement</h1>
             <p>@_period.Label(Now)@(_sector == null ? "" : " · " + Sectors.Label(_sector))@(_shift == null ? "" : " · poste " + Shifts.Label(_shift.Value))</p>
         </div>
-        @if (Desktop.IsAvailable)
+        @if (Desktop.IsAvailable && Session.Can(Perm.TableauDetaille))
         {
             <button type="button" class="bar" @onclick="() => Desktop.OpenDashboard(CanEditStationSettings)" title="Diapositives, détail par machine, synthèse secteur, historique">
                 Tableau de bord détaillé
@@ -25,7 +25,7 @@
             <span>Secteur</span>
             <div class="segs" role="group" aria-label="Secteur">
                 <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => OnSectorAsync(null)">Tous</button>
-                @foreach (var s in Sectors.All.Where(Actor.Scope.AllowsSector))
+                @foreach (var s in Sectors.All.Where(s => Actor.Allows(View, s)))
                 {
                     <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => OnSectorAsync(s)">@Sectors.Label(s)</button>
                 }
@@ -41,10 +41,6 @@
                 }
             </div>
         </div>
-        @if (Actor.Scope.Team != null)
-        {
-            <div class="f"><span>Équipe</span><span class="chip acc" title="Votre périmètre">@Actor.Scope.Team</span></div>
-        }
     </div>
 
     <Flash Error="@Error" />
@@ -155,6 +151,8 @@
     [SupplyParameterFromQuery(Name = "du")] public string? FromParam { get; set; }
     [SupplyParameterFromQuery(Name = "au")] public string? ToParam { get; set; }
 
+    private static readonly string View = Perm.View(Modules.Conditionnement);
+
     private Period _period = default!;
     private string? _sector;
     private int? _shift;
@@ -172,7 +170,7 @@
             var to = DateTime.TryParse(ToParam, CultureInfo.InvariantCulture, out var t) ? t : from;
             _period = new Period(PeriodKind.Custom, from, to);
         }
-        if (_sector != null && !Actor.Scope.AllowsSector(_sector))
+        if (_sector != null && !Actor.Allows(View, _sector))
             _sector = null;
         await LoadAsync();
     }
@@ -201,6 +199,6 @@
             return;
         _snap = null;
         var (from, to) = _period.Range(Now);
-        await Run(async () => _snap = await Queries.LoadAsync(Actor, from, to, _sector, _shift));
+        await Run(async () => _snap = await Queries.LoadAsync(Actor, View, from, to, _sector, _shift));
     }
 }

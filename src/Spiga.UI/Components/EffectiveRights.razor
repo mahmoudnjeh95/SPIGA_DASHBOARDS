@@ -1,0 +1,29 @@
+@* What a set of role assignments allows, module by module, and where. *@
+@if (Grants.Count == 0)
+{
+    <p class="empty">Aucun rôle actif : ce compte ne peut rien faire.</p>
+}
+else
+{
+    <table class="t">
+        <thead><tr><th>Module</th><th>Permissions</th><th>Où</th></tr></thead>
+        <tbody>
+            @foreach (var m in ModuleCatalog.All)
+            {
+                var holding = Grants.Where(g => g.Role.EffectivePermissions.HasModule(m.Key)).ToList();
+                if (holding.Count == 0)
+                    continue;
+                var perms = PermissionCatalog.ForModule(m.Key).Where(p => holding.Any(g => g.Role.EffectivePermissions.Has(p.Key))).ToList();
+                <tr>
+                    <td style="font-size:14px">@m.Label</td>
+                    <td class="n">@string.Join(", ", perms.Select(p => p.Label))</td>
+                    <td class="n">@(holding.Any(g => g.Scope.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", holding.Select(g => g.Scope.Describe()).Distinct()))</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Actor.Grant> Grants { get; set; } = Array.Empty<Actor.Grant>();
+}

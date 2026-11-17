@@ -7,16 +7,16 @@
     <div class="head">
         <div>
             <span class="pre">Administration</span><h1>Utilisateurs et rôles</h1>
-            <p>Un rôle donne des droits par module et par action. Un utilisateur reçoit un rôle et un périmètre de données. Chaque modification est tracée.</p>
+            <p>Les rôles sont définis ici, sans limite de nombre, à partir des permissions de chaque module. Un utilisateur peut cumuler plusieurs rôles, chacun sur son périmètre et pour une période.</p>
         </div>
-        @if (!CanAdmin)
+        @if (!CanRoles && !CanAccounts)
         {
             <span class="chip">Consultation seule</span>
         }
     </div>
 
     <div class="tabrow" role="tablist">
-        <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" aria-selected="@(_tab == 0)" @onclick="() => _tab = 0">Rôles et droits</button>
+        <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" aria-selected="@(_tab == 0)" @onclick="() => _tab = 0">Rôles (@_roles.Count)</button>
         <button type="button" role="tab" class="tab @(_tab == 1 ? "on" : "")" aria-selected="@(_tab == 1)" @onclick="() => _tab = 1">Utilisateurs (@_users.Count)</button>
         <button type="button" role="tab" class="tab @(_tab == 2 ? "on" : "")" aria-selected="@(_tab == 2)" @onclick="() => _tab = 2">Règles de sécurité</button>
     </div>
@@ -36,102 +36,146 @@
     @if (_tab == 0)
     {
         <div class="row">
-            <section class="card" style="flex:1 1 230px;max-width:300px">
-                <h2>Rôles</h2>
+            @* ---------- role list ---------- *@
+            <section class="card" style="flex:1 1 250px;max-width:320px">
+                <div class="f"><label for="role-filter">Rechercher un rôle</label><input id="role-filter" @bind="_roleFilter" @bind:event="oninput" /></div>
                 <div class="rolelist">
-                    @foreach (var r in _roles)
+                    @foreach (var r in _roles.Where(r => string.IsNullOrWhiteSpace(_roleFilter) || r.Name.Contains(_roleFilter.Trim(), StringComparison.OrdinalIgnoreCase)))
                     {
                         <button type="button" class="rolebtn @(r.Id == _role?.Id ? "on" : "")" @onclick="() => SelectRole(r)">
-                            <span>@r.Name @if (r.IsSystem) { <span class="chip" style="margin-left:4px">système</span> }</span>
-                            <small title="Utilisateurs">@r.UserCount</small>
+                            <span>
+                                @r.Name
+                                @if (r.IsSystem) { <span class="chip" style="margin-left:4px">système</span> }
+                                @if (!r.IsActive) { <span class="chip warn" style="margin-left:4px">inactif</span> }
+                            </span>
+                            <small title="Titulaires">@r.UserCount</small>
                         </button>
                     }
                 </div>
-                @if (CanAdmin)
+                @if (CanRoles)
                 {
                     <form class="form" style="border-top:1px solid var(--line);padding-top:10px" @onsubmit="CreateRoleAsync">
-                        <div class="f grow"><label for="new-role">Nouveau rôle</label><input id="new-role" @bind="_newRoleName" @bind:event="oninput" placeholder="ex. Magasinier" /></div>
+                        <div class="f grow"><label for="new-role">Nouveau rôle</label><input id="new-role" @bind="_newRoleName" @bind:event="oninput" placeholder="ex. Magasinier silos" /></div>
                         <button class="bar small" type="submit">Créer</button>
                     </form>
+                    @if (MissingTemplates > 0)
+                    {
+                        <button type="button" class="link" style="align-self:flex-start" @onclick="AddTemplatesAsync">Ajouter les @MissingTemplates rôles types manquants</button>
+                    }
                 }
             </section>
 
+            @* ---------- role editor ---------- *@
             @if (_role != null)
             {
-                <section class="card" style="flex:3 1 560px">
+                <section class="card" style="flex:4 1 620px">
                     <div class="card-head">
-                        <h2>@_role.Name <small>@_role.UserCount utilisateur(s)</small></h2>
-                        @if (CanAdmin)
+                        <h2>@_role.Name <small>@_role.UserCount titulaire(s) · @(_role.IsSystem ? PermissionCatalog.All.Count : _draft.Count) permission(s) sur @PermissionCatalog.All.Count</small></h2>
+                        @if (CanRoles)
                         {
                             <div class="segs">
                                 <button type="button" class="bar small" @onclick="DuplicateRoleAsync">Dupliquer</button>
                                 @if (!_role.IsSystem)
                                 {
                                     <button type="button" class="bar small danger" @onclick="DeleteRoleAsync" disabled="@(_role.UserCount > 0)"
-                                            title="@(_role.UserCount > 0 ? "Attribuez un autre rôle à ses utilisateurs d'abord" : "")">Supprimer</button>
+                                            title="@(_role.UserCount > 0 ? "Retirez-le à ses titulaires ou désactivez-le" : "")">Supprimer</button>
                                 }
                             </div>
                         }
                     </div>
+
                     @if (_role.IsSystem)
                     {
-                        <div class="notice info">Rôle système : tous les droits, non modifiable. L'application garde ainsi toujours un administrateur.</div>
-                    }
-                    else if (CanAdmin)
-                    {
-                        <div class="form">
-                            <div class="f"><label for="role-name">Nom</label><input id="role-name" @bind="_roleName" @bind:event="oninput" /></div>
-                            <div class="f grow"><label for="role-desc">Description</label><input id="role-desc" @bind="_roleDescription" @bind:event="oninput" /></div>
-                        </div>
+                        <div class="notice info">Rôle système : toutes les permissions, présentes et futures. Non modifiable, il garantit qu'un administrateur existe toujours.</div>
                     }
                     else
                     {
-                        <p>@_role.Description</p>
+                        <div class="form">
+                            <div class="f"><label for="role-name">Nom</label><input id="role-name" @bind="_roleName" @bind:event="oninput" disabled="@(!CanRoles)" /></div>
+                            <div class="f grow"><label for="role-desc">Description</label><input id="role-desc" @bind="_roleDescription" @bind:event="oninput" disabled="@(!CanRoles)" /></div>
+                            <label class="check" title="Un rôle inactif ne donne plus rien à ses titulaires"><input type="checkbox" @bind="_roleActive" disabled="@(!CanRoles)" />Rôle actif</label>
+                        </div>
                     }
 
-                    <div class="scroll">
-                        <table class="t matrix">
-                            <thead>
-                                <tr>
-                                    <th>Module</th>
-                                    @foreach (var a in AppActions.All)
-                                    {
-                                        <th class="c">@AppActions.Label(a)</th>
-                                    }
-                                </tr>
-                            </thead>
+                    <h3 class="sub">Permissions</h3>
+                    <div class="perm-grid">
+                        @foreach (var domain in ModuleCatalog.All.GroupBy(m => m.Domain))
+                        {
+                            <div class="dom">@domain.Key</div>
+                            @foreach (var m in domain)
+                            {
+                                var editable = CanRoles && !_role.IsSystem;
+                                <div class="perm-row @(Perms.HasModule(m.Key) ? "has" : "")">
+                                    <div class="perm-mod">
+                                        <b>@m.Label</b><small>@m.Description</small>
+                                        @if (editable)
+                                        {
+                                            <span class="perm-quick">
+                                                <button type="button" class="link" @onclick="() => SetModule(m.Key, true)">Tout</button>
+                                                <button type="button" class="link" @onclick="() => SetModule(m.Key, false)">Aucun</button>
+                                            </span>
+                                        }
+                                    </div>
+                                    <div class="perm-list">
+                                        @foreach (var p in PermissionCatalog.ForModule(m.Key))
+                                        {
+                                            <label class="perm @(Perms.Has(p.Key) ? "on" : "")" title="@p.Description">
+                                                <input type="checkbox" checked="@Perms.Has(p.Key)" disabled="@(!editable)"
+                                                       @onchange="e => _draft.Set(p.Key, e.Value is true)" />@p.Label
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    @if (!_role.IsSystem)
+                    {
+                        <h3 class="sub">Administration déléguée</h3>
+                        <p class="nd" style="font-size:13px">
+                            Rôles que les titulaires de « @_role.Name » peuvent attribuer, dans leur propre périmètre, s'ils ont la permission
+                            « Créer et modifier des comptes »@(Perms.Has(Perm.ComptesGerer) ? "" : " (non cochée pour l'instant)").
+                        </p>
+                        <div class="checks">
+                            @foreach (var r in _roles.Where(r => !r.IsSystem))
+                            {
+                                <label class="check"><input type="checkbox" checked="@_roleAssignable.Contains(r.Id)" disabled="@(!CanRoles)"
+                                                            @onchange="e => ToggleAssignable(r.Id, e.Value is true)" />@r.Name</label>
+                            }
+                        </div>
+                    }
+
+                    <h3 class="sub">Titulaires</h3>
+                    @{ var holders = _users.Where(u => u.Assignments.Any(a => a.RoleId == _role.Id)).ToList(); }
+                    @if (holders.Count == 0)
+                    {
+                        <p class="empty">Aucun compte n'a ce rôle.</p>
+                    }
+                    else
+                    {
+                        <table class="t">
+                            <thead><tr><th>Compte</th><th>Périmètre</th><th>Validité</th></tr></thead>
                             <tbody>
-                                @foreach (var domain in ModuleCatalog.All.GroupBy(m => m.Domain))
+                                @foreach (var u in holders)
                                 {
-                                    <tr><td class="dom" colspan="6">@domain.Key</td></tr>
-                                    @foreach (var m in domain)
+                                    @foreach (var a in u.Assignments.Where(a => a.RoleId == _role.Id))
                                     {
                                         <tr>
-                                            <td class="mod">@m.Label<small>@m.Description</small></td>
-                                            @foreach (var a in AppActions.All)
-                                            {
-                                                <td class="c">
-                                                    @if (m.Allowed.HasFlag(a))
-                                                    {
-                                                        <input type="checkbox" aria-label="@m.Label : @AppActions.Label(a)" checked="@_draft[m.Key].HasFlag(a)"
-                                                               disabled="@(_role.IsSystem || !CanAdmin)" @onchange="e => Toggle(m.Key, a, e.Value is true)" />
-                                                    }
-                                                    else
-                                                    {
-                                                        <span class="na" title="Action sans objet pour ce module">—</span>
-                                                    }
-                                                </td>
-                                            }
+                                            <td>@u.Login<small>@u.DisplayName@(u.IsActive ? "" : " · désactivé")</small></td>
+                                            <td class="n">@a.Scope.Describe()</td>
+                                            <td class="n">@a.Validity()</td>
                                         </tr>
                                     }
                                 }
                             </tbody>
                         </table>
-                    </div>
-                    @if (CanAdmin && !_role.IsSystem)
+                    }
+
+                    @if (CanRoles && !_role.IsSystem)
                     {
-                        <div class="segs" style="justify-content:flex-end">
-                            <span class="nd" style="align-self:center;margin-right:8px">@(RoleDirty ? "Modifications non enregistrées" : "")</span>
+                        <div class="savebar">
+                            <span class="nd">@(RoleDirty ? "Modifications non enregistrées" : "")</span>
                             <button type="button" class="bar" @onclick="() => SelectRole(_role)" disabled="@(!RoleDirty)">Annuler</button>
                             <button type="button" class="bar acc" @onclick="SaveRoleAsync" disabled="@(!RoleDirty)">Enregistrer le rôle</button>
                         </div>
@@ -143,44 +187,52 @@
     else if (_tab == 1)
     {
         <div class="row">
-            <section class="card" style="flex:3 1 560px">
+            @* ---------- user list ---------- *@
+            <section class="card" style="flex:@(_form == null ? "3 1 560px" : "2 1 440px")">
                 <div class="card-head">
-                    <h2>Comptes</h2>
-                    @if (CanAdmin)
+                    <div class="form">
+                        <div class="f"><label for="user-filter">Rechercher</label><input id="user-filter" @bind="_userFilter" @bind:event="oninput" placeholder="identifiant ou nom" /></div>
+                        <div class="f">
+                            <label for="user-role-filter">Rôle</label>
+                            <select id="user-role-filter" @bind="_userRoleFilter">
+                                <option value="0">Tous les rôles</option>
+                                @foreach (var r in _roles)
+                                {
+                                    <option value="@r.Id">@r.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    @if (CanAccounts && _assignable.Count > 0)
                     {
                         <button type="button" class="bar acc small" @onclick="NewUser">Nouvel utilisateur</button>
                     }
                 </div>
                 <div class="scroll">
                     <table class="t">
-                        <thead><tr><th>Identifiant</th><th>Rôle</th><th>Périmètre</th><th>Dernière connexion</th><th>État</th><th></th></tr></thead>
+                        <thead><tr><th>Compte</th><th>Rôles</th>@if (_form == null) { <th>Dernière connexion</th> }<th>État</th><th></th></tr></thead>
                         <tbody>
-                            @foreach (var u in _users)
+                            @foreach (var u in FilteredUsers())
                             {
                                 <tr class="@(_user?.Id == u.Id ? "sel" : "")">
                                     <td>@u.Login<small>@u.DisplayName</small></td>
-                                    <td class="n">@u.RoleName</td>
-                                    <td class="n">@u.Scope.Describe()</td>
-                                    <td class="n">@Fmt.Ago(u.LastLoginAt, Now)</td>
                                     <td>
-                                        @if (!u.IsActive)
+                                        @foreach (var a in u.Assignments)
                                         {
-                                            <span class="chip">Désactivé</span>
-                                        }
-                                        else if (u.IsLocked(Now))
-                                        {
-                                            <span class="chip bad">Bloqué</span>
-                                        }
-                                        else if (u.MustChangePassword)
-                                        {
-                                            <span class="chip warn">Mot de passe à changer</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="chip ok">Actif</span>
+                                            <span class="chip @(a.IsCurrent(Now) ? "acc" : "")" style="margin:0 4px 3px 0" title="@a.Scope.Describe() · @a.Validity()">@a.RoleName@(a.Scope.IsUnrestricted ? "" : " · " + a.Scope.Describe())</span>
                                         }
                                     </td>
-                                    <td><div class="actions"><button type="button" class="link" @onclick="() => EditUser(u)">@(CanAdmin ? "Modifier" : "Détail")</button></div></td>
+                                    @if (_form == null)
+                                    {
+                                        <td class="n">@Fmt.Ago(u.LastLoginAt, Now)</td>
+                                    }
+                                    <td>
+                                        @if (!u.IsActive) { <span class="chip">Désactivé</span> }
+                                        else if (u.IsLocked(Now)) { <span class="chip bad">Bloqué</span> }
+                                        else if (u.MustChangePassword) { <span class="chip warn">Mot de passe à changer</span> }
+                                        else { <span class="chip ok">Actif</span> }
+                                    </td>
+                                    <td><div class="actions"><button type="button" class="link" @onclick="() => EditUser(u)">@(_manageable.Contains(u.Id) ? "Modifier" : "Détail")</button></div></td>
                                 </tr>
                             }
                         </tbody>
@@ -188,64 +240,93 @@
                 </div>
             </section>
 
-            @if (_userForm != null)
+            @* ---------- user editor ---------- *@
+            @if (_form != null)
             {
-                <section class="card" style="flex:2 1 360px">
+                var editable = _user == null || _manageable.Contains(_user.Id);
+                <section class="card" style="flex:3 1 520px">
                     <div class="card-head">
                         <h2>@(_user == null ? "Nouvel utilisateur" : _user.Login)</h2>
-                        <button type="button" class="link" @onclick="() => { _userForm = null; _user = null; }">Fermer</button>
+                        <button type="button" class="link" @onclick="CloseUser">Fermer</button>
                     </div>
+                    @if (!editable)
+                    {
+                        <div class="notice info">Ce compte a des rôles que vous ne gérez pas : consultation seule.</div>
+                    }
                     <form @onsubmit="SaveUserAsync" style="display:flex;flex-direction:column;gap:12px">
                         <div class="form">
                             @if (_user == null)
                             {
-                                <div class="f"><label for="u-login">Identifiant</label><input id="u-login" @bind="_userForm.Login" @bind:event="oninput" placeholder="prenom.nom" /></div>
+                                <div class="f"><label for="u-login">Identifiant</label><input id="u-login" @bind="_form.Login" @bind:event="oninput" placeholder="prenom.nom" /></div>
                             }
-                            <div class="f grow"><label for="u-name">Nom affiché</label><input id="u-name" @bind="_userForm.Name" @bind:event="oninput" disabled="@(!CanAdmin)" /></div>
-                            <div class="f">
-                                <label for="u-role">Rôle</label>
-                                <select id="u-role" @bind="_userForm.RoleId" disabled="@(!CanAdmin)">
-                                    @foreach (var r in _roles)
-                                    {
-                                        <option value="@r.Id">@r.Name</option>
-                                    }
-                                </select>
-                            </div>
+                            <div class="f grow"><label for="u-name">Nom affiché</label><input id="u-name" @bind="_form.Name" @bind:event="oninput" disabled="@(!editable)" /></div>
+                            <label class="check"><input type="checkbox" @bind="_form.Active" disabled="@(!editable)" />Compte actif</label>
                         </div>
 
-                        <div class="f">
-                            <span>Périmètre : secteurs</span>
-                            <div class="checks">
-                                @foreach (var s in Sectors.All)
-                                {
-                                    <label class="check"><input type="checkbox" checked="@_userForm.Sectors.Contains(s)" disabled="@(!CanAdmin)"
-                                                                @onchange="e => ToggleIn(_userForm.Sectors, s, e.Value is true)" />@Sectors.Label(s)</label>
-                                }
+                        <h3 class="sub">Rôles attribués</h3>
+                        @for (var i = 0; i < _form.Assignments.Count; i++)
+                        {
+                            var a = _form.Assignments[i];
+                            var index = i;
+                            <div class="assign">
+                                <div class="form">
+                                    <div class="f grow">
+                                        <label for="@($"a{index}-role")">Rôle @(index + 1)</label>
+                                        <select id="@($"a{index}-role")" @bind="a.RoleId" disabled="@(!editable)">
+                                            @foreach (var r in RoleChoices(a.RoleId))
+                                            {
+                                                <option value="@r.Id">@r.Name@(r.IsActive ? "" : " (inactif)")</option>
+                                            }
+                                        </select>
+                                    </div>
+                                    @if (editable)
+                                    {
+                                        <button type="button" class="link danger" style="margin-bottom:9px" @onclick="() => _form.Assignments.RemoveAt(index)">Retirer</button>
+                                    }
+                                </div>
+                                <div class="form">
+                                    <div class="f"><label for="@($"a{index}-from")">Valide du</label><input id="@($"a{index}-from")" type="date" @bind="a.From" disabled="@(!editable)" /></div>
+                                    <div class="f"><label for="@($"a{index}-to")">au</label><input id="@($"a{index}-to")" type="date" @bind="a.To" disabled="@(!editable)" /></div>
+                                    <div class="f">
+                                        <label for="@($"a{index}-team")">Équipe</label>
+                                        <select id="@($"a{index}-team")" @bind="a.Team" disabled="@(!editable)">
+                                            <option value="">Toutes les équipes</option>
+                                            @foreach (var t in Plant.Teams)
+                                            {
+                                                <option value="@t">@t</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="f">
+                                    <span>Secteurs <small class="nd">(aucun = tous)</small></span>
+                                    <div class="checks">
+                                        @foreach (var s in Sectors.All)
+                                        {
+                                            <label class="check"><input type="checkbox" checked="@a.Sectors.Contains(s)" disabled="@(!editable)"
+                                                                        @onchange="e => ToggleIn(a.Sectors, s, e.Value is true)" />@Sectors.Label(s)</label>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="f">
+                                    <span>Machines <small class="nd">(aucune = toutes celles des secteurs)</small></span>
+                                    <div class="checks">
+                                        @foreach (var m in _machines.Where(m => a.Sectors.Count == 0 || a.Sectors.Contains(m.Sector)))
+                                        {
+                                            <label class="check"><input type="checkbox" checked="@a.Machines.Contains(m.Id)" disabled="@(!editable)"
+                                                                        @onchange="e => ToggleIn(a.Machines, m.Id, e.Value is true)" />@m.Id</label>
+                                        }
+                                    </div>
+                                </div>
                             </div>
-                            <small class="nd">Aucun coché = tous les secteurs.</small>
-                        </div>
-                        <div class="f">
-                            <span>Périmètre : machines</span>
-                            <div class="checks">
-                                @foreach (var m in _machines.Where(m => _userForm.Sectors.Count == 0 || _userForm.Sectors.Contains(m.Sector)))
-                                {
-                                    <label class="check"><input type="checkbox" checked="@_userForm.Machines.Contains(m.Id)" disabled="@(!CanAdmin)"
-                                                                @onchange="e => ToggleIn(_userForm.Machines, m.Id, e.Value is true)" />@m.Id</label>
-                                }
-                            </div>
-                            <small class="nd">Aucune cochée = toutes les machines des secteurs choisis.</small>
-                        </div>
-                        <div class="f">
-                            <label for="u-team">Périmètre : équipe</label>
-                            <select id="u-team" @bind="_userForm.Team" disabled="@(!CanAdmin)" style="max-width:220px">
-                                <option value="">Toutes les équipes</option>
-                                @foreach (var t in Plant.Teams)
-                                {
-                                    <option value="@t">@t</option>
-                                }
-                            </select>
-                        </div>
-                        <label class="check"><input type="checkbox" @bind="_userForm.Active" disabled="@(!CanAdmin)" />Compte actif</label>
+                        }
+                        @if (editable && _assignable.Count > 0)
+                        {
+                            <button type="button" class="link" style="align-self:flex-start" @onclick="AddAssignment">+ Ajouter un rôle</button>
+                        }
+
+                        <h3 class="sub">Droits effectifs aujourd'hui</h3>
+                        <EffectiveRights Grants="PreviewGrants()" />
 
                         @if (_user != null)
                         {
@@ -256,20 +337,20 @@
                             </dl>
                         }
 
-                        @if (CanAdmin)
-                        {
-                            <div class="segs">
+                        <div class="segs">
+                            @if (editable && CanAccounts)
+                            {
                                 <button class="bar acc" type="submit">@(_user == null ? "Créer le compte" : "Enregistrer")</button>
-                                @if (_user != null)
+                            }
+                            @if (_user != null && editable && Session.Can(Perm.ComptesDebloquer))
+                            {
+                                <button type="button" class="bar" @onclick="ResetPasswordAsync">Réinitialiser le mot de passe</button>
+                                @if (_user.IsLocked(Now))
                                 {
-                                    <button type="button" class="bar" @onclick="ResetPasswordAsync">Réinitialiser le mot de passe</button>
-                                    @if (_user.IsLocked(Now))
-                                    {
-                                        <button type="button" class="bar" @onclick="UnlockAsync">Débloquer</button>
-                                    }
+                                    <button type="button" class="bar" @onclick="UnlockAsync">Débloquer</button>
                                 }
-                            </div>
-                        }
+                            }
+                        </div>
                     </form>
                 </section>
             }
@@ -277,19 +358,20 @@
     }
     else if (_policy != null)
     {
+        var canEdit = Session.Can(Perm.SecuriteGerer);
         <section class="card" style="max-width:760px">
             <h2>Règles de sécurité <small>appliquées à tous les comptes</small></h2>
             <form @onsubmit="SavePolicyAsync" style="display:flex;flex-direction:column;gap:14px">
                 <div class="form">
-                    <div class="f"><label for="p-len">Longueur minimale du mot de passe</label><input id="p-len" type="number" min="8" max="64" @bind="_policy.MinPasswordLength" disabled="@(!CanAdmin)" /></div>
-                    <div class="f"><label for="p-fail">Échecs avant blocage</label><input id="p-fail" type="number" min="3" max="20" @bind="_policy.MaxFailedAttempts" disabled="@(!CanAdmin)" /></div>
-                    <div class="f"><label for="p-lock">Durée du blocage (min, 0 = déblocage par un administrateur)</label><input id="p-lock" type="number" min="0" max="1440" @bind="_policy.LockoutMinutes" disabled="@(!CanAdmin)" /></div>
-                    <div class="f"><label for="p-idle">Verrouillage après inactivité (min, 0 = jamais)</label><input id="p-idle" type="number" min="0" max="480" @bind="_policy.SessionTimeoutMinutes" disabled="@(!CanAdmin)" /></div>
+                    <div class="f"><label for="p-len">Longueur minimale du mot de passe</label><input id="p-len" type="number" min="8" max="64" @bind="_policy.MinPasswordLength" disabled="@(!canEdit)" /></div>
+                    <div class="f"><label for="p-fail">Échecs avant blocage</label><input id="p-fail" type="number" min="3" max="20" @bind="_policy.MaxFailedAttempts" disabled="@(!canEdit)" /></div>
+                    <div class="f"><label for="p-lock">Durée du blocage (min, 0 = déblocage par un administrateur)</label><input id="p-lock" type="number" min="0" max="1440" @bind="_policy.LockoutMinutes" disabled="@(!canEdit)" /></div>
+                    <div class="f"><label for="p-idle">Verrouillage après inactivité (min, 0 = jamais)</label><input id="p-idle" type="number" min="0" max="480" @bind="_policy.SessionTimeoutMinutes" disabled="@(!canEdit)" /></div>
                 </div>
-                <label class="check"><input type="checkbox" @bind="_policy.RequireLetterAndDigit" disabled="@(!CanAdmin)" />Le mot de passe contient au moins une lettre et un chiffre</label>
-                <label class="check"><input type="checkbox" @bind="_policy.RequireSecondValidator" disabled="@(!CanAdmin)" />Une saisie est validée par une autre personne que son auteur</label>
+                <label class="check"><input type="checkbox" @bind="_policy.RequireLetterAndDigit" disabled="@(!canEdit)" />Le mot de passe contient au moins une lettre et un chiffre</label>
+                <label class="check"><input type="checkbox" @bind="_policy.RequireSecondValidator" disabled="@(!canEdit)" />Une saisie est validée par une autre personne que son auteur</label>
                 <p class="nd" style="font-size:13px">Les mots de passe sont stockés hachés (PBKDF2-SHA256), jamais en clair. Un identifiant inconnu et un mauvais mot de passe donnent la même réponse.</p>
-                @if (CanAdmin)
+                @if (canEdit)
                 {
                     <div><button class="bar acc" type="submit">Enregistrer les règles</button></div>
                 }
@@ -299,35 +381,56 @@
 </RequireAccess>
 
 @code {
-    private sealed class UserForm
+    private sealed class AssignmentForm
     {
-        public string Login { get; set; } = "";
-        public string Name { get; set; } = "";
         public int RoleId { get; set; }
         public List<string> Sectors { get; set; } = new();
         public List<string> Machines { get; set; } = new();
         public string Team { get; set; } = "";
+        public DateTime? From { get; set; }
+        public DateTime? To { get; set; }
+    }
+
+    private sealed class UserForm
+    {
+        public string Login { get; set; } = "";
+        public string Name { get; set; } = "";
         public bool Active { get; set; } = true;
+        public List<AssignmentForm> Assignments { get; set; } = new();
     }
 
     private int _tab;
     private IReadOnlyList<Role> _roles = Array.Empty<Role>();
     private IReadOnlyList<AppUser> _users = Array.Empty<AppUser>();
+    private IReadOnlyList<Role> _assignable = Array.Empty<Role>();
+    private HashSet<int> _manageable = new();
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+
     private Role? _role;
     private PermissionSet _draft = new();
     private string _roleName = "";
     private string _roleDescription = "";
+    private bool _roleActive = true;
+    private HashSet<int> _roleAssignable = new();
+    private string _roleFilter = "";
     private string _newRoleName = "";
+
     private AppUser? _user;
-    private UserForm? _userForm;
+    private UserForm? _form;
+    private string _userFilter = "";
+    private int _userRoleFilter;
+
     private SecurityPolicy? _policy;
     private (string Login, string Password)? _secret;
 
-    private bool CanAdmin => Session.Can(Modules.Utilisateurs, AppAction.Administrer);
+    private bool CanRoles => Session.Can(Perm.RolesGerer);
+    private bool CanAccounts => Session.Can(Perm.ComptesGerer) || CanRoles;
+    private PermissionSet Perms => _role?.IsSystem == true ? PermissionSet.Full() : _draft;
+    private int MissingTemplates => RoleTemplates.All.Count(t => !_roles.Any(r => r.Code == t.Code || string.Equals(r.Name, t.Name, StringComparison.OrdinalIgnoreCase)));
 
-    private bool RoleDirty => _role != null && !_role.IsSystem
-        && (PermissionSet.Diff(_role.Permissions, _draft).Length > 0 || _roleName != _role.Name || _roleDescription != _role.Description);
+    private bool RoleDirty => _role is { IsSystem: false }
+        && (!_role.Permissions.SameAs(_draft) || _roleName != _role.Name || _roleDescription != _role.Description
+            || _roleActive != _role.IsActive || !_roleAssignable.SetEquals(_role.AssignableRoleIds));
 
     protected override async Task OnInitializedAsync()
     {
@@ -350,7 +453,12 @@
         {
             _roles = await Admin.ListRolesAsync(Actor);
             _users = await Admin.ListUsersAsync(Actor);
+            _assignable = await Admin.AssignableRolesAsync(Actor);
             _policy = (await Admin.GetPolicyAsync(Actor)).Clone();
+            _manageable = new HashSet<int>();
+            foreach (var u in _users)
+                if (await Admin.CanManageAsync(Actor, u))
+                    _manageable.Add(u.Id);
         });
         var keep = selectRoleId ?? _role?.Id;
         SelectRole(_roles.FirstOrDefault(r => r.Id == keep) ?? _roles.FirstOrDefault(r => !r.IsSystem) ?? _roles.FirstOrDefault());
@@ -363,25 +471,32 @@
     private void SelectRole(Role? role)
     {
         _role = role;
-        _draft = role?.IsSystem == true ? PermissionSet.Full() : role?.Permissions.Clone() ?? new PermissionSet();
+        _draft = role?.Permissions.Clone() ?? new PermissionSet();
         _roleName = role?.Name ?? "";
         _roleDescription = role?.Description ?? "";
+        _roleActive = role?.IsActive ?? true;
+        _roleAssignable = role?.AssignableRoleIds.ToHashSet() ?? new HashSet<int>();
     }
 
-    private void Toggle(string module, AppAction action, bool on)
+    private void SetModule(string module, bool on)
     {
-        var current = _draft[module];
-        var next = on ? current | action : current & ~action;
-        // Removing Voir removes everything; granting anything grants Voir.
-        if (!on && action == AppAction.Voir)
-            next = AppAction.None;
-        _draft.Set(module, next);
+        foreach (var p in PermissionCatalog.ForModule(module).OrderBy(p => p.IsView ? 1 : 0))
+            _draft.Set(p.Key, on);
+    }
+
+    private void ToggleAssignable(int roleId, bool on)
+    {
+        if (on)
+            _roleAssignable.Add(roleId);
+        else
+            _roleAssignable.Remove(roleId);
     }
 
     private async Task SaveRoleAsync()
     {
         var role = _role!;
-        if (await Run(() => Admin.UpdateRoleAsync(Actor, role.Id, _roleName, _roleDescription, _draft), $"Rôle « {_roleName.Trim()} » enregistré."))
+        var change = new RoleChange(_roleName, _roleDescription, _roleActive, _draft, _roleAssignable.ToList());
+        if (await Run(() => Admin.UpdateRoleAsync(Actor, role.Id, change), $"Rôle « {_roleName.Trim()} » enregistré. Il s'applique à ses titulaires dès leur prochaine action."))
         {
             await ReloadAsync(role.Id);
             await Session.RefreshAsync();
@@ -391,7 +506,7 @@
     private async Task CreateRoleAsync()
     {
         Role? created = null;
-        if (await Run(async () => created = await Admin.CreateRoleAsync(Actor, _newRoleName, "", null), "Rôle créé, sans droit : cochez ce qu'il peut faire."))
+        if (await Run(async () => created = await Admin.CreateRoleAsync(Actor, _newRoleName, "", null), "Rôle créé, sans permission : cochez ce qu'il peut faire."))
         {
             _newRoleName = "";
             await ReloadAsync(created!.Id);
@@ -417,6 +532,16 @@
         }
     }
 
+    private async Task AddTemplatesAsync()
+    {
+        var count = 0;
+        if (await Run(async () => count = await Admin.AddTemplatesAsync(Actor)))
+        {
+            Info = $"{count} rôles types ajoutés ; modifiez-les librement.";
+            await ReloadAsync();
+        }
+    }
+
     private string UniqueName(string name)
     {
         var candidate = name;
@@ -427,27 +552,54 @@
 
     // ---------- users ----------
 
+    private IEnumerable<AppUser> FilteredUsers()
+        => _users
+            .Where(u => _userRoleFilter == 0 || u.Assignments.Any(a => a.RoleId == _userRoleFilter))
+            .Where(u => string.IsNullOrWhiteSpace(_userFilter)
+                        || u.Login.Contains(_userFilter.Trim(), StringComparison.OrdinalIgnoreCase)
+                        || u.DisplayName.Contains(_userFilter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    // The roles offered in an assignment row: the assignable ones, plus the
+    // one already there (shown even if this actor could not give it).
+    private IEnumerable<Role> RoleChoices(int current)
+        => _roles.Where(r => _assignable.Any(a => a.Id == r.Id) || r.Id == current);
+
     private void NewUser()
     {
         _user = null;
-        _userForm = new UserForm { RoleId = _roles.FirstOrDefault(r => r.Code == "operateur")?.Id ?? _roles.Last().Id };
+        _form = new UserForm();
+        AddAssignment();
         Error = Info = null;
     }
+
+    private void AddAssignment()
+        => _form!.Assignments.Add(new AssignmentForm { RoleId = _assignable.FirstOrDefault(r => !r.IsSystem)?.Id ?? _assignable.FirstOrDefault()?.Id ?? 0 });
 
     private void EditUser(AppUser u)
     {
         _user = u;
-        _userForm = new UserForm
+        _form = new UserForm
         {
             Login = u.Login,
             Name = u.DisplayName,
-            RoleId = u.RoleId,
-            Sectors = u.Scope.Sectors.ToList(),
-            Machines = u.Scope.Machines.ToList(),
-            Team = u.Scope.Team ?? "",
             Active = u.IsActive,
+            Assignments = u.Assignments.Select(a => new AssignmentForm
+            {
+                RoleId = a.RoleId,
+                Sectors = a.Scope.Sectors.ToList(),
+                Machines = a.Scope.Machines.ToList(),
+                Team = a.Scope.Team ?? "",
+                From = a.ValidFrom,
+                To = a.ValidTo,
+            }).ToList(),
         };
         Error = Info = null;
+    }
+
+    private void CloseUser()
+    {
+        _form = null;
+        _user = null;
     }
 
     private static void ToggleIn(List<string> list, string value, bool on)
@@ -457,19 +609,39 @@
             list.Add(value);
     }
 
+    private List<RoleAssignment> BuildAssignments()
+        => _form!.Assignments.Select(a =>
+        {
+            var machines = a.Machines.Where(id => a.Sectors.Count == 0 || _machines.Any(m => m.Id == id && a.Sectors.Contains(m.Sector))).ToList();
+            return new RoleAssignment
+            {
+                RoleId = a.RoleId,
+                RoleName = _roles.FirstOrDefault(r => r.Id == a.RoleId)?.Name ?? "",
+                Scope = new DataScope(a.Sectors.ToList(), string.IsNullOrEmpty(a.Team) ? null : a.Team, machines),
+                ValidFrom = a.From,
+                ValidTo = a.To,
+            };
+        }).ToList();
+
+    private IReadOnlyList<Actor.Grant> PreviewGrants()
+        => BuildAssignments()
+            .Where(a => a.IsCurrent(Now))
+            .Select(a => (Role: _roles.FirstOrDefault(r => r.Id == a.RoleId), Assignment: a))
+            .Where(x => x.Role is { IsActive: true })
+            .Select(x => new Actor.Grant(x.Role!, x.Assignment))
+            .ToList();
+
     private async Task SaveUserAsync()
     {
-        var form = _userForm!;
-        var machines = form.Machines.Where(id => form.Sectors.Count == 0 || _machines.Any(m => m.Id == id && form.Sectors.Contains(m.Sector))).ToList();
-        var scope = new DataScope(form.Sectors.ToList(), string.IsNullOrEmpty(form.Team) ? null : form.Team, machines);
-        var draft = new UserDraft(form.Login, form.Name, form.RoleId, scope, form.Active);
+        var form = _form!;
+        var draft = new UserDraft(form.Login, form.Name, BuildAssignments(), form.Active);
         if (_user == null)
         {
             string? password = null;
             if (await Run(async () => password = await Admin.CreateUserAsync(Actor, draft), "Compte créé."))
             {
                 _secret = (AccessAdminService.CheckLogin(form.Login), password!);
-                _userForm = null;
+                CloseUser();
                 await ReloadAsync();
             }
         }

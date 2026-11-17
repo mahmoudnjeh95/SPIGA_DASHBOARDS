@@ -63,17 +63,28 @@ public sealed class TestApp : IDisposable
 
     public const string AdminPassword = "Admin2026secure";
 
-    public Task<Actor> SetupAdminAsync() => Auth.CreateFirstAdminAsync("admin", "Administrateur L2I", AdminPassword);
+    public Task<Actor> SetupAdminAsync(bool templates = true)
+        => Auth.CreateFirstAdminAsync("admin", "Administrateur L2I", AdminPassword, templates);
 
-    // Creates an account with a role (by code) and signs it in with a known password.
+    public static RoleAssignment As(Role role, DataScope? scope = null, DateTime? from = null, DateTime? to = null)
+        => new() { RoleId = role.Id, RoleName = role.Name, Scope = scope ?? DataScope.Everything, ValidFrom = from, ValidTo = to };
+
+    public async Task<Role> RoleAsync(string code) => await Roles.GetByCodeAsync(code) ?? throw new InvalidOperationException(code);
+
+    // Creates an account with one role (by code) and signs it in with a known password.
     public async Task<Actor> UserAsync(Actor admin, string login, string roleCode, DataScope? scope = null)
+        => await UserAsync(admin, login, As(await RoleAsync(roleCode), scope));
+
+    public async Task<Actor> UserAsync(Actor admin, string login, params RoleAssignment[] assignments)
     {
-        var role = await Roles.GetByCodeAsync(roleCode) ?? throw new InvalidOperationException(roleCode);
-        var temporary = await Admin.CreateUserAsync(admin, new UserDraft(login, login, role.Id, scope ?? DataScope.Everything));
+        var temporary = await Admin.CreateUserAsync(admin, new UserDraft(login, login, assignments));
         var first = await Auth.LoginAsync(login, temporary);
         await Auth.ChangePasswordAsync(first.Actor!, temporary, "Password2026x");
         return (await Auth.LoginAsync(login, "Password2026x")).Actor!;
     }
+
+    public static DataScope Sector(string sector) => new(new[] { sector }, null, Array.Empty<string>());
+    public static DataScope Team(string team) => new(Array.Empty<string>(), team, Array.Empty<string>());
 
     public async Task<IReadOnlyList<AuditEntry>> AuditAsync()
         => await Audit.QueryAsync(new AuditQuery(DateTime.MinValue, DateTime.MaxValue));

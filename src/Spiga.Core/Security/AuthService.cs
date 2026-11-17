@@ -15,6 +15,7 @@ public enum LoginStatus
     InvalidCredentials,
     Locked,
     Disabled,
+    NoRole,
 }
 
 public sealed record LoginResult(LoginStatus Status, Actor? Actor = null, string Message = "")
@@ -34,9 +35,10 @@ public sealed class AuthService(
 
     public async Task<bool> NeedsSetupAsync() => await users.CountAsync() == 0;
 
-    // First start only: creates the first administrator. Refused as soon as
-    // any account exists, so the setup page cannot be replayed.
-    public async Task<Actor> CreateFirstAdminAsync(string login, string displayName, string password)
+    // First start only: creates the first administrator, and the role
+    // templates when asked. Refused as soon as any account exists, so the
+    // setup page cannot be replayed.
+    public async Task<Actor> CreateFirstAdminAsync(string login, string displayName, string password, bool installTemplates = false)
     {
         if (!await NeedsSetupAsync())
             throw new RuleViolationException("L'application est déjà installée : connectez-vous avec un compte existant.");
@@ -47,24 +49,39 @@ public sealed class AuthService(
         if (error != null)
             throw new RuleViolationException(error);
 
-        var adminRole = await roles.GetByCodeAsync(DefaultRoles.AdminCode)
+        var adminRole = await roles.GetByCodeAsync(RoleTemplates.AdminCode)
             ?? throw new InvalidOperationException("Rôle Administrateur introuvable : la base n'a pas été initialisée.");
         var user = new AppUser
         {
             Login = login,
             DisplayName = displayName.Trim(),
-            RoleId = adminRole.Id,
-            RoleName = adminRole.Name,
             PasswordHash = PasswordHasher.Hash(password),
             MustChangePassword = false,
             IsActive = true,
             CreatedAt = Now,
             PasswordChangedAt = Now,
             LastLoginAt = Now,
+            Assignments = { new RoleAssignment { RoleId = adminRole.Id, RoleName = adminRole.Name, Scope = DataScope.Everything } },
         };
         user.Id = await users.InsertAsync(user);
-        await Write(login, AuditActions.SetupDone, login, $"Compte {login} créé avec le rôle Administrateur.");
-        return new Actor(user, adminRole);
+        var templates = installTemplates ? await AccessAdminService.InstallTemplatesAsync(roles) : 0;
+        await Write(login, AuditActions.SetupDone, login,
+            $"Compte {login} créé avec le rôle Administrateur{(templates > 0 ? $" ; {templates} rôles types créés" : "")}.");
+        return await BuildActorAsync(user) ?? throw new InvalidOperationException("Administrateur sans rôle.");
+    }
+
+    // The user's current assignments of active roles. Null when none: the
+    // account cannot do anything and is refused at sign-in.
+    public async Task<Actor?> BuildActorAsync(AppUser user)
+    {
+        var allRoles = (await roles.ListAsync()).ToDictionary(r => r.Id);
+        var grants = user.Assignments
+            .Where(a => a.IsCurrent(Now))
+            .Select(a => (Role: allRoles.GetValueOrDefault(a.RoleId), Assignment: a))
+            .Where(g => g.Role is { IsActive: true })
+            .Select(g => new Actor.Grant(g.Role!, g.Assignment))
+            .ToList();
+        return grants.Count == 0 ? null : new Actor(user, grants);
     }
 
     public async Task<LoginResult> LoginAsync(string login, string password)
@@ -108,14 +125,19 @@ public sealed class AuthService(
             return new LoginResult(LoginStatus.Disabled, Message: "Ce compte est désactivé. Contactez un administrateur.");
         }
 
-        var role = await roles.GetAsync(user.RoleId)
-            ?? throw new InvalidOperationException($"Rôle {user.RoleId} introuvable pour {user.Login}.");
         user.FailedAttempts = 0;
         user.LockedUntil = null;
+        var actor = await BuildActorAsync(user);
+        if (actor == null)
+        {
+            await users.UpdateAsync(user);
+            await Write(user.Login, AuditActions.LoginRefused, user.Login, "Aucun rôle actif.");
+            return new LoginResult(LoginStatus.NoRole, Message: "Aucun rôle actif n'est attribué à ce compte. Contactez un administrateur.");
+        }
         user.LastLoginAt = Now;
         await users.UpdateAsync(user);
-        await Write(user.Login, AuditActions.LoginOk, user.Login, $"Rôle {role.Name}.");
-        return new LoginResult(LoginStatus.Success, new Actor(user, role));
+        await Write(user.Login, AuditActions.LoginOk, user.Login, $"Rôles : {actor.RoleNames}.");
+        return new LoginResult(LoginStatus.Success, actor);
     }
 
     public async Task ChangePasswordAsync(Actor actor, string currentPassword, string newPassword)
@@ -145,8 +167,7 @@ public sealed class AuthService(
         var user = await users.GetAsync(actor.User.Id);
         if (user == null || !user.IsActive || user.IsLocked(Now))
             return null;
-        var role = await roles.GetAsync(user.RoleId);
-        return role == null ? null : new Actor(user, role);
+        return await BuildActorAsync(user);
     }
 
     // Web host, page reloaded: the tab's stored session is taken back if the
@@ -160,8 +181,7 @@ public sealed class AuthService(
         var user = await users.GetAsync(userId);
         if (user == null || !user.IsActive || user.IsLocked(Now) || user.MustChangePassword)
             return null;
-        var role = await roles.GetAsync(user.RoleId);
-        return role == null ? null : new Actor(user, role);
+        return await BuildActorAsync(user);
     }
 
     public async Task SetThemeAsync(Actor actor, string theme)

@@ -52,19 +52,23 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
         return (TeamOnShift(Shifts.ProductionDate(now), shift), shift);
     }
 
-    public async Task<IReadOnlyList<PlantMachine>> MachinesFor(Actor actor, string? sector)
+    // The machines where the actor holds `permission` (any team).
+    public async Task<IReadOnlyList<PlantMachine>> MachinesFor(Actor actor, string permission, string? sector)
         => (await GetMachinesAsync())
-            .Where(m => actor.Scope.AllowsMachine(m.Id, m.Sector) && (sector == null || m.Sector == sector))
+            .Where(m => actor.Allows(permission, m.Sector, m.Id) && (sector == null || m.Sector == sector))
             .ToList();
 
     // Lots of the given machines over [from, to), narrowed to a poste and to
-    // the actor's team when their scope has one.
-    public async Task<List<ProductionBucket>> LotsAsync(Actor actor, IReadOnlyCollection<PlantMachine> machines, DateTime from, DateTime to, int? shiftId)
+    // what the actor's assignments cover (a team-scoped role sees its team's
+    // postes only).
+    public async Task<List<ProductionBucket>> LotsAsync(
+        Actor actor, string permission, IReadOnlyCollection<PlantMachine> machines, DateTime from, DateTime to, int? shiftId)
     {
+        var sectorOf = machines.ToDictionary(m => m.Id, m => m.Sector);
         var lots = await repository.GetLotsForMachinesAsync(machines.Select(m => m.Id).ToList(), from, to);
         return lots
             .Where(l => shiftId == null || l.ShiftId == shiftId)
-            .Where(l => actor.Scope.AllowsTeam(teams.TeamOf(l)))
+            .Where(l => sectorOf.TryGetValue(l.MachineId, out var sector) && actor.Allows(permission, sector, l.MachineId, teams.TeamOf(l)))
             .ToList();
     }
 

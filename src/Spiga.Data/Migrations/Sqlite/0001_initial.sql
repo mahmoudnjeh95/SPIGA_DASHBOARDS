@@ -7,36 +7,54 @@ CREATE TABLE Roles (
     Name        TEXT    NOT NULL,
     Description TEXT    NOT NULL DEFAULT '',
     IsSystem    INTEGER NOT NULL DEFAULT 0,
+    IsActive    INTEGER NOT NULL DEFAULT 1,
     CreatedAt   TEXT    NOT NULL,
     UpdatedAt   TEXT    NOT NULL
 );
 
-CREATE TABLE RolePermissions (
-    RoleId  INTEGER NOT NULL REFERENCES Roles(Id) ON DELETE CASCADE,
-    Module  TEXT    NOT NULL,
-    Actions INTEGER NOT NULL,
-    PRIMARY KEY (RoleId, Module)
+-- One row per permission ("module:name", Spiga.Core PermissionCatalog).
+CREATE TABLE RoleGrants (
+    RoleId     INTEGER NOT NULL REFERENCES Roles(Id) ON DELETE CASCADE,
+    Permission TEXT    NOT NULL,
+    PRIMARY KEY (RoleId, Permission)
+);
+
+-- Delegated administration: roles the holders of RoleId may give.
+CREATE TABLE RoleAssignables (
+    RoleId           INTEGER NOT NULL REFERENCES Roles(Id) ON DELETE CASCADE,
+    AssignableRoleId INTEGER NOT NULL REFERENCES Roles(Id) ON DELETE CASCADE,
+    PRIMARY KEY (RoleId, AssignableRoleId)
 );
 
 CREATE TABLE Users (
     Id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     Login              TEXT    NOT NULL UNIQUE COLLATE NOCASE,
     DisplayName        TEXT    NOT NULL,
-    RoleId             INTEGER NOT NULL REFERENCES Roles(Id),
     PasswordHash       TEXT    NOT NULL,
     MustChangePassword INTEGER NOT NULL DEFAULT 1,
     IsActive           INTEGER NOT NULL DEFAULT 1,
     FailedAttempts     INTEGER NOT NULL DEFAULT 0,
     LockedUntil        TEXT    NULL,
-    ScopeSectors       TEXT    NOT NULL DEFAULT '',
-    ScopeTeam          TEXT    NOT NULL DEFAULT '',
-    ScopeMachines      TEXT    NOT NULL DEFAULT '',
     Theme              TEXT    NOT NULL DEFAULT 'light',
     LastLoginAt        TEXT    NULL,
     PasswordChangedAt  TEXT    NULL,
     CreatedAt          TEXT    NOT NULL,
     UpdatedAt          TEXT    NOT NULL
 );
+
+-- A role given to a user over a scope (empty = no restriction), possibly
+-- for a period. A user holds one or more.
+CREATE TABLE UserRoles (
+    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserId        INTEGER NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+    RoleId        INTEGER NOT NULL REFERENCES Roles(Id),
+    ScopeSectors  TEXT    NOT NULL DEFAULT '',
+    ScopeTeam     TEXT    NOT NULL DEFAULT '',
+    ScopeMachines TEXT    NOT NULL DEFAULT '',
+    ValidFrom     TEXT    NULL,
+    ValidTo       TEXT    NULL
+);
+CREATE INDEX IX_UserRoles_User ON UserRoles (UserId);
 
 CREATE TABLE AppSettings (
     Key       TEXT NOT NULL PRIMARY KEY,

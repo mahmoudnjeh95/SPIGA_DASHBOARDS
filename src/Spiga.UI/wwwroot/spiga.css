@@ -119,6 +119,7 @@ table.t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-
 .t td.c, .t th.c { text-align: center; }
 .t td.wrap { white-space: pre-line; font-weight: 400; font-size: 12px; color: var(--fg2); max-width: 360px; }
 .t tr.sel td { background: var(--accent-soft); }
+.t td:has(> .actions) { width: 1%; }
 .t .actions { white-space: nowrap; display: flex; gap: 12px; justify-content: flex-end; }
 .machine-id { font-size: 16px; font-weight: 800; }
 
@@ -171,6 +172,23 @@ dl.kv { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8
 .matrix input { width: 20px; height: 20px; accent-color: var(--accent); }
 .matrix .na { color: var(--line); font-weight: 400; }
 
+/* ---------- permission matrix, assignments ---------- */
+h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--fg3); margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.perm-grid { display: flex; flex-direction: column; }
+.perm-grid .dom { font-size: 11px; font-weight: 700; color: var(--fg3); text-transform: uppercase; letter-spacing: .05em; padding: 12px 0 4px; }
+.perm-row { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 6px 16px; padding: 8px 0; border-top: 1px solid var(--line); }
+.perm-mod b { display: block; font-size: 14px; }
+.perm-mod small { display: block; font-size: 12px; color: var(--fg3); }
+.perm-row:not(.has) .perm-mod b { color: var(--fg2); font-weight: 600; }
+.perm-quick { display: inline-flex; gap: 10px; margin-top: 2px; }
+.perm-list { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+.perm { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px 0 8px; border: 1px solid var(--line); border-radius: 15px; font-size: 13px; font-weight: 600; color: var(--fg2); cursor: pointer; }
+.perm input { width: 16px; height: 16px; accent-color: var(--accent); }
+.perm.on { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.savebar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; position: sticky; bottom: 0; background: var(--tile); padding: 10px 0 2px; border-top: 1px solid var(--line); }
+.assign { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.assign .form .f input[type=date] { min-width: 150px; }
+
 /* ---------- charts ---------- */
 .bars { display: flex; align-items: flex-end; gap: 8px; height: 130px; border-bottom: 1px solid var(--line); position: relative; padding: 0 4px; }
 .bars i { flex: 1; background: var(--bar); border-radius: 3px 3px 0 0; min-height: 1px; }
@@ -200,5 +218,6 @@ dl.kv { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8
     .rail { width: auto; height: auto; border-right: 0; border-bottom: 1px solid var(--soft); }
     .navwrap { max-height: 220px; }
     .filters .f + .f { border: 0; padding: 0; }
+    .perm-row { grid-template-columns: 1fr; }
     .ctx, .view { padding-left: 12px; padding-right: 12px; }
 }

@@ -13,7 +13,7 @@ public abstract class SpigaPage : ComponentBase
     [Inject] protected NavigationManager Nav { get; set; } = default!;
 
     protected Actor Actor => Session.Actor!;
-    protected bool CanEditStationSettings => Session.Can(Modules.Parametres, AppAction.Administrer);
+    protected bool CanEditStationSettings => Session.Can(Perm.ParametresPoste);
     protected DateTime Now => Clock.GetLocalNow().DateTime;
     protected string? Error { get; set; }
     protected string? Info { get; set; }

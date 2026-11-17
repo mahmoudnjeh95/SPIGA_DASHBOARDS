@@ -8,16 +8,26 @@ CREATE TABLE dbo.Roles (
     Name        NVARCHAR(60)  NOT NULL,
     Description NVARCHAR(400) NOT NULL DEFAULT '',
     IsSystem    BIT           NOT NULL DEFAULT 0,
+    IsActive    BIT           NOT NULL DEFAULT 1,
     CreatedAt   DATETIME2(0)  NOT NULL,
     UpdatedAt   DATETIME2(0)  NOT NULL
 );
 GO
 
-CREATE TABLE dbo.RolePermissions (
-    RoleId  INT          NOT NULL REFERENCES dbo.Roles(Id) ON DELETE CASCADE,
-    Module  VARCHAR(40)  NOT NULL,
-    Actions INT          NOT NULL,
-    CONSTRAINT PK_RolePermissions PRIMARY KEY (RoleId, Module)
+-- One row per permission ("module:name", Spiga.Core PermissionCatalog).
+CREATE TABLE dbo.RoleGrants (
+    RoleId     INT          NOT NULL REFERENCES dbo.Roles(Id) ON DELETE CASCADE,
+    Permission VARCHAR(60)  NOT NULL,
+    CONSTRAINT PK_RoleGrants PRIMARY KEY (RoleId, Permission)
+);
+GO
+
+-- Delegated administration: roles the holders of RoleId may give.
+-- (No cascade on the second key: SQL Server refuses two cascade paths.)
+CREATE TABLE dbo.RoleAssignables (
+    RoleId           INT NOT NULL REFERENCES dbo.Roles(Id) ON DELETE CASCADE,
+    AssignableRoleId INT NOT NULL REFERENCES dbo.Roles(Id),
+    CONSTRAINT PK_RoleAssignables PRIMARY KEY (RoleId, AssignableRoleId)
 );
 GO
 
@@ -25,21 +35,32 @@ CREATE TABLE dbo.Users (
     Id                 INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     Login              NVARCHAR(40)  NOT NULL UNIQUE,
     DisplayName        NVARCHAR(100) NOT NULL,
-    RoleId             INT           NOT NULL REFERENCES dbo.Roles(Id),
     PasswordHash       VARCHAR(200)  NOT NULL,
     MustChangePassword BIT           NOT NULL DEFAULT 1,
     IsActive           BIT           NOT NULL DEFAULT 1,
     FailedAttempts     INT           NOT NULL DEFAULT 0,
     LockedUntil        DATETIME2(0)  NULL,
-    ScopeSectors       NVARCHAR(200) NOT NULL DEFAULT '',
-    ScopeTeam          NVARCHAR(50)  NOT NULL DEFAULT '',
-    ScopeMachines      NVARCHAR(400) NOT NULL DEFAULT '',
     Theme              VARCHAR(10)   NOT NULL DEFAULT 'light',
     LastLoginAt        DATETIME2(0)  NULL,
     PasswordChangedAt  DATETIME2(0)  NULL,
     CreatedAt          DATETIME2(0)  NOT NULL,
     UpdatedAt          DATETIME2(0)  NOT NULL
 );
+GO
+
+-- A role given to a user over a scope (empty = no restriction), possibly
+-- for a period. A user holds one or more.
+CREATE TABLE dbo.UserRoles (
+    Id            BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    UserId        INT           NOT NULL REFERENCES dbo.Users(Id) ON DELETE CASCADE,
+    RoleId        INT           NOT NULL REFERENCES dbo.Roles(Id),
+    ScopeSectors  NVARCHAR(200) NOT NULL DEFAULT '',
+    ScopeTeam     NVARCHAR(50)  NOT NULL DEFAULT '',
+    ScopeMachines NVARCHAR(400) NOT NULL DEFAULT '',
+    ValidFrom     DATETIME2(0)  NULL,
+    ValidTo       DATETIME2(0)  NULL
+);
+CREATE INDEX IX_UserRoles_User ON dbo.UserRoles (UserId);
 GO
 
 CREATE TABLE dbo.AppSettings (

@@ -1,66 +1,75 @@
 namespace Spiga.Core.Security;
 
-// Actions granted per module. Saisir / Valider / Exporter / Administrer
-// always carry Voir, and actions a module does not offer are dropped, so a
-// stored set can never hold an impossible right.
+// The permissions of a role. Granting a module's permission grants its
+// "voir"; withdrawing "voir" withdraws the whole module. Unknown keys (a
+// permission removed from the catalogue) are ignored.
 public sealed class PermissionSet
 {
-    private readonly Dictionary<string, AppAction> _grants = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
 
     public PermissionSet() { }
 
-    public PermissionSet(IEnumerable<KeyValuePair<string, AppAction>> grants)
+    public PermissionSet(IEnumerable<string> keys)
     {
-        foreach (var (module, actions) in grants)
-            Set(module, actions);
+        foreach (var key in keys)
+            Set(key, true);
     }
 
-    public AppAction this[string module] => _grants.GetValueOrDefault(module);
+    public IReadOnlyCollection<string> Keys => _keys;
 
-    public IReadOnlyDictionary<string, AppAction> Grants => _grants;
+    public int Count => _keys.Count;
 
-    public bool Can(string module, AppAction action)
-        => action != AppAction.None && (this[module] & action) == action;
+    public bool Has(string key) => _keys.Contains(key);
 
-    public bool CanSeeAny(IEnumerable<string> modules) => modules.Any(m => Can(m, AppAction.Voir));
+    public bool Can(string module, AppAction action) => PermissionCatalog.Key(module, action) is { } key && Has(key);
 
-    public void Set(string module, AppAction actions)
+    public bool CanSeeAny(IEnumerable<string> modules) => modules.Any(m => Has(Perm.View(m)));
+
+    public bool HasModule(string module) => Has(Perm.View(module));
+
+    public void Set(string key, bool on)
     {
-        var info = ModuleCatalog.Find(module);
-        if (info == null)
+        var def = PermissionCatalog.Find(key);
+        if (def == null)
             return;
-        actions &= info.Allowed;
-        if (actions != AppAction.None)
-            actions |= AppAction.Voir;
-        if (actions == AppAction.None)
-            _grants.Remove(module);
+        if (on)
+        {
+            _keys.Add(key);
+            _keys.Add(Perm.View(def.Module));
+        }
+        else if (def.IsView)
+        {
+            _keys.RemoveWhere(k => PermissionCatalog.Find(k)?.Module == def.Module);
+        }
         else
-            _grants[module] = actions;
+        {
+            _keys.Remove(key);
+        }
     }
 
-    public PermissionSet With(string module, AppAction actions)
+    public PermissionSet With(string key, bool on = true)
     {
         var copy = Clone();
-        copy.Set(module, actions);
+        copy.Set(key, on);
         return copy;
     }
 
-    public PermissionSet Clone() => new(_grants);
+    public PermissionSet Clone() => new(_keys);
 
-    public static PermissionSet Full()
-        => new(ModuleCatalog.All.Select(m => new KeyValuePair<string, AppAction>(m.Key, m.Allowed)));
+    public static PermissionSet Full() => new(PermissionCatalog.All.Select(p => p.Key));
 
-    // One line per changed module, for the audit trail.
+    public static PermissionSet Union(IEnumerable<PermissionSet> sets) => new(sets.SelectMany(s => s.Keys));
+
+    public bool SameAs(PermissionSet other) => _keys.SetEquals(other._keys);
+
+    // "+ Module › right" / "- Module › right", one line per change, catalogue order.
     public static string Diff(PermissionSet before, PermissionSet after)
-    {
-        var lines = new List<string>();
-        foreach (var module in ModuleCatalog.All)
-        {
-            var b = before[module.Key];
-            var a = after[module.Key];
-            if (a != b)
-                lines.Add($"{module.Label} : {AppActions.Describe(b)} → {AppActions.Describe(a)}");
-        }
-        return string.Join("\n", lines);
-    }
+        => string.Join("\n", PermissionCatalog.All
+            .Where(p => before.Has(p.Key) != after.Has(p.Key))
+            .Select(p => (after.Has(p.Key) ? "+ " : "- ") + PermissionCatalog.Label(p.Key)));
+
+    public string Describe()
+        => string.Join("\n", ModuleCatalog.All
+            .Where(m => HasModule(m.Key))
+            .Select(m => m.Label + " : " + string.Join(", ", PermissionCatalog.ForModule(m.Key).Where(p => Has(p.Key)).Select(p => p.Label))));
 }
