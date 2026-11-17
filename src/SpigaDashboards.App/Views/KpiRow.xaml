@@ -71,6 +71,12 @@
             </StackPanel>
         </Border>
         <Border Style="{StaticResource KpiTileCompact}">
+            <Grid>
+            <!-- Main weight on its target (WeightOnTarget): the tile lit gold,
+                 over its padding up to the outline; no arrow then. -->
+            <Border Margin="-14,-5" CornerRadius="11" BorderThickness="2" IsHitTestVisible="False"
+                    BorderBrush="{DynamicResource GoldBrush}" Background="{DynamicResource GoldTintBrush}"
+                    Visibility="{Binding WeightOnTarget, Converter={StaticResource BoolToVisibility}}"/>
             <StackPanel>
                 <TextBlock Text="Poids moyen (net)" Style="{StaticResource KpiLabelCompact}"/>
                 <Grid>
@@ -86,6 +92,7 @@
                     <views:TrendBadge Grid.Column="1" HorizontalAlignment="Right" Trend="{Binding WeightTrend}"/>
                 </Grid>
             </StackPanel>
+            </Grid>
         </Border>
         <Border Style="{StaticResource KpiTileCompact}">
             <StackPanel>

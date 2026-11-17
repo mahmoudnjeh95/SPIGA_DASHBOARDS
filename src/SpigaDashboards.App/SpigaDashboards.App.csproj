@@ -37,6 +37,8 @@
     <!-- Trend arrows (Flaticon: increase 4721635, decrease 6067145; attribution in À propos). -->
     <Resource Include="Assets\trend-up.png" />
     <Resource Include="Assets\trend-down.png" />
+    <Resource Include="Assets\trend-up-red.png" />
+    <Resource Include="Assets\trend-down-green.png" />
   </ItemGroup>
 
 </Project>

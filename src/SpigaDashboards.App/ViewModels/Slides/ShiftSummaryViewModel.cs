@@ -31,6 +31,8 @@ public class ShiftSummaryViewModel
     public KpiTrend? TrsTrend { get; init; }
     public KpiTrend? SpeedTrend { get; init; }
     public KpiTrend? WeightTrend { get; init; }
+    // Main weight on its target: the Poids moyen tile lights up gold, no arrow.
+    public bool WeightOnTarget => KpiTrend.WeightOnTarget(Kpis);
 
     // Main poste only: per hour of the poste, up to now.
     public ChartParts OnOffChart { get; init; } = ChartParts.Empty();
@@ -90,11 +92,13 @@ public class ShiftSummaryViewModel
             trsTrend = KpiTrend.Of(kpis.TrsPercent, earlier.TrsPercent, " pt");
             speedTrend = KpiTrend.Of(kpis.SpeedBagsPerMinute, earlier.SpeedBagsPerMinute, "");
             // Weight: the main (biggest) weight of the poste, when it was
-            // already the main one 2 min ago. Closer to the target is good.
+            // already the main one 2 min ago. Closer to the target is good
+            // (green arrow, up or down), further is bad (red). On the target:
+            // no arrow, the tile is lit gold instead (WeightOnTarget).
             var mainWeight = kpis.Weights.FirstOrDefault();
             var earlierWeight = mainWeight == null ? null
                 : earlier.Weights.FirstOrDefault(w => Math.Round(w.TargetWeight) == Math.Round(mainWeight.TargetWeight));
-            if (mainWeight?.AvgWeight is { } a && earlierWeight?.AvgWeight is { } b)
+            if (!KpiTrend.WeightOnTarget(kpis) && mainWeight?.AvgWeight is { } a && earlierWeight?.AvgWeight is { } b)
             {
                 var closer = Math.Sign(Math.Abs(b - mainWeight.TargetWeight) - Math.Abs(a - mainWeight.TargetWeight));
                 weightTrend = KpiTrend.Of(a, b, " g", goodDirection: closer);
@@ -129,6 +133,13 @@ public sealed record KpiTrend(int Direction, string Text, int Good)
 {
     public static readonly TimeSpan TrendWindow = TimeSpan.FromMinutes(2);
     private static readonly System.Globalization.CultureInfo French = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+
+    // "On the target": the main weight's average within this of its target.
+    public const double WeightOnTargetGrams = 0.5;
+
+    public static bool WeightOnTarget(KpiSummary kpis)
+        => kpis.Weights.FirstOrDefault() is { AvgWeight: { } avg } main
+           && Math.Abs(avg - main.TargetWeight) < WeightOnTargetGrams;
 
     public static KpiTrend? Of(double? now, double? before, string unit, int? goodDirection = null)
     {

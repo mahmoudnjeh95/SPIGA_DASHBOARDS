@@ -8,8 +8,10 @@ using SpigaDashboards.App.ViewModels.Slides;
 namespace SpigaDashboards.App.Views;
 
 // Up / down arrow beside a poste figure (KpiRow: TRS, vitesse), with the change
-// over the last KpiTrend.TrendWindow under it: green arrow rising, red arrow
-// falling, flat grey stroke when the figure on screen is the same.
+// over the last KpiTrend.TrendWindow under it: arrow and change in the colour
+// of what the move means (TRS, vitesse: rising green, falling red; poids:
+// towards the target green, away from it red), flat grey stroke when the
+// figure on screen is the same.
 // Slides in from the way it points when it appears or turns, then stays still.
 public sealed class TrendBadge : StackPanel
 {
@@ -21,6 +23,10 @@ public sealed class TrendBadge : StackPanel
     // Rising / falling: the chosen icons (Assets/trend-up|down.png); steady: a grey dash.
     private static readonly ImageSource Up = Icon("trend-up.png");
     private static readonly ImageSource Down = Icon("trend-down.png");
+    // Weight: the arrow in the colour of what it means (rising away from the
+    // target = red, falling towards it = green).
+    private static readonly ImageSource UpBad = Icon("trend-up-red.png");
+    private static readonly ImageSource DownGood = Icon("trend-down-green.png");
 
     private readonly Image _icon = new() { Width = 44, Height = 44, Margin = new Thickness(0, -4, 0, -4), HorizontalAlignment = HorizontalAlignment.Center };
     // Same figure: a flat grey stroke in the arrows' style, at their size.
@@ -63,7 +69,9 @@ public sealed class TrendBadge : StackPanel
         }
 
         badge.Visibility = Visibility.Visible;
-        badge._icon.Source = trend.Direction > 0 ? Up : trend.Direction < 0 ? Down : null;
+        badge._icon.Source = trend.Direction > 0 ? (trend.Good < 0 ? UpBad : Up)
+            : trend.Direction < 0 ? (trend.Good > 0 ? DownGood : Down)
+            : null;
         badge._icon.Visibility = trend.Direction == 0 ? Visibility.Collapsed : Visibility.Visible;
         badge._flat.Visibility = trend.Direction == 0 ? Visibility.Visible : Visibility.Collapsed;
         // The change in the colour of what it means: green good, red bad, grey same.

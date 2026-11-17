@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Markup;
+using System.Windows.Threading;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
@@ -85,6 +87,55 @@ public partial class App : Application
     {
         MainWindow = window;
         window.Show();
+
+        // From here on the app runs 24/7 on the hall screen: an error in one
+        // window (15/11/2026: a font WPF couldn't load while Planification
+        // opened) is logged and the app carries on instead of closing. Before
+        // this point an error still closes it: there would be no window to
+        // show, and the watchdog task starts it again.
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            AppLogger.Log($"Erreur fatale, l'application se ferme : {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            AppLogger.Log($"Erreur ignorée (tâche) : {e.Exception.GetBaseException()}");
+            e.SetObserved();
+        };
+    }
+
+    // Errors kept within the last minute: a window failing again and again
+    // (every layout pass) means the app is stuck, it then starts afresh.
+    private readonly Queue<DateTime> _recentErrors = new();
+    private const int MaxErrorsPerMinute = 20;
+    private bool _restarting;
+
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        e.Handled = true;
+        var now = DateTime.Now;
+        _recentErrors.Enqueue(now);
+        while (_recentErrors.Count > 0 && now - _recentErrors.Peek() > TimeSpan.FromMinutes(1))
+            _recentErrors.Dequeue();
+
+        // The full error the first times, then one line each.
+        AppLogger.Log(_recentErrors.Count <= 3
+            ? $"Erreur ignorée, l'application continue : {e.Exception}"
+            : $"Erreur ignorée ({_recentErrors.Count} en 1 min) : {e.Exception.GetType().Name}: {e.Exception.Message}");
+
+        if (_recentErrors.Count < MaxErrorsPerMinute || _restarting)
+            return;
+        _restarting = true;
+        AppLogger.Log($"{MaxErrorsPerMinute} erreurs en 1 minute : l'application redémarre.");
+        try
+        {
+            if (Environment.ProcessPath is { } exe)
+                Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true, WorkingDirectory = AppContext.BaseDirectory });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log($"Redémarrage impossible : {ex.Message}");
+        }
+        Environment.Exit(1);
     }
 
     // SQL Server on site: same server and credentials as the production

@@ -37,7 +37,11 @@ public partial class StatsViewModel : ObservableObject
     private const string AllMachines = "Toutes les lignes";
     private const string AllTeams = "Toutes les équipes";
 
+    // 1 = "Aujourd'hui": the production day, from 06:00 (yesterday's 06:00
+    // before then) to now, compared with the day before. 7 / 30 / 90: calendar
+    // days up to today, compared with the same number of days before.
     [ObservableProperty] private int periodDays = 30;
+    private bool IsToday => PeriodDays == 1;
     [ObservableProperty] private string selectedMachine = AllMachines;
     [ObservableProperty] private string selectedTeam = AllTeams;
     [ObservableProperty] private bool pannesOnly;
@@ -139,7 +143,10 @@ public partial class StatsViewModel : ObservableObject
     private async Task BuildAsync()
     {
         var now = DateTime.Now;
-        var from = now.Date.AddDays(-PeriodDays + 1);
+        var today = IsToday;
+        var from = today
+            ? (now.Hour < 6 ? now.Date.AddDays(-1) : now.Date).AddHours(6)
+            : now.Date.AddDays(-PeriodDays + 1);
         var prevFrom = from.AddDays(-PeriodDays);
         FillOptions();
         var machines = SelectedMachine is AllMachines or null
@@ -154,15 +161,17 @@ public partial class StatsViewModel : ObservableObject
         var prev = all.Where(q => q.StopStart < from).ToList();
 
         // Run hours for MTBF / lost availability: day buckets are light; one
-        // team needs hour buckets (a day mixes the three postes).
-        var buckets = await _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now, team == null ? BucketSize.Day : BucketSize.Hour);
+        // team needs hour buckets (a day mixes the three postes), and so does
+        // today (day buckets start at midnight, the day here at 06:00).
+        var buckets = await _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now,
+            team == null && !today ? BucketSize.Day : BucketSize.Hour);
         var runHours = buckets.Where(b => team == null || _ctx.Teams.TeamOf(b) == team).Sum(b => b.RunMinutes) / 60;
 
         var minutes = cur.Sum(q => q.Minutes);
         var prevMinutes = prev.Sum(q => q.Minutes);
         Tiles.Clear();
         Tiles.Add(new StatTile(PannesOnly ? "Pannes" : "Arrêts qualifiés", cur.Count.ToString(CultureInfo.InvariantCulture),
-            $"vs {prev.Count} sur les {PeriodDays} j précédents", DeltaBrush(cur.Count, prev.Count), Delta(cur.Count, prev.Count)));
+            today ? $"vs {prev.Count} hier" : $"vs {prev.Count} sur les {PeriodDays} j précédents", DeltaBrush(cur.Count, prev.Count), Delta(cur.Count, prev.Count)));
         Tiles.Add(new StatTile("Temps d'arrêt", PlanningContext.Duration(minutes),
             $"vs {PlanningContext.Duration(prevMinutes)} avant", DeltaBrush(minutes, prevMinutes), Delta(minutes, prevMinutes)));
         Tiles.Add(new StatTile("MTBF · temps moyen entre pannes", cur.Count == 0 || runHours <= 0 ? "—" : $"{runHours / cur.Count:0} h",
@@ -236,7 +245,8 @@ public partial class StatsViewModel : ObservableObject
             var plan = plans.FirstOrDefault(p => p.MachineId == g.Key.MachineId && p.Task.Contains(component, StringComparison.OrdinalIgnoreCase));
             var machineId = g.Key.MachineId;
             Repeats.Add(new RepeatRow(_ctx.NameOf(machineId), component, g.Count(), Enumerable.Range(0, Math.Min(8, g.Count())).ToList(),
-                PlanningContext.Duration(g.Sum(q => q.Minutes)), $"{(double)PeriodDays / g.Count():0.#} j",
+                PlanningContext.Duration(g.Sum(q => q.Minutes)),
+                today ? $"{(now - from).TotalHours / g.Count():0.#} h" : $"{(double)PeriodDays / g.Count():0.#} j",
                 plan == null ? "Aucun préventif" : MaintenanceText.Rule(plan),
                 plan == null ? PlanningContext.Brush(Color.FromRgb(0x9A, 0xA4, 0xB2)) : PlanningContext.Brush(Color.FromRgb(0xFA, 0xB2, 0x19)),
                 machineId, new RelayCommand(() => PreventiveRequested?.Invoke(machineId, component))));
