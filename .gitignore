@@ -25,3 +25,10 @@ release/
 
 # Application database of SPIGA Suivi Production (created at first start)
 database/spiga_suivi.db*
+
+# Ricciarelli HMI copy (vendor binaries, 680 MB log), capture and collector logs, collected CSVs
+HMI_CP/
+tools/*capture*.log
+tools/ricciarelli_info_*.log
+tools/data_collector_console.log
+tools/data/
