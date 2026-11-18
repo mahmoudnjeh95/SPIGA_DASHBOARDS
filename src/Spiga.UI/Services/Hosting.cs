@@ -123,6 +123,7 @@ public static class SpigaServices
         services.AddSingleton<Migrator>();
         services.AddSingleton<IUserStore, UserStore>();
         services.AddSingleton<IRoleStore, RoleStore>();
+        services.AddSingleton<IPlatformStore, PlatformStore>();
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<IAuditLog, AuditStore>();
         services.AddSingleton<IWasteStore, WasteStore>();

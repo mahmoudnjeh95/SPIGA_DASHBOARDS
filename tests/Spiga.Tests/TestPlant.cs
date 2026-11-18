@@ -41,12 +41,13 @@ public sealed class TestApp : IDisposable
         new Migrator(Db).MigrateAsync().GetAwaiter().GetResult();
         Users = new UserStore(Db);
         Roles = new RoleStore(Db);
+        Platforms = new PlatformStore(Db);
         Settings = new SettingsStore(Db);
         Audit = new AuditStore(Db);
         Waste = new WasteStore(Db);
         var client = new ClientInfo { Workstation = "TEST-PC" };
         Auth = new AuthService(Users, Roles, Settings, Audit, Clock, client);
-        Admin = new AccessAdminService(Users, Roles, Settings, Audit, Clock, client);
+        Admin = new AccessAdminService(Users, Roles, Platforms, Settings, Audit, Clock, client);
         WasteService = new WasteService(Waste, new FakePlant(), Settings, Audit, Clock, client);
     }
 
@@ -54,6 +55,7 @@ public sealed class TestApp : IDisposable
     public AppDb Db { get; }
     public UserStore Users { get; }
     public RoleStore Roles { get; }
+    public PlatformStore Platforms { get; }
     public SettingsStore Settings { get; }
     public AuditStore Audit { get; }
     public WasteStore Waste { get; }

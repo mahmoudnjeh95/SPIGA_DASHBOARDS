@@ -40,6 +40,9 @@ public static class AuditActions
     public const string RoleUpdated = "Droits du rôle modifiés";
     public const string RoleRenamed = "Propriétés du rôle modifiées";
     public const string RoleDeleted = "Rôle supprimé";
+    public const string PlatformCreated = "Plateforme créée";
+    public const string PlatformUpdated = "Plateforme modifiée";
+    public const string PlatformDeleted = "Plateforme supprimée";
     public const string PolicyUpdated = "Règles de sécurité modifiées";
     public const string SetupDone = "Installation : premier administrateur";
     public const string EntryCreated = "Saisie créée";

@@ -7,6 +7,8 @@ public sealed record UserDraft(string Login, string DisplayName, IReadOnlyList<R
 
 public sealed record RoleChange(string Name, string Description, bool IsActive, PermissionSet Permissions, IReadOnlyList<int> AssignableRoleIds);
 
+public sealed record PlatformChange(string Name, string Description, bool IsActive, IReadOnlyList<PlatformMachine> Machines);
+
 // Users, roles and security rules. Every method checks the caller's rights
 // itself and writes the audit trail.
 //
@@ -17,8 +19,11 @@ public sealed record RoleChange(string Name, string Description, bool IsActive, 
 //    its own roles list as assignable, only inside its own scope, and only
 //    to accounts that hold nothing else.
 // No change may leave the application without an active administrator.
+//
+// Roles are given over a scope: a team and platforms (named groups of
+// machines, "Gérer les plateformes").
 public sealed partial class AccessAdminService(
-    IUserStore users, IRoleStore roles, ISettingsStore settings, IAuditLog audit, TimeProvider clock, ClientInfo client)
+    IUserStore users, IRoleStore roles, IPlatformStore platforms, ISettingsStore settings, IAuditLog audit, TimeProvider clock, ClientInfo client)
 {
     private DateTime Now => clock.GetLocalNow().DateTime;
 
@@ -132,6 +137,71 @@ public sealed partial class AccessAdminService(
             await roles.UpdateAsync(role);
         }
         return created.Count;
+    }
+
+    // ---------- platforms ----------
+
+    public async Task<IReadOnlyList<Platform>> ListPlatformsAsync(Actor actor)
+    {
+        actor.Demand(Perm.View(Modules.Utilisateurs));
+        return await platforms.ListAsync();
+    }
+
+    public async Task<Platform> CreatePlatformAsync(Actor actor, PlatformChange change)
+    {
+        actor.Demand(Perm.PlateformesGerer);
+        var all = await platforms.ListAsync();
+        var platform = CheckPlatform(change, all, null);
+        platform.Id = await platforms.InsertAsync(platform);
+        await Write(actor, AuditActions.PlatformCreated, platform.Name, "", null, platform.Describe());
+        return platform;
+    }
+
+    // Takes effect for every account given this platform, at its next action.
+    public async Task UpdatePlatformAsync(Actor actor, int platformId, PlatformChange change)
+    {
+        actor.Demand(Perm.PlateformesGerer);
+        var all = await platforms.ListAsync();
+        var before = all.FirstOrDefault(p => p.Id == platformId) ?? throw new RuleViolationException("Plateforme introuvable.");
+        var updated = CheckPlatform(change, all, platformId);
+        updated.Id = platformId;
+        await platforms.UpdateAsync(updated);
+        if (before.Describe() != updated.Describe())
+            await Write(actor, AuditActions.PlatformUpdated, updated.Name,
+                before.AssignmentCount > 0 ? $"S'applique aux {before.AssignmentCount} attribution(s) de rôle qui la nomment." : "",
+                before.Describe(), updated.Describe());
+    }
+
+    public async Task DeletePlatformAsync(Actor actor, int platformId)
+    {
+        actor.Demand(Perm.PlateformesGerer);
+        var platform = (await platforms.ListAsync()).FirstOrDefault(p => p.Id == platformId)
+                       ?? throw new RuleViolationException("Plateforme introuvable.");
+        if (platform.AssignmentCount > 0)
+            throw new RuleViolationException(
+                $"{platform.AssignmentCount} attribution(s) de rôle utilisent « {platform.Name} » : retirez-la des comptes ou désactivez-la.");
+        await platforms.DeleteAsync(platformId);
+        await Write(actor, AuditActions.PlatformDeleted, platform.Name, "", platform.Describe(), null);
+    }
+
+    private static Platform CheckPlatform(PlatformChange change, IReadOnlyList<Platform> existing, int? exceptId)
+    {
+        var name = (change.Name ?? "").Trim();
+        if (name.Length is < 3 or > 60)
+            throw new RuleViolationException("Le nom de la plateforme doit faire 3 à 60 caractères.");
+        if (existing.Any(p => p.Id != exceptId && string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
+            throw new RuleViolationException($"Une plateforme « {name} » existe déjà.");
+        var machines = (change.Machines ?? Array.Empty<PlatformMachine>())
+            .Where(m => !string.IsNullOrWhiteSpace(m.MachineId))
+            .Select(m => new PlatformMachine(m.MachineId.Trim(), (m.Sector ?? "").Trim()))
+            .DistinctBy(m => m.MachineId, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m.MachineId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (machines.Count == 0)
+            throw new RuleViolationException("Choisissez au moins une machine : une plateforme vide ne donne accès à rien.");
+        if (machines.FirstOrDefault(m => !Plant.Sectors.All.Contains(m.Sector)) is { } unknown)
+            throw new RuleViolationException($"La machine {unknown.MachineId} n'a pas de secteur connu.");
+        return new Platform { Name = name, Description = (change.Description ?? "").Trim(), IsActive = change.IsActive, Machines = machines };
     }
 
     // ---------- users ----------
@@ -285,9 +355,18 @@ public sealed partial class AccessAdminService(
             throw new RuleViolationException("Attribuez au moins un rôle : un compte sans rôle ne peut rien faire.");
         var all = (await roles.ListAsync()).ToDictionary(r => r.Id);
         var assignable = (await AssignableRolesAsync(actor)).Select(r => r.Id).ToHashSet();
+        var known = (await platforms.ListAsync()).ToDictionary(p => p.Id);
         var result = new List<RoleAssignment>();
-        foreach (var a in requested)
+        foreach (var requestedAssignment in requested)
         {
+            // The platforms as stored, not as the screen sent them.
+            var a = requestedAssignment.Clone();
+            a.Scope = a.Scope with
+            {
+                Platforms = a.Scope.Platforms.Select(p => p.Id).Distinct()
+                    .Select(id => known.GetValueOrDefault(id) ?? throw new RuleViolationException("Une plateforme attribuée n'existe plus."))
+                    .ToList(),
+            };
             var role = all.GetValueOrDefault(a.RoleId) ?? throw new RuleViolationException("Un rôle attribué n'existe plus.");
             if (role.IsSystem && !actor.IsAdministrator)
                 throw new AccessDeniedException("Seul un administrateur peut attribuer le rôle Administrateur.");

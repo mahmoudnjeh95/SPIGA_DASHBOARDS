@@ -128,6 +128,7 @@ public sealed class UserStore(AppDb db) : IUserStore
         public string ScopeSectors { get; set; } = "";
         public string ScopeTeam { get; set; } = "";
         public string ScopeMachines { get; set; } = "";
+        public string ScopePlatforms { get; set; } = "";
         public DateTime? ValidFrom { get; set; }
         public DateTime? ValidTo { get; set; }
     }
@@ -138,7 +139,7 @@ public sealed class UserStore(AppDb db) : IUserStore
           FROM Users";
 
     private const string SelectAssignments =
-        @"SELECT ur.Id, ur.UserId, ur.RoleId, r.Name AS RoleName, ur.ScopeSectors, ur.ScopeTeam, ur.ScopeMachines, ur.ValidFrom, ur.ValidTo
+        @"SELECT ur.Id, ur.UserId, ur.RoleId, r.Name AS RoleName, ur.ScopeSectors, ur.ScopeTeam, ur.ScopeMachines, ur.ScopePlatforms, ur.ValidFrom, ur.ValidTo
           FROM UserRoles ur JOIN Roles r ON r.Id = ur.RoleId";
 
     public async Task<int> CountAsync()
@@ -152,7 +153,8 @@ public sealed class UserStore(AppDb db) : IUserStore
         using var c = await db.OpenAsync();
         var rows = await c.QueryAsync<UserRow>(Select + " ORDER BY Login");
         var assignments = (await c.QueryAsync<AssignmentRow>(SelectAssignments + " ORDER BY ur.Id")).ToLookup(a => a.UserId);
-        return rows.Select(r => Map(r, assignments[r.Id])).ToList();
+        var platforms = await PlatformStore.LoadAsync(c);
+        return rows.Select(r => Map(r, assignments[r.Id], platforms)).ToList();
     }
 
     public Task<AppUser?> GetAsync(int id) => GetOneAsync(" WHERE Id = @id", new { id });
@@ -166,7 +168,7 @@ public sealed class UserStore(AppDb db) : IUserStore
         if (row == null)
             return null;
         var assignments = await c.QueryAsync<AssignmentRow>(SelectAssignments + " WHERE ur.UserId = @id ORDER BY ur.Id", new { id = row.Id });
-        return Map(row, assignments);
+        return Map(row, assignments, await PlatformStore.LoadAsync(c));
     }
 
     public async Task<int> InsertAsync(AppUser user)
@@ -206,14 +208,15 @@ public sealed class UserStore(AppDb db) : IUserStore
 
     private static Task WriteAssignments(IDbConnection c, IDbTransaction t, int userId, IEnumerable<RoleAssignment> assignments)
         => c.ExecuteAsync(
-            @"INSERT INTO UserRoles (UserId, RoleId, ScopeSectors, ScopeTeam, ScopeMachines, ValidFrom, ValidTo)
-              VALUES (@userId, @RoleId, @ScopeSectors, @ScopeTeam, @ScopeMachines, @ValidFrom, @ValidTo)",
+            @"INSERT INTO UserRoles (UserId, RoleId, ScopeSectors, ScopeTeam, ScopeMachines, ScopePlatforms, ValidFrom, ValidTo)
+              VALUES (@userId, @RoleId, @ScopeSectors, @ScopeTeam, @ScopeMachines, @ScopePlatforms, @ValidFrom, @ValidTo)",
             assignments.Select(a => new
             {
                 userId, a.RoleId,
                 ScopeSectors = DataScope.ToCsv(a.Scope.Sectors),
                 ScopeTeam = a.Scope.Team ?? "",
                 ScopeMachines = DataScope.ToCsv(a.Scope.Machines),
+                ScopePlatforms = DataScope.ToCsv(a.Scope.Platforms.Select(p => p.Id.ToString())),
                 ValidFrom = a.ValidFrom?.Date,
                 ValidTo = a.ValidTo?.Date,
             }), t);
@@ -226,7 +229,7 @@ public sealed class UserStore(AppDb db) : IUserStore
         UpdatedAt = DateTime.Now,
     };
 
-    private static AppUser Map(UserRow r, IEnumerable<AssignmentRow> assignments) => new()
+    private static AppUser Map(UserRow r, IEnumerable<AssignmentRow> assignments, IReadOnlyDictionary<int, Platform> platforms) => new()
     {
         Id = (int)r.Id,
         Login = r.Login,
@@ -246,7 +249,8 @@ public sealed class UserStore(AppDb db) : IUserStore
             RoleId = (int)a.RoleId,
             RoleName = a.RoleName,
             Scope = new DataScope(DataScope.FromCsv(a.ScopeSectors), string.IsNullOrWhiteSpace(a.ScopeTeam) ? null : a.ScopeTeam,
-                DataScope.FromCsv(a.ScopeMachines)),
+                DataScope.FromCsv(a.ScopeMachines),
+                PlatformStore.IdsFromCsv(a.ScopePlatforms).Select(id => platforms.GetValueOrDefault(id) ?? Platform.Missing(id)).ToList()),
             ValidFrom = a.ValidFrom,
             ValidTo = a.ValidTo,
         }).ToList(),
@@ -275,4 +279,93 @@ public sealed class SettingsStore(AppDb db) : ISettingsStore
             await c.ExecuteAsync($"INSERT INTO AppSettings ({db.Key}, Value, UpdatedAt, UpdatedBy) VALUES (@key, @json, @now, @updatedBy)", args, t);
         t.Commit();
     }
+}
+
+public sealed class PlatformStore(AppDb db) : IPlatformStore
+{
+    private sealed class PlatformRow
+    {
+        public long Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    private sealed class MachineRow
+    {
+        public long PlatformId { get; set; }
+        public string MachineId { get; set; } = "";
+        public string Sector { get; set; } = "";
+    }
+
+    public async Task<IReadOnlyList<Platform>> ListAsync()
+    {
+        using var c = await db.OpenAsync();
+        var platforms = await LoadAsync(c);
+        var used = (await c.QueryAsync<string>("SELECT ScopePlatforms FROM UserRoles WHERE ScopePlatforms <> ''"))
+            .SelectMany(csv => IdsFromCsv(csv))
+            .GroupBy(id => id)
+            .ToDictionary(g => g.Key, g => g.Count());
+        foreach (var p in platforms.Values)
+            p.AssignmentCount = used.GetValueOrDefault(p.Id);
+        return platforms.Values.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public async Task<int> InsertAsync(Platform platform)
+    {
+        using var c = await db.OpenAsync();
+        using var t = c.BeginTransaction();
+        var now = DateTime.Now;
+        var id = (int)await c.ExecuteScalarAsync<long>(
+            "INSERT INTO Platforms (Name, Description, IsActive, CreatedAt, UpdatedAt) VALUES (@Name, @Description, @IsActive, @now, @now)" + db.ReturnId,
+            new { platform.Name, platform.Description, platform.IsActive, now }, t);
+        await WriteMachines(c, t, id, platform);
+        t.Commit();
+        return id;
+    }
+
+    public async Task UpdateAsync(Platform platform)
+    {
+        using var c = await db.OpenAsync();
+        using var t = c.BeginTransaction();
+        await c.ExecuteAsync("UPDATE Platforms SET Name = @Name, Description = @Description, IsActive = @IsActive, UpdatedAt = @now WHERE Id = @Id",
+            new { platform.Name, platform.Description, platform.IsActive, platform.Id, now = DateTime.Now }, t);
+        await c.ExecuteAsync("DELETE FROM PlatformMachines WHERE PlatformId = @Id", new { platform.Id }, t);
+        await WriteMachines(c, t, platform.Id, platform);
+        t.Commit();
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        using var c = await db.OpenAsync();
+        using var t = c.BeginTransaction();
+        await c.ExecuteAsync("DELETE FROM PlatformMachines WHERE PlatformId = @id", new { id }, t);
+        await c.ExecuteAsync("DELETE FROM Platforms WHERE Id = @id", new { id }, t);
+        t.Commit();
+    }
+
+    // Every platform with its machines, by id (used by the user store to
+    // give each role assignment its platforms).
+    internal static async Task<Dictionary<int, Platform>> LoadAsync(IDbConnection c)
+    {
+        var rows = await c.QueryAsync<PlatformRow>("SELECT Id, Name, Description, IsActive FROM Platforms");
+        var machines = (await c.QueryAsync<MachineRow>("SELECT PlatformId, MachineId, Sector FROM PlatformMachines ORDER BY MachineId"))
+            .ToLookup(m => m.PlatformId);
+        return rows.ToDictionary(r => (int)r.Id, r => new Platform
+        {
+            Id = (int)r.Id,
+            Name = r.Name,
+            Description = r.Description,
+            IsActive = r.IsActive,
+            Machines = machines[r.Id].Select(m => new PlatformMachine(m.MachineId, m.Sector)).ToList(),
+        });
+    }
+
+    internal static IEnumerable<int> IdsFromCsv(string? csv)
+        => DataScope.FromCsv(csv).Select(v => int.TryParse(v, out var id) ? id : 0).Where(id => id > 0).Distinct();
+
+    private static Task WriteMachines(IDbConnection c, IDbTransaction t, int platformId, Platform platform)
+        => c.ExecuteAsync("INSERT INTO PlatformMachines (PlatformId, MachineId, Sector) VALUES (@platformId, @MachineId, @Sector)",
+            platform.Machines.DistinctBy(m => m.MachineId, StringComparer.OrdinalIgnoreCase)
+                .Select(m => new { platformId, m.MachineId, m.Sector }), t);
 }

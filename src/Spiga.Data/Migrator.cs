@@ -12,7 +12,7 @@ namespace Spiga.Data;
 // role and the waste reasons when missing. Safe to run on every start.
 public sealed partial class Migrator(AppDb db)
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     [GeneratedRegex(@"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex GoSeparator();

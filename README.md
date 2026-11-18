@@ -52,9 +52,18 @@ Utilisateurs et rôles, without a developer.
   permissions, not editable). The role templates (direction, responsables,
   chef d'équipe, opérateur) are optional, offered at installation and in
   the roles list, and are ordinary roles once created.
-* **Users** hold one or more roles, each with its own **scope** (sectors,
-  machines, team) and optional **validity dates** (temporary staff,
-  replacements). A right applies where one of the user's roles gives it.
+* **Platforms** are named groups of machines (Utilisateurs et rôles ›
+  Plateformes, right « Gérer les plateformes »): « Ligne pâte courte 1 »,
+  « Conditionnement couscous »... A platform can hold machines from several
+  sectors; deactivating it closes its machines to everyone given it, and it
+  cannot be deleted while a role assignment names it.
+* **Users** hold one or more roles, each with its own **scope** — a
+  **team** and one or more **platforms** (none = all the plant) — and
+  optional **validity dates** (temporary staff, replacements). A right
+  applies where one of the user's roles gives it: the holder sees, enters,
+  validates... (whatever the role allows) on the machines of its platforms,
+  for its team's postes. Sectors and machines picked one by one, from
+  before platforms, still apply and can be removed in the account.
 * **One team per account, except responsables.** Only a role with « Vue
   d'ensemble › Couvrir plusieurs équipes » (the direction and responsables
   templates) covers several or all teams; any other account is bound to one

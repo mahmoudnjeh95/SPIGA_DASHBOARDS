@@ -21,6 +21,7 @@ public static class Perm
     public const string ComptesDebloquer = "utilisateurs:deblocage";
     public const string RolesGerer = "utilisateurs:roles";
     public const string SecuriteGerer = "utilisateurs:securite";
+    public const string PlateformesGerer = "utilisateurs:plateformes";
 
     public const string TableauDetaille = "conditionnement:tableau";
     public const string EcranTv = "conditionnement:tv";
@@ -115,6 +116,7 @@ public static class PermissionCatalog
         Add(Modules.Utilisateurs, "comptes", "Créer et modifier des comptes", "Limité aux rôles attribuables et à son propre périmètre, sauf avec « Gérer les rôles »");
         Add(Modules.Utilisateurs, "deblocage", "Débloquer, réinitialiser un mot de passe");
         Add(Modules.Utilisateurs, "roles", "Gérer les rôles", "Créer, modifier, supprimer des rôles ; attribuer tout rôle");
+        Add(Modules.Utilisateurs, "plateformes", "Gérer les plateformes", "Créer, modifier, supprimer les plateformes (groupes de machines) sur lesquelles les rôles sont donnés");
         Add(Modules.Utilisateurs, "securite", "Modifier les règles de sécurité");
 
         View(Modules.Sources); Add(Modules.Sources, "administrer", "Configurer les connexions");

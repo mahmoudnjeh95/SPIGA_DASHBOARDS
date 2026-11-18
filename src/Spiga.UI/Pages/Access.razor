@@ -7,7 +7,7 @@
     <div class="head">
         <div>
             <span class="pre">Administration</span><h1>Utilisateurs et rôles</h1>
-            <p>Les rôles sont définis ici, sans limite de nombre, à partir des permissions de chaque module. Un utilisateur peut cumuler plusieurs rôles, chacun sur son périmètre et pour une période.</p>
+            <p>Les rôles sont définis ici, sans limite de nombre, à partir des permissions de chaque module. Un utilisateur peut cumuler plusieurs rôles, chacun sur son périmètre (une équipe et des plateformes) et pour une période.</p>
         </div>
         @if (!CanRoles && !CanAccounts)
         {
@@ -18,6 +18,7 @@
     <div class="tabrow" role="tablist">
         <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" aria-selected="@(_tab == 0)" @onclick="() => _tab = 0">Rôles (@_roles.Count)</button>
         <button type="button" role="tab" class="tab @(_tab == 1 ? "on" : "")" aria-selected="@(_tab == 1)" @onclick="() => _tab = 1">Utilisateurs (@_users.Count)</button>
+        <button type="button" role="tab" class="tab @(_tab == 3 ? "on" : "")" aria-selected="@(_tab == 3)" @onclick="() => _tab = 3">Plateformes (@_platforms.Count)</button>
         <button type="button" role="tab" class="tab @(_tab == 2 ? "on" : "")" aria-selected="@(_tab == 2)" @onclick="() => _tab = 2">Règles de sécurité</button>
     </div>
 
@@ -306,25 +307,36 @@
                                     </div>
                                 </div>
                                 <div class="f">
-                                    <span>Secteurs <small class="nd">(aucun = tous)</small></span>
+                                    <span>Plateformes <small class="nd">(aucune = toute l'usine)</small></span>
+                                    @if (_platforms.Count == 0 && a.Platforms.Count == 0)
+                                    {
+                                        <small class="nd">Aucune plateforme définie@(Session.Can(Perm.PlateformesGerer) ? " : créez-les dans l'onglet Plateformes." : ".")</small>
+                                    }
                                     <div class="checks">
-                                        @foreach (var s in Sectors.All)
+                                        @foreach (var p in PlatformChoices(a))
                                         {
-                                            <label class="check"><input type="checkbox" checked="@a.Sectors.Contains(s)" disabled="@(!editable)"
-                                                                        @onchange="e => ToggleIn(a.Sectors, s, e.Value is true)" />@Sectors.Label(s)</label>
+                                            <label class="check" title="@string.Join(", ", p.Machines.Select(m => m.MachineId))">
+                                                <input type="checkbox" checked="@a.Platforms.Contains(p.Id)" disabled="@(!editable)"
+                                                       @onchange="e => ToggleIn(a.Platforms, p.Id, e.Value is true)" />@p.Name@(p.IsActive ? "" : " (inactive)")
+                                                <small class="nd">&nbsp;@p.Machines.Count machine(s)</small>
+                                            </label>
                                         }
                                     </div>
                                 </div>
-                                <div class="f">
-                                    <span>Machines <small class="nd">(aucune = toutes celles des secteurs)</small></span>
-                                    <div class="checks">
-                                        @foreach (var m in _machines.Where(m => a.Sectors.Count == 0 || a.Sectors.Contains(m.Sector)))
+                                @if (a.Sectors.Count > 0 || a.Machines.Count > 0)
+                                {
+                                    <div class="notice info" style="margin:0">
+                                        <div>
+                                            Restriction donnée avant les plateformes :
+                                            <b>@string.Join(", ", a.Sectors.Select(Sectors.Label).Concat(a.Machines))</b>.
+                                            Elle s'ajoute aux plateformes cochées.
+                                        </div>
+                                        @if (editable)
                                         {
-                                            <label class="check"><input type="checkbox" checked="@a.Machines.Contains(m.Id)" disabled="@(!editable)"
-                                                                        @onchange="e => ToggleIn(a.Machines, m.Id, e.Value is true)" />@m.Id</label>
+                                            <button type="button" class="link" @onclick="() => { a.Sectors.Clear(); a.Machines.Clear(); }">Retirer</button>
                                         }
                                     </div>
-                                </div>
+                                }
                             </div>
                         }
                         @if (editable && _assignable.Count > 0)
@@ -363,6 +375,130 @@
             }
         </div>
     }
+    else if (_tab == 3)
+    {
+        <div class="row">
+            @* ---------- platform list ---------- *@
+            <section class="card" style="flex:1 1 250px;max-width:320px">
+                <p class="nd" style="font-size:13px;margin:0">
+                    Une plateforme est un groupe de machines. Les rôles sont donnés sur une équipe et des plateformes :
+                    le titulaire voit, saisit, valide… (selon son rôle) sur ces machines seulement.
+                </p>
+                <div class="rolelist">
+                    @foreach (var p in _platforms)
+                    {
+                        <button type="button" class="rolebtn @(p.Id == _platform?.Id ? "on" : "")" @onclick="() => SelectPlatform(p)">
+                            <span>
+                                @p.Name
+                                @if (!p.IsActive) { <span class="chip warn" style="margin-left:4px">inactive</span> }
+                            </span>
+                            <small title="Machines">@p.Machines.Count</small>
+                        </button>
+                    }
+                    @if (_platforms.Count == 0)
+                    {
+                        <p class="empty">Aucune plateforme.</p>
+                    }
+                </div>
+                @if (CanPlatforms)
+                {
+                    <button type="button" class="bar small" style="align-self:flex-start" @onclick="NewPlatform">Nouvelle plateforme</button>
+                }
+            </section>
+
+            @* ---------- platform editor ---------- *@
+            @if (_pfEditing)
+            {
+                <section class="card" style="flex:4 1 620px">
+                    <div class="card-head">
+                        <h2>@(_platform == null ? "Nouvelle plateforme" : _platform.Name) <small>@_pfMachines.Count machine(s)</small></h2>
+                        @if (CanPlatforms && _platform != null)
+                        {
+                            <button type="button" class="bar small danger" @onclick="DeletePlatformAsync" disabled="@(_platform.AssignmentCount > 0)"
+                                    title="@(_platform.AssignmentCount > 0 ? "Retirez-la des comptes ou désactivez-la" : "")">Supprimer</button>
+                        }
+                    </div>
+                    <div class="form">
+                        <div class="f"><label for="pf-name">Nom</label><input id="pf-name" @bind="_pfName" @bind:event="oninput" disabled="@(!CanPlatforms)" placeholder="ex. Ligne pâte courte 1" /></div>
+                        <div class="f grow"><label for="pf-desc">Description</label><input id="pf-desc" @bind="_pfDescription" @bind:event="oninput" disabled="@(!CanPlatforms)" /></div>
+                        <label class="check" title="Une plateforme inactive ne donne plus accès à ses machines"><input type="checkbox" @bind="_pfActive" disabled="@(!CanPlatforms)" />Plateforme active</label>
+                    </div>
+
+                    <h3 class="sub">Machines</h3>
+                    @if (_machines.Count == 0)
+                    {
+                        <div class="notice info">Base de production injoignable : seules les machines déjà dans la plateforme sont listées.</div>
+                    }
+                    @foreach (var sector in Sectors.All)
+                    {
+                        var inSector = PlatformMachineChoices().Where(m => m.Sector == sector).ToList();
+                        if (inSector.Count == 0)
+                            continue;
+                        <div class="f">
+                            <span>
+                                @Sectors.Label(sector)
+                                @if (CanPlatforms)
+                                {
+                                    <span class="perm-quick" style="margin-left:10px">
+                                        <button type="button" class="link" @onclick="() => SetSector(inSector, true)">Tout</button>
+                                        <button type="button" class="link" @onclick="() => SetSector(inSector, false)">Aucun</button>
+                                    </span>
+                                }
+                            </span>
+                            <div class="checks">
+                                @foreach (var m in inSector)
+                                {
+                                    <label class="check" title="@m.Name">
+                                        <input type="checkbox" checked="@_pfMachines.ContainsKey(m.Id)" disabled="@(!CanPlatforms)"
+                                               @onchange="e => TogglePlatformMachine(m, e.Value is true)" />@m.Id
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (_platform != null)
+                    {
+                        <h3 class="sub">Comptes</h3>
+                        var holders = _users.SelectMany(u => u.Assignments.Where(a => a.Scope.Platforms.Any(p => p.Id == _platform.Id)).Select(a => (User: u, Assignment: a))).ToList();
+                        @if (holders.Count == 0)
+                        {
+                            <p class="empty">Aucun compte n'a de rôle sur cette plateforme.</p>
+                        }
+                        else
+                        {
+                            <table class="t">
+                                <thead><tr><th>Compte</th><th>Rôle</th><th>Périmètre</th><th>Validité</th></tr></thead>
+                                <tbody>
+                                    @foreach (var (u, a) in holders)
+                                    {
+                                        <tr>
+                                            <td>@u.Login<small>@u.DisplayName@(u.IsActive ? "" : " · désactivé")</small></td>
+                                            <td class="n">@a.RoleName</td>
+                                            <td class="n">@a.Scope.Describe()</td>
+                                            <td class="n">@a.Validity()</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    }
+
+                    @if (CanPlatforms)
+                    {
+                        <div class="savebar">
+                            <span class="nd">@(PlatformDirty ? (_platform?.AssignmentCount > 0 ? $"Non enregistré · s'appliquera aux {_platform.AssignmentCount} attribution(s) qui la nomment" : "Modifications non enregistrées") : "")</span>
+                            @if (_platform != null)
+                            {
+                                <button type="button" class="bar" @onclick="() => SelectPlatform(_platform)" disabled="@(!PlatformDirty)">Annuler</button>
+                            }
+                            <button type="button" class="bar acc" @onclick="SavePlatformAsync" disabled="@(!PlatformDirty)">@(_platform == null ? "Créer la plateforme" : "Enregistrer la plateforme")</button>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
     else if (_policy != null)
     {
         var canEdit = Session.Can(Perm.SecuriteGerer);
@@ -393,6 +529,7 @@
         public int RoleId { get; set; }
         public List<string> Sectors { get; set; } = new();
         public List<string> Machines { get; set; } = new();
+        public List<int> Platforms { get; set; } = new();
         public string Team { get; set; } = "";
         public DateTime? From { get; set; }
         public DateTime? To { get; set; }
@@ -412,6 +549,14 @@
     private IReadOnlyList<Role> _assignable = Array.Empty<Role>();
     private HashSet<int> _manageable = new();
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+    private IReadOnlyList<Platform> _platforms = Array.Empty<Platform>();
+
+    private Platform? _platform;
+    private bool _pfEditing;
+    private string _pfName = "";
+    private string _pfDescription = "";
+    private bool _pfActive = true;
+    private Dictionary<string, string> _pfMachines = new(StringComparer.OrdinalIgnoreCase);
 
     private Role? _role;
     private PermissionSet _draft = new();
@@ -432,6 +577,7 @@
 
     private bool CanRoles => Session.Can(Perm.RolesGerer);
     private bool CanAccounts => Session.Can(Perm.ComptesGerer) || CanRoles;
+    private bool CanPlatforms => Session.Can(Perm.PlateformesGerer);
     private PermissionSet Perms => _role?.IsSystem == true ? PermissionSet.Full() : _draft;
     private int MissingTemplates => RoleTemplates.All.Count(t => !_roles.Any(r => r.Code == t.Code || string.Equals(r.Name, t.Name, StringComparison.OrdinalIgnoreCase)));
 
@@ -460,6 +606,7 @@
         {
             _roles = await Admin.ListRolesAsync(Actor);
             _users = await Admin.ListUsersAsync(Actor);
+            _platforms = await Admin.ListPlatformsAsync(Actor);
             _assignable = await Admin.AssignableRolesAsync(Actor);
             _policy = (await Admin.GetPolicyAsync(Actor)).Clone();
             _manageable = new HashSet<int>();
@@ -471,6 +618,98 @@
         SelectRole(_roles.FirstOrDefault(r => r.Id == keep) ?? _roles.FirstOrDefault(r => !r.IsSystem) ?? _roles.FirstOrDefault());
         if (_user != null)
             _user = _users.FirstOrDefault(u => u.Id == _user.Id);
+        if (_platform != null)
+        {
+            var kept = _platforms.FirstOrDefault(p => p.Id == _platform.Id);
+            if (kept != null)
+                SelectPlatform(kept);
+            else
+                _platform = null;
+        }
+    }
+
+    // ---------- platforms ----------
+
+    private bool PlatformDirty
+        => _pfEditing && (_platform == null
+            ? _pfName.Trim().Length > 0 || _pfMachines.Count > 0
+            : _pfName != _platform.Name || _pfDescription != _platform.Description || _pfActive != _platform.IsActive
+              || !_pfMachines.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(_platform.Machines.Select(m => m.MachineId)));
+
+    private void SelectPlatform(Platform p)
+    {
+        _platform = p;
+        _pfEditing = true;
+        _pfName = p.Name;
+        _pfDescription = p.Description;
+        _pfActive = p.IsActive;
+        _pfMachines = p.Machines.ToDictionary(m => m.MachineId, m => m.Sector, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void NewPlatform()
+    {
+        _platform = null;
+        _pfEditing = true;
+        _pfName = _pfDescription = "";
+        _pfActive = true;
+        _pfMachines = new(StringComparer.OrdinalIgnoreCase);
+        Error = Info = null;
+    }
+
+    // The plant's machines, plus those of the platform the production
+    // database no longer lists (or cannot be reached).
+    private IEnumerable<PlantMachine> PlatformMachineChoices()
+        => _machines.Concat(_pfMachines.Where(kv => !_machines.Any(m => string.Equals(m.Id, kv.Key, StringComparison.OrdinalIgnoreCase)))
+                .Select(kv => new PlantMachine(kv.Key, kv.Key, kv.Value)))
+            .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase);
+
+    private void TogglePlatformMachine(PlantMachine m, bool on)
+    {
+        if (on)
+            _pfMachines[m.Id] = m.Sector;
+        else
+            _pfMachines.Remove(m.Id);
+    }
+
+    private void SetSector(IEnumerable<PlantMachine> machines, bool on)
+    {
+        foreach (var m in machines)
+            TogglePlatformMachine(m, on);
+    }
+
+    private async Task SavePlatformAsync()
+    {
+        var change = new PlatformChange(_pfName, _pfDescription, _pfActive,
+            _pfMachines.Select(kv => new PlatformMachine(kv.Key, kv.Value)).ToList());
+        if (_platform == null)
+        {
+            Platform? created = null;
+            if (await Run(async () => created = await Admin.CreatePlatformAsync(Actor, change), $"Plateforme « {_pfName.Trim()} » créée. Donnez-la aux comptes dans l'onglet Utilisateurs."))
+            {
+                await ReloadAsync();
+                SelectPlatform(_platforms.First(p => p.Id == created!.Id));
+            }
+        }
+        else
+        {
+            var id = _platform.Id;
+            if (await Run(() => Admin.UpdatePlatformAsync(Actor, id, change), $"Plateforme « {_pfName.Trim()} » enregistrée. Elle s'applique à ses comptes dès leur prochaine action."))
+            {
+                await ReloadAsync();
+                await Session.RefreshAsync();
+            }
+        }
+    }
+
+    private async Task DeletePlatformAsync()
+    {
+        var p = _platform!;
+        if (await Run(() => Admin.DeletePlatformAsync(Actor, p.Id), $"Plateforme « {p.Name} » supprimée."))
+        {
+            _platform = null;
+            _pfEditing = false;
+            await ReloadAsync();
+        }
     }
 
     // ---------- roles ----------
@@ -599,6 +838,7 @@
                 RoleId = a.RoleId,
                 Sectors = a.Scope.Sectors.ToList(),
                 Machines = a.Scope.Machines.ToList(),
+                Platforms = a.Scope.Platforms.Select(p => p.Id).ToList(),
                 Team = a.Scope.Team ?? "",
                 From = a.ValidFrom,
                 To = a.ValidTo,
@@ -613,7 +853,13 @@
         _user = null;
     }
 
-    private static void ToggleIn(List<string> list, string value, bool on)
+    // The platforms offered in an assignment row: all of them (the service
+    // refuses those outside a delegated manager's own scope), plus any the
+    // row already names.
+    private IEnumerable<Platform> PlatformChoices(AssignmentForm a)
+        => _platforms.Concat(a.Platforms.Where(id => _platforms.All(p => p.Id != id)).Select(Platform.Missing));
+
+    private static void ToggleIn<T>(List<T> list, T value, bool on)
     {
         list.Remove(value);
         if (on)
@@ -628,7 +874,8 @@
             {
                 RoleId = a.RoleId,
                 RoleName = _roles.FirstOrDefault(r => r.Id == a.RoleId)?.Name ?? "",
-                Scope = new DataScope(a.Sectors.ToList(), string.IsNullOrEmpty(a.Team) ? null : a.Team, machines),
+                Scope = new DataScope(a.Sectors.ToList(), string.IsNullOrEmpty(a.Team) ? null : a.Team, machines,
+                    a.Platforms.Select(id => _platforms.FirstOrDefault(p => p.Id == id) ?? Platform.Missing(id)).ToList()),
                 ValidFrom = a.From,
                 ValidTo = a.To,
             };
