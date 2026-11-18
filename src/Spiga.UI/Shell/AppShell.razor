@@ -20,6 +20,7 @@
                 @foreach (var item in group)
                 {
                     <NavLink class="nav" ActiveClass="active" href="@item.Route" Match="@(item.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                        <span class="nav-ic">@Icons.Svg(item.Key)</span>
                         <span>@item.Label</span>
                         @if (!item.Ready)
                         {
@@ -49,11 +50,11 @@
             <span class="sp"></span>
             @if (Desktop.IsAvailable && Session.Can(Perm.EcranTv))
             {
-                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Perm.ParametresPoste))">Écran TV</button>
+                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Perm.ParametresPoste))">@Icons.Svg("tv")Écran TV</button>
             }
-            <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
-            <a class="bar" href="compte">Mon compte</a>
-            <button type="button" class="bar" @onclick="Session.SignOutAsync">Se déconnecter</button>
+            <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@Icons.Svg(Session.Theme == "dark" ? "sun" : "moon")@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
+            <a class="bar" href="compte">@Icons.Svg("user")Mon compte</a>
+            <button type="button" class="bar" @onclick="Session.SignOutAsync">@Icons.Svg("logout")Se déconnecter</button>
         </header>
         <main class="view">
             @Body
