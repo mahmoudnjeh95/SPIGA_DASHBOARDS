@@ -64,25 +64,51 @@
 @code {
     private string _shift = "";
 
+    // The last Razor screen, where "Fermer" on a WPF page comes back to.
+    private string _lastWebRoute = "";
+
     protected override void OnInitialized()
     {
         Nav.LocationChanged += OnLocationChanged;
         Session.Changed += OnSessionChanged;
         Desktop.UserActivity += Session.Touch;
+        Desktop.NativeClosed += OnNativeClosed;
+        Desktop.NavigateRequested += OnNavigateRequested;
+        if (CurrentNative == null)
+            _lastWebRoute = CurrentPath;
         UpdateShift();
     }
 
-    // The classic dashboard page: in the Windows application, the window
-    // shows the rail here and the dashboard beside it.
-    private bool RailOnly
-        => Desktop.IsAvailable && Session.Can(Perm.TableauDetaille)
-           && Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/') == "production/tableau-de-bord";
+    private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+
+    // A WPF page (dashboard, arrêts, planification, paramètres): in the
+    // Windows application the window shows the rail here and the page beside it.
+    private NativePage? CurrentNative
+        => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && Session.Can(NativePages.Permission(page))
+            ? page
+            : null;
+
+    private bool RailOnly => CurrentNative != null;
 
     protected override void OnAfterRender(bool firstRender)
     {
         Desktop.ApplyTheme(Session.Theme == "dark");
-        Desktop.ShowDashboard(RailOnly, Session.Can(Perm.ParametresPoste));
+        Desktop.ShowNative(CurrentNative, Session.Can(Perm.ParametresPoste));
     }
+
+    private void OnNativeClosed(NativePage page)
+        => _ = InvokeAsync(() =>
+        {
+            if (CurrentNative == page)
+                Nav.NavigateTo(_lastWebRoute);
+        });
+
+    private void OnNavigateRequested(NativePage page)
+        => _ = InvokeAsync(() =>
+        {
+            if (Session.Can(NativePages.Permission(page)))
+                Nav.NavigateTo(NativePages.Route(page));
+        });
 
     private IEnumerable<IGrouping<string?, NavItem>> VisibleGroups()
         => ModuleCatalog.Navigation
@@ -118,6 +144,8 @@
     // administrator disappears without signing out.
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
+        if (NativePages.FromRoute(CurrentPath) == null)
+            _lastWebRoute = CurrentPath;
         UpdateShift();
         await Session.RefreshAsync();
         await InvokeAsync(StateHasChanged);
@@ -130,5 +158,7 @@
         Nav.LocationChanged -= OnLocationChanged;
         Session.Changed -= OnSessionChanged;
         Desktop.UserActivity -= Session.Touch;
+        Desktop.NativeClosed -= OnNativeClosed;
+        Desktop.NavigateRequested -= OnNavigateRequested;
     }
 }

@@ -88,7 +88,9 @@ public static class ModuleCatalog
         new NavItem("maintenance", "Indicateurs", "Maintenance", Modules.Maintenance, "module/maintenance", false,
             "Préventif réalisé, ordres de travail clôturés, arrêts dus à la maintenance, pannes répétitives, grandes réparations.",
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
-        new NavItem("arrets", "Arrêts et planification", "Maintenance", Modules.Maintenance, "maintenance/arrets", true),
+        new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true, DesktopOnly: true),
+        new NavItem("planification", "Planification", "Maintenance", Modules.Maintenance, "maintenance/planification", true,
+            Permission: "maintenance:saisir", DesktopOnly: true),
         new NavItem("couts", "Pièces et consommables", "Maintenance", Modules.Maintenance, "module/couts", false,
             "Coût et consommation des pièces de rechange et consommables par machine, cumul comparé à l'objectif.",
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
@@ -119,9 +121,8 @@ public static class ModuleCatalog
             "Recherche", "Reprend cadences, équipes et pauses des Paramètres actuels"),
         new NavItem("sources", "Sources de données", "Administration", Modules.Sources, "admin/sources", true),
         new NavItem("audit", "Journal d'audit", "Administration", Modules.Audit, "admin/audit", true),
-        new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "module/parametres", false,
-            "Paramètres du poste : écran TV, rotation des diapositives, seuil d'arrêt, connexion à la base de production.",
-            "Aucun", "Fenêtre Paramètres actuelle"),
+        new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "admin/parametres", true,
+            Permission: Perm.ParametresPoste, DesktopOnly: true),
     };
 
     public static NavItem? FindNav(string key) => Navigation.FirstOrDefault(n => n.Key == key);

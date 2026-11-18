@@ -71,19 +71,20 @@
     <Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,6,0">
-            <!-- Header -->
+            <!-- Header. The filters wrap onto a second line on a narrower
+                 screen (beside the menu of SPIGA Suivi Production). -->
             <Grid Margin="0,0,0,14">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0">
+                <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0" Width="290">
                     <TextBlock Text="STATISTIQUES" Style="{StaticResource Eyebrow}"/>
                     <TextBlock Text="Statistiques des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
                     <TextBlock Text="Calculé sur les arrêts qualifiés (onglet Pannes)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                    <Border Style="{StaticResource SegTrack}">
+                <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <Border Style="{StaticResource SegTrack}" Margin="0,4,0,4">
                         <StackPanel Orientation="Horizontal">
                             <RadioButton GroupName="StatsPeriod" Content="Aujourd'hui" Style="{StaticResource Seg}"
                                          IsChecked="{Binding PeriodKey, Converter={StaticResource ValueToBool}, ConverterParameter=1}"/>
@@ -95,15 +96,15 @@
                                          IsChecked="{Binding PeriodKey, Converter={StaticResource ValueToBool}, ConverterParameter=90}"/>
                         </StackPanel>
                     </Border>
-                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="10,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="10,4,0,4" FontSize="14" VerticalContentAlignment="Center"
                               ItemsSource="{Binding MachineOptions}" SelectedItem="{Binding SelectedMachine}" AutomationProperties.Name="Ligne"/>
-                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="8,0,0,0" FontSize="14" VerticalContentAlignment="Center"
+                    <ComboBox Style="{StaticResource DarkComboBox}" Width="170" Margin="8,4,0,4" FontSize="14" VerticalContentAlignment="Center"
                               ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}" AutomationProperties.Name="Équipe"/>
-                    <CheckBox Content="Pannes seulement" IsChecked="{Binding PannesOnly}" Margin="14,0,0,0" VerticalAlignment="Center"
+                    <CheckBox Content="Pannes seulement" IsChecked="{Binding PannesOnly}" Margin="14,4,0,4" VerticalAlignment="Center"
                               FontSize="13" Foreground="{DynamicResource PrimaryTextBrush}"
                               ToolTip="Coché : seulement les pannes (mécanique, électrique, pneumatique). Décoché : tous les arrêts qualifiés."/>
-                    <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,0,0,0" Command="{Binding RefreshCommand}"/>
-                </StackPanel>
+                    <Button Content="Actualiser" Style="{StaticResource BarButton}" Margin="14,4,0,4" Command="{Binding RefreshCommand}"/>
+                </WrapPanel>
             </Grid>
 
             <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource Caption}" Margin="0,0,0,8"/>

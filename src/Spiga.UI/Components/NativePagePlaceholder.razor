@@ -1,0 +1,24 @@
+@* The Razor side of a WPF page (dashboard, arrêts, planification,
+   paramètres). In the Windows application it is not seen: the window shows
+   the WPF page beside the menu. In a browser, it says where to find it. *@
+@inject UserSession Session
+@inject IDesktopBridge Desktop
+
+@if (!Session.Can(NativePages.Permission(Page)))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(NativePages.Permission(Page)) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else if (!Desktop.IsAvailable)
+{
+    <div class="head"><div><span class="pre">@Group</span><h1>@Title</h1></div></div>
+    <div class="notice info">@Title s'ouvre dans l'application installée sur les postes ; sa version web viendra avec son intégration.</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public NativePage Page { get; set; }
+    [Parameter, EditorRequired] public string Group { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+}

@@ -11,27 +11,37 @@ public partial class ShellWindow : Window
     {
         InitializeComponent();
         WebView.Services = services;
-        // Using the dashboard counts as activity for the inactivity lock.
-        DashboardHost.PreviewMouseDown += (_, _) => DashboardActivity?.Invoke();
-        DashboardHost.PreviewKeyDown += (_, _) => DashboardActivity?.Invoke();
+        // Using a WPF page counts as activity for the inactivity lock.
+        DashboardHost.PreviewMouseDown += (_, _) => NativeActivity?.Invoke();
+        DashboardHost.PreviewKeyDown += (_, _) => NativeActivity?.Invoke();
     }
 
-    public event Action? DashboardActivity;
+    public event Action? NativeActivity;
 
-    public void ShowDashboard(DashboardView view)
+    // A WPF page (dashboard, arrêts, planification, paramètres) beside the rail.
+    public void ShowNative(FrameworkElement view)
     {
         if (!ReferenceEquals(DashboardHost.Child, view))
             DashboardHost.Child = view;
+        // The slide templates bind to their window's DataContext (shared
+        // with TvWindow): give it the dashboard's.
+        DataContext = view is DashboardView ? view.DataContext : null;
         WebColumn.Width = new GridLength(RailWidth);
         DashboardColumn.Width = new GridLength(1, GridUnitType.Star);
         DashboardHost.Visibility = Visibility.Visible;
     }
 
-    // The view stays in the window, hidden: the slides keep their state.
-    public void HideDashboard()
+    // The page stays loaded, hidden: it keeps its state for when it comes back.
+    public void HideNative()
     {
         WebColumn.Width = new GridLength(1, GridUnitType.Star);
         DashboardColumn.Width = new GridLength(0);
         DashboardHost.Visibility = Visibility.Collapsed;
+    }
+
+    public void RemoveNative(FrameworkElement view)
+    {
+        if (ReferenceEquals(DashboardHost.Child, view))
+            DashboardHost.Child = null;
     }
 }

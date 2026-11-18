@@ -168,20 +168,21 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!-- Header. The buttons wrap onto a second line on a narrower screen
+             (beside the menu of SPIGA Suivi Production). -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Bottom" Margin="0,0,16,0">
+            <StackPanel VerticalAlignment="Bottom" Margin="0,0,16,0" Width="230">
                 <TextBlock Text="PLANIFICATION" Style="{StaticResource Eyebrow}"/>
                 <TextBlock Text="{Binding RangeLabel}" Style="{StaticResource H1}" FontSize="22" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding RangeLabel}"/>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                 <!-- Lines shown on the calendar (this PC only, BoardViewModel.LineGroups). -->
-                <ToggleButton x:Name="LinesToggle" Style="{StaticResource LinesToggle}" Margin="0,0,12,0"
+                <ToggleButton x:Name="LinesToggle" Style="{StaticResource LinesToggle}" Margin="0,4,12,4"
                               IsHitTestVisible="{Binding IsOpen, ElementName=LinesPopup, Converter={StaticResource InverseBool}}">
                     <TextBlock>
                         <Run Text="{Binding LinesLabel, Mode=OneWay}"/><Run Text="  &#x25BE;"/>
@@ -220,7 +221,7 @@
                         </StackPanel>
                     </Border>
                 </Popup>
-                <Border Style="{StaticResource SegTrack}" Margin="0,0,12,0">
+                <Border Style="{StaticResource SegTrack}" Margin="0,4,12,4">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton GroupName="BoardRange" Content="Jour" Style="{StaticResource Seg}"
                                      IsChecked="{Binding RangeKey, Converter={StaticResource ValueToBool}, ConverterParameter=0}"/>
@@ -230,18 +231,18 @@
                                      IsChecked="{Binding RangeKey, Converter={StaticResource ValueToBool}, ConverterParameter=2}"/>
                     </StackPanel>
                 </Border>
-                <Button Content="‹" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding PreviousCommand}" ToolTip="Précédent"/>
-                <Button Content="Aujourd'hui" Style="{StaticResource BarButton}" Margin="4,0" Command="{Binding TodayCommand}"/>
-                <Button Content="›" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Command="{Binding NextCommand}" ToolTip="Suivant"/>
-                <Button Content="+ Règle préventive" Style="{StaticResource BarButton}" Margin="12,0,0,0" Command="{Binding NewPlanCommand}"/>
-                <Button Content="+ Arrêt planifié" Style="{StaticResource BarButton}" Margin="6,0,0,0" Background="#7F8C8D" Foreground="White"
+                <Button Content="‹" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Margin="0,4" Command="{Binding PreviousCommand}" ToolTip="Précédent"/>
+                <Button Content="Aujourd'hui" Style="{StaticResource BarButton}" Margin="4,4" Command="{Binding TodayCommand}"/>
+                <Button Content="›" Style="{StaticResource BarButton}" FontSize="16" Padding="14,5" Margin="0,4" Command="{Binding NextCommand}" ToolTip="Suivant"/>
+                <Button Content="+ Règle préventive" Style="{StaticResource BarButton}" Margin="12,4,0,4" Command="{Binding NewPlanCommand}"/>
+                <Button Content="+ Arrêt planifié" Style="{StaticResource BarButton}" Margin="6,4,0,4" Background="#7F8C8D" Foreground="White"
                         ToolTip="Planifier un arrêt (pas de commande, jour férié…)" Command="{Binding NewStopCommand}"/>
-                <Button Content="+ Maintenance" Style="{StaticResource BarButton}" Margin="6,0,0,0" Background="#FAB219" Foreground="#1A1406"
+                <Button Content="+ Maintenance" Style="{StaticResource BarButton}" Margin="6,4,0,4" Background="#FAB219" Foreground="#1A1406"
                         ToolTip="Planifier une maintenance" Command="{Binding NewEventCommand}"/>
                 <!-- Not in this version: greyed, a click says so. -->
-                <Button Content="+ Ordre de fab." Style="{StaticResource BarButton}" Margin="6,0,0,0" Opacity="0.5"
+                <Button Content="+ Ordre de fab." Style="{StaticResource BarButton}" Margin="6,4,0,4" Opacity="0.5"
                         ToolTip="Ordres de fabrication : non disponible dans cette version" Command="{Binding NewOrderCommand}"/>
-            </StackPanel>
+            </WrapPanel>
         </Grid>
 
         <!-- KPI strip -->

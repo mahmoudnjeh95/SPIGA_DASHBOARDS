@@ -11,25 +11,65 @@ using SpigaDashboards.App.Services;
 
 namespace Spiga.UI.Services;
 
-// What only the desktop app can do: open the SPIGA Dashboards windows that
-// are not yet Razor screens. The web host registers NoDesktop.
+// The SPIGA Dashboards screens that are WPF, not Razor: in the Windows
+// application they are shown in the main window beside the menu.
+public enum NativePage
+{
+    Dashboard,
+    Stops,
+    Planning,
+    Settings,
+}
+
+public static class NativePages
+{
+    public static string Route(NativePage page) => page switch
+    {
+        NativePage.Dashboard => "production/tableau-de-bord",
+        NativePage.Stops => "maintenance/arrets",
+        NativePage.Planning => "maintenance/planification",
+        _ => "admin/parametres",
+    };
+
+    public static string Permission(NativePage page) => page switch
+    {
+        NativePage.Dashboard => Perm.TableauDetaille,
+        NativePage.Stops => Perm.View(Modules.Maintenance),
+        // The planning board has no read-only mode yet.
+        NativePage.Planning => "maintenance:saisir",
+        _ => Perm.ParametresPoste,
+    };
+
+    public static NativePage? FromRoute(string path)
+        => Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(p => Route(p!.Value) == path);
+}
+
+// What only the desktop app can do. The web host registers NoDesktop.
 // allowSettings: whether the user may open the station's Paramètres from
 // the dashboard (Paramètres > Administrer).
 public interface IDesktopBridge
 {
     bool IsAvailable { get; }
 
-    // The classic dashboard, in the main window beside the navigation rail.
-    void ShowDashboard(bool visible, bool allowSettings);
-    void OpenTvScreen(bool allowSettings);
-    void OpenStops(bool allowSettings);
-    void OpenPlanning(bool allowSettings);
+    // A WPF page in the main window beside the navigation rail (null: none).
+    void ShowNative(NativePage? page, bool allowSettings);
 
-    // The dashboard follows the signed-in user's light / dark choice.
+    // Sign-out / lock: the pages are dropped (unsaved edits with them).
+    void DiscardNativePages();
+
+    void OpenTvScreen(bool allowSettings);
+
+    // The WPF pages follow the signed-in user's light / dark choice.
     void ApplyTheme(bool dark);
 
-    // Clicks and keys in the dashboard (not seen by the Razor screens).
+    // Clicks and keys in a WPF page (not seen by the Razor screens).
     event Action? UserActivity;
+
+    // A page was closed with its own button (Fermer, Enregistrer, Annuler).
+    event Action<NativePage>? NativeClosed;
+
+    // The dashboard's own Arrêts / Planification / Paramètres buttons.
+    event Action<NativePage>? NavigateRequested;
 }
 
 // Keeps the sign-in across a page reload (web host: the browser tab's
@@ -51,12 +91,13 @@ public sealed class NoSessionStore : ISessionStore
 public sealed class NoDesktop : IDesktopBridge
 {
     public bool IsAvailable => false;
-    public void ShowDashboard(bool visible, bool allowSettings) { }
+    public void ShowNative(NativePage? page, bool allowSettings) { }
+    public void DiscardNativePages() { }
     public void OpenTvScreen(bool allowSettings) { }
-    public void OpenStops(bool allowSettings) { }
-    public void OpenPlanning(bool allowSettings) { }
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }
+    public event Action<NativePage>? NativeClosed { add { } remove { } }
+    public event Action<NativePage>? NavigateRequested { add { } remove { } }
 }
 
 public static class SpigaServices

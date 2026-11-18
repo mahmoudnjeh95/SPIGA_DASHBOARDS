@@ -84,13 +84,16 @@
 
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
 
-    // Sign-in, lock, first setup: the dashboard beside the rail is hidden
-    // (AppShell shows it again on its page).
+    // Sign-in, lock, first setup: no WPF page beside the rail (AppShell shows
+    // it again on its page). Signed out: the pages are dropped, so the next
+    // user does not find the previous one's unsaved edits.
     protected override void OnAfterRender(bool firstRender)
     {
         var showsApp = _ready && !_needsSetup && Session.Actor is { User.MustChangePassword: false } && !Session.IsLocked;
-        if (!showsApp)
-            Desktop.ShowDashboard(false, false);
+        if (Session.Actor == null)
+            Desktop.DiscardNativePages();
+        else if (!showsApp)
+            Desktop.ShowNative(null, false);
     }
 
     public void Dispose() => Session.Changed -= OnSessionChanged;

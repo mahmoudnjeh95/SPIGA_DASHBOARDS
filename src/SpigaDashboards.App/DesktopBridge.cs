@@ -5,39 +5,59 @@ using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App;
 
-// What the Razor screens ask of the desktop: show the classic dashboard in
-// the main window, open the TV / Arrêts / Planification windows, follow the
-// user's theme. One dashboard view, created on first use.
+// What the Razor screens ask of the desktop: show a WPF page (dashboard,
+// arrêts, planification, paramètres) in the main window beside the menu,
+// open the TV screen, follow the user's theme. One view per page, kept while
+// the user goes elsewhere (no edit lost), dropped when it is closed with its
+// own button or on sign-out.
 internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesktopBridge
 {
     private ShellWindow? _shell;
-    private DashboardView? _view;
+    private DashboardView? _dashboard;
+    private readonly Dictionary<NativePage, FrameworkElement> _views = new();
+    private readonly HashSet<NativePage> _creating = new();
+    private NativePage? _wanted;
+    private bool _allowSettings;
     private bool? _dark;
 
     public bool IsAvailable => true;
 
     public event Action? UserActivity;
+    public event Action<NativePage>? NativeClosed;
+    public event Action<NativePage>? NavigateRequested;
 
     public void Attach(ShellWindow shell)
     {
         _shell = shell;
-        shell.DashboardActivity += () => UserActivity?.Invoke();
-        shell.Closed += (_, _) => _view?.CloseTvForShutdown();
+        shell.NativeActivity += () => UserActivity?.Invoke();
+        shell.Closed += (_, _) => _dashboard?.CloseTvForShutdown();
     }
 
-    public void ShowDashboard(bool visible, bool allowSettings) => OnUi(() =>
+    public void ShowNative(NativePage? page, bool allowSettings) => OnUi(async () =>
     {
-        if (visible)
-            _shell?.ShowDashboard(View(allowSettings));
-        else
-            _shell?.HideDashboard();
+        _wanted = page;
+        _allowSettings = allowSettings;
+        if (_dashboard != null)
+            _dashboard.AllowSettings(allowSettings);
+        if (page is not { } p)
+        {
+            _shell?.HideNative();
+            return;
+        }
+        var view = await ViewAsync(p);
+        // The user may have moved on while the page was being built.
+        if (view != null && _wanted == p)
+            _shell?.ShowNative(view);
     });
 
-    public void OpenTvScreen(bool allowSettings) => OnUi(() => View(allowSettings).OpenTvScreen());
+    public void DiscardNativePages() => OnUi(() =>
+    {
+        _shell?.HideNative();
+        foreach (var page in _views.Keys.Where(k => k != NativePage.Dashboard).ToList())
+            Drop(page);
+    });
 
-    public void OpenStops(bool allowSettings) => OnUi(() => View(allowSettings).ShowStops());
-
-    public void OpenPlanning(bool allowSettings) => OnUi(() => View(allowSettings).ShowPlanning());
+    public void OpenTvScreen(bool allowSettings) => OnUi(() => Dashboard().OpenTvScreen());
 
     public void ApplyTheme(bool dark)
     {
@@ -47,14 +67,87 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         OnUi(() => ThemeService.Apply(dark ? AppTheme.Dark : AppTheme.Light));
     }
 
-    private DashboardView View(bool allowSettings)
+    private DashboardView Dashboard()
     {
-        _view ??= createDashboard();
-        _view.SetEmbedded(true);
-        _view.AllowSettings(allowSettings);
-        return _view;
+        if (_dashboard == null)
+        {
+            _dashboard = createDashboard();
+            _dashboard.SetEmbedded(true);
+            _dashboard.PageRequested = name =>
+            {
+                NativePage? page = name switch
+                {
+                    "arrets" => NativePage.Stops,
+                    "planification" => NativePage.Planning,
+                    "parametres" => NativePage.Settings,
+                    _ => null,
+                };
+                if (page is { } p)
+                    NavigateRequested?.Invoke(p);
+            };
+            _views[NativePage.Dashboard] = _dashboard;
+        }
+        _dashboard.AllowSettings(_allowSettings);
+        return _dashboard;
     }
 
-    // After the Razor event handler has returned (the windows open modal dialogs).
+    private async Task<FrameworkElement?> ViewAsync(NativePage page)
+    {
+        if (_views.TryGetValue(page, out var existing))
+            return existing;
+        if (page == NativePage.Dashboard)
+            return Dashboard();
+        if (!_creating.Add(page))
+            return null;
+        try
+        {
+            FrameworkElement view;
+            switch (page)
+            {
+                case NativePage.Stops:
+                    var stops = new StopsView(Dashboard().CreateStopsViewModel());
+                    stops.CloseRequested += () => Close(page);
+                    view = stops;
+                    break;
+                case NativePage.Planning:
+                    var planning = new PlanningView(Dashboard().CreatePlanningViewModel());
+                    planning.CloseRequested += () => Close(page);
+                    view = planning;
+                    break;
+                default:
+                    var settings = new SettingsView(await Dashboard().CreateSettingsViewModelAsync());
+                    settings.CloseRequested += () => Close(page);
+                    view = settings;
+                    break;
+            }
+            _views[page] = view;
+            return view;
+        }
+        finally
+        {
+            _creating.Remove(page);
+        }
+    }
+
+    // Closed with its own button (Fermer, Enregistrer, Annuler): next time it
+    // opens fresh, and the Razor shell goes back to the previous screen.
+    private void Close(NativePage page)
+    {
+        Drop(page);
+        NativeClosed?.Invoke(page);
+    }
+
+    private void Drop(NativePage page)
+    {
+        if (!_views.Remove(page, out var view))
+            return;
+        if (_wanted == page)
+            _shell?.HideNative();
+        _shell?.RemoveNative(view);
+    }
+
+    // After the Razor event handler has returned.
     private static void OnUi(Action action) => Application.Current.Dispatcher.BeginInvoke(action);
+
+    private static void OnUi(Func<Task> action) => Application.Current.Dispatcher.BeginInvoke((Action)(async () => await action()));
 }

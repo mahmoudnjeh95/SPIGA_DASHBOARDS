@@ -1,4 +1,7 @@
-<Window x:Class="SpigaDashboards.App.SettingsWindow"
+﻿<!-- Paramètres du poste: shown in the main window of SPIGA Suivi Production
+     (Administration > Paramètres) and, in kiosk mode, in SettingsWindow. It
+     was SettingsWindow's content until v1.5.26. -->
+<UserControl x:Class="SpigaDashboards.App.SettingsView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -6,13 +9,10 @@
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
         xmlns:views="clr-namespace:SpigaDashboards.App.Views"
         mc:Ignorable="d"
-        Title="Paramètres" Icon="/Assets/spiga-logo.png" Height="720" Width="780"
-        WindowStartupLocation="CenterOwner"
-        ResizeMode="CanResize"
         Language="fr-FR"
         Background="{DynamicResource WindowBackgroundBrush}">
 
-    <Window.Resources>
+    <UserControl.Resources>
         <!-- Explicit ItemTemplate rather than DisplayMemberPath: the custom
              DarkComboBox template's SelectionBoxItemTemplate doesn't pick up
              DisplayMemberPath's auto-generated template reliably. -->
@@ -116,7 +116,7 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Margin" Value="0,0,8,0"/>
         </Style>
-    </Window.Resources>
+    </UserControl.Resources>
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -317,11 +317,11 @@
                                         <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="8,0,0,0">
                                             <Button Content="&#x25B2;" AutomationProperties.Name="Monter" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0,0,4,0"
                                                     ToolTip="Monter (passe plus tôt dans la rotation)"
-                                                    Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Command="{Binding DataContext.MoveSlideUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}"/>
                                             <Button Content="&#x25BC;" AutomationProperties.Name="Descendre" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="0"
                                                     ToolTip="Descendre (passe plus tard dans la rotation)"
-                                                    Command="{Binding DataContext.MoveSlideDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Command="{Binding DataContext.MoveSlideDownCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}"/>
                                         </StackPanel>
                                     </Grid>
@@ -379,7 +379,7 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <ComboBox Grid.Column="0" Style="{StaticResource DarkComboBox}"
-                                                  ItemsSource="{Binding DataContext.MachineChoices, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  ItemsSource="{Binding DataContext.MachineChoices, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedValuePath="Id" ItemTemplate="{StaticResource MachineChoiceTemplate}"
                                                   SelectedValue="{Binding MachineId}"/>
                                         <TextBox Grid.Column="1" Margin="8,0,0,0" Text="{Binding WeightText, UpdateSourceTrigger=PropertyChanged}"/>
@@ -388,10 +388,10 @@
                                         <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="8,0,0,0">
                                             <Button Content="Dupliquer" Style="{StaticResource SecondaryButton}" Padding="10,4"
                                                     ToolTip="Copier cette ligne (par exemple pour une autre machine)"
-                                                    Command="{Binding DataContext.DuplicateNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Command="{Binding DataContext.DuplicateNominalRateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}"/>
                                             <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4"
-                                                    Command="{Binding DataContext.RemoveNominalRateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Command="{Binding DataContext.RemoveNominalRateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding}"/>
                                         </StackPanel>
                                     </Grid>
@@ -421,7 +421,7 @@
                                         <TextBox Text="{Binding StartText, UpdateSourceTrigger=PropertyChanged}" Width="110"/>
                                         <TextBox Text="{Binding DurationText, UpdateSourceTrigger=PropertyChanged}" Width="80" Margin="8,0,0,0"/>
                                         <Button Content="Supprimer" Style="{StaticResource SecondaryButton}" Padding="10,4" Margin="8,0,0,0"
-                                                Command="{Binding DataContext.RemovePlannedBreakCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Command="{Binding DataContext.RemovePlannedBreakCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                 CommandParameter="{Binding}"/>
                                     </StackPanel>
                                 </DataTemplate>
@@ -477,15 +477,15 @@
                                             <Run Text="{Binding CycleDay, Mode=OneWay}"/>
                                         </TextBlock>
                                         <ComboBox Grid.Column="1" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
-                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
                                                   SelectedValue="{Binding MatinTeamIndex}"/>
                                         <ComboBox Grid.Column="2" Margin="0,0,4,0" Style="{StaticResource DarkComboBox}"
-                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
                                                   SelectedValue="{Binding SoirTeamIndex}"/>
                                         <ComboBox Grid.Column="3" Style="{StaticResource DarkComboBox}"
-                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  ItemsSource="{Binding DataContext.TeamOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                   SelectedValuePath="Index" ItemTemplate="{StaticResource TeamOptionTemplate}"
                                                   SelectedValue="{Binding NuitTeamIndex}"/>
                                     </Grid>
@@ -668,4 +668,4 @@
                        TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0"/>
         </DockPanel>
     </Grid>
-</Window>
+</UserControl>

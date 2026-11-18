@@ -1,20 +1,22 @@
 using System.Windows;
-using SpigaDashboards.App.Services;
+using System.Windows.Controls;
 using SpigaDashboards.App.ViewModels;
 
 namespace SpigaDashboards.App;
 
-public partial class SettingsWindow : Window
+public partial class SettingsView : UserControl
 {
     private readonly SettingsViewModel _viewModel;
 
-    public SettingsWindow(SettingsViewModel viewModel)
+    public SettingsView(SettingsViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
-        WindowSizing.FitToWorkArea(this);
     }
+
+    // Saved or cancelled: the host closes its window, or the main window goes back.
+    public event Action? CloseRequested;
 
     private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
@@ -30,11 +32,11 @@ public partial class SettingsWindow : Window
         // The shared settings did not reach the base: the message says what to do.
         if (_viewModel.SharedSettingsMessage.Length > 0)
             return;
-        Close();
+        CloseRequested?.Invoke();
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
-        Close();
+        CloseRequested?.Invoke();
     }
 }

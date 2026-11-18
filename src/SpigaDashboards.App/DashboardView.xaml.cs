@@ -81,19 +81,34 @@ public partial class DashboardView : UserControl
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (PageRequested != null)
+        {
+            PageRequested("parametres");
+            return;
+        }
+        var window = new SettingsWindow(await CreateSettingsViewModelAsync()) { Owner = OwnerWindow };
+        window.ShowDialog();
+    }
+
+    public async Task<SettingsViewModel> CreateSettingsViewModelAsync()
+    {
         // Edit the shared settings as the other PCs last saved them.
         await _sharedSettings.PullAsync();
-        var settingsViewModel = new SettingsViewModel(
+        return new SettingsViewModel(
             _settingsService, _settings, _activeFactory, _repository, _sharedSettings,
             onApplied: () =>
             {
                 _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
                 _ = _tvWindow?.ReconnectAsync();
             });
-
-        var window = new SettingsWindow(settingsViewModel) { Owner = OwnerWindow };
-        window.ShowDialog();
     }
+
+    public StopsViewModel CreateStopsViewModel()
+        => new(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
+
+    public PlanningViewModel CreatePlanningViewModel()
+        => new(new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
+            new TeamScheduleService(_settings)));
 
     private void TvScreenButton_Click(object sender, RoutedEventArgs e) => OpenTvWindow(activate: true);
 
@@ -124,16 +139,22 @@ public partial class DashboardView : UserControl
 
     private void StopsButton_Click(object sender, RoutedEventArgs e)
     {
-        var stopsViewModel = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
-        var window = new StopsWindow(stopsViewModel) { Owner = OwnerWindow };
-        window.ShowDialog();
+        if (PageRequested != null)
+        {
+            PageRequested("arrets");
+            return;
+        }
+        new StopsWindow(CreateStopsViewModel()) { Owner = OwnerWindow }.ShowDialog();
     }
 
     private void PlanningButton_Click(object sender, RoutedEventArgs e)
     {
-        var context = new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
-            new TeamScheduleService(_settings));
-        new PlanningWindow(new PlanningViewModel(context)) { Owner = OwnerWindow }.ShowDialog();
+        if (PageRequested != null)
+        {
+            PageRequested("planification");
+            return;
+        }
+        new PlanningWindow(CreatePlanningViewModel()) { Owner = OwnerWindow }.ShowDialog();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)
@@ -162,9 +183,10 @@ public partial class DashboardView : UserControl
 
     public void OpenTvScreen() => OpenTvWindow(activate: true);
 
-    public void ShowStops() => StopsButton_Click(this, new RoutedEventArgs());
-
-    public void ShowPlanning() => PlanningButton_Click(this, new RoutedEventArgs());
+    // Set in the main window: the Arrêts, Planification and Paramètres
+    // buttons open those pages beside the menu ("arrets", "planification",
+    // "parametres") instead of dialogs. Null in kiosk mode.
+    public Action<string>? PageRequested { get; set; }
 
     private void NoteTextBox_GotFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = true;
 

@@ -1,18 +1,3 @@
 @page "/production/tableau-de-bord"
-@inherits SpigaPage
-@inject IDesktopBridge Desktop
 
-@* In the Windows application this page is not seen: the window shows the
-   classic dashboard (DashboardView) beside the navigation rail. *@
-@if (!Session.Can(Perm.TableauDetaille))
-{
-    <div class="card" style="max-width:640px">
-        <h2>Accès refusé</h2>
-        <p>Vos rôles ne donnent pas le droit « Tableau de bord détaillé ». Demandez-le à un administrateur.</p>
-    </div>
-}
-else if (!Desktop.IsAvailable)
-{
-    <div class="head"><div><span class="pre">Production</span><h1>Tableau de bord</h1></div></div>
-    <div class="notice info">Le tableau de bord détaillé (diapositives, historique, écran TV) s'ouvre dans l'application installée sur les postes.</div>
-}
+<NativePagePlaceholder Page="NativePage.Dashboard" Group="Production" Title="Le tableau de bord détaillé" />

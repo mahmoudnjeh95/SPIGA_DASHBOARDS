@@ -10,6 +10,8 @@ public partial class KioskWindow : Window
     {
         InitializeComponent();
         Content = dashboard;
+        // The slide templates bind to their window's DataContext (shared with TvWindow).
+        DataContext = dashboard.DataContext;
         Closed += (_, _) => dashboard.CloseTvForShutdown();
     }
 }
