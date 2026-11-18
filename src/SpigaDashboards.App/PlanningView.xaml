@@ -51,7 +51,9 @@
                                 BorderThickness="0,0,0,1" Padding="22,12">
                             <DockPanel>
                                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="0,0,28,0">
-                                    <Image Source="/Assets/spiga-logo.png" Height="34" RenderOptions.BitmapScalingMode="HighQuality" Margin="0,0,10,0"/>
+                                    <!-- Hidden in the main window: its menu already shows the logo. -->
+                                    <Image Source="/Assets/spiga-logo.png" Height="34" RenderOptions.BitmapScalingMode="HighQuality" Margin="0,0,10,0"
+                                           Visibility="{Binding ShowLogo, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}"/>
                                     <TextBlock Text="Planification" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"
                                                Foreground="{DynamicResource PrimaryTextBrush}"/>
                                 </StackPanel>

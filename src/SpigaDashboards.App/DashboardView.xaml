@@ -114,9 +114,9 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Image Source="/Assets/spiga-logo.png" Height="44" Margin="0,0,12,0" VerticalAlignment="Center"
+                <Image x:Name="TopBarLogo" Source="/Assets/spiga-logo.png" Height="44" Margin="0,0,12,0" VerticalAlignment="Center"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
-                <TextBlock Text="SPIGA Dashboards" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TopBarTitle" Text="SPIGA Dashboards" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
                 <!-- Hidden over the consignes PDF slide. -->
                 <!-- Team / poste: pops, glows and flips over at a poste change. -->
                 <Border Background="{DynamicResource HoverBackgroundBrush}" CornerRadius="12" Padding="12,4" Margin="16,0,0,0"

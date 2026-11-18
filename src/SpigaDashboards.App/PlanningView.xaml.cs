@@ -22,6 +22,16 @@ public partial class PlanningView : UserControl
         };
     }
 
+    // False in the main window, whose menu already shows the Spiga logo.
+    public static readonly DependencyProperty ShowLogoProperty =
+        DependencyProperty.Register(nameof(ShowLogo), typeof(bool), typeof(PlanningView), new PropertyMetadata(true));
+
+    public bool ShowLogo
+    {
+        get => (bool)GetValue(ShowLogoProperty);
+        set => SetValue(ShowLogoProperty, value);
+    }
+
     // "Fermer": the host closes its window, or the main window goes back.
     public event Action? CloseRequested;
 

@@ -110,7 +110,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
                     view = stops;
                     break;
                 case NativePage.Planning:
-                    var planning = new PlanningView(Dashboard().CreatePlanningViewModel());
+                    var planning = new PlanningView(Dashboard().CreatePlanningViewModel()) { ShowLogo = false };
                     planning.CloseRequested += () => Close(page);
                     view = planning;
                     break;
