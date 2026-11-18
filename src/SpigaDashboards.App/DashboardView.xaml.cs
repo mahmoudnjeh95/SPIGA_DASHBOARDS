@@ -116,6 +116,15 @@ public partial class DashboardView : UserControl
     // or null (cancelled, refused). Null: no gate (signed-in shell).
     public Func<Window?, Task<ChangeAuthor?>>? SettingsGate { get; set; }
 
+    // Kiosk mode: asked before the note is saved (same answer).
+    public Func<Window?, Task<ChangeAuthor?>>? NoteGate
+    {
+        set => _viewModel.NoteGate = value == null ? null : () => value(OwnerWindow);
+    }
+
+    // Signed-in application: « Modifier la note de l'écran » over the whole plant.
+    public void AllowNote(bool allowed) => _viewModel.CanEditNote = allowed;
+
     public async Task<SettingsViewModel> CreateSettingsViewModelAsync(ChangeAuthor? author = null)
     {
         // Edit the shared settings as the other PCs last saved them.
@@ -145,8 +154,10 @@ public partial class DashboardView : UserControl
     }
 
     // canValidate: « Valider les interventions » (maintenance done).
-    public PlanningViewModel CreatePlanningViewModel(MachineAccess access, bool canValidate)
-        => new(new PlanningContext(new ProductionRepository(_activeFactory, _appData, _settings, access), new PlanningRepository(_appData, _activeFactory, access),
+    // author: who plans and qualifies, written in the audit trail.
+    public PlanningViewModel CreatePlanningViewModel(MachineAccess access, bool canValidate, ChangeAuthor author)
+        => new(new PlanningContext(new ProductionRepository(_activeFactory, _appData, _settings, access),
+            new PlanningRepository(_appData, _activeFactory, access) { Author = author },
             _settings, _settingsService, new TeamScheduleService(_settings)) { CanValidate = canValidate });
 
     // The machines this dashboard shows (and its Historique, Arrêts).

@@ -33,7 +33,7 @@ public static class RoleTemplates
                   Modules.Maintenance, Modules.Energie, Modules.Rh, Modules.Referentiels, Modules.Utilisateurs)
             .Concat(new[]
             {
-                Perm.EquipesMultiples, "vue-ensemble:exporter", "conditionnement:exporter", Perm.TableauDetaille, Perm.EcranTv, "rendement:exporter", "dechets:exporter",
+                Perm.EquipesMultiples, "vue-ensemble:exporter", "conditionnement:exporter", Perm.TableauDetaille, Perm.EcranTv, Perm.NoteEcran, "rendement:exporter", "dechets:exporter",
                 Perm.DechetsSaisir, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsAutrui, Perm.DechetsTardif,
                 "saisie-quantites:saisir", "saisie-quantites:valider", "objectifs:saisir", Perm.ComptesGerer, Perm.ComptesDebloquer,
             }).ToArray(),

@@ -494,12 +494,41 @@ public partial class MainViewModel : ObservableObject
     // Who writes the note (DashboardView.Author).
     public ChangeAuthor Author { get; set; } = ChangeAuthor.Kiosk;
 
-    [RelayCommand]
+    // « Modifier la note de l'écran » over the whole plant (signed-in
+    // application). Kiosk: true, NoteGate asks for an account at save.
+    private bool _canEditNote = true;
+
+    public bool CanEditNote
+    {
+        get => _canEditNote;
+        set
+        {
+            if (SetProperty(ref _canEditNote, value))
+                SaveNoteCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    // Kiosk: the account that signs in to save the note, or null (refused).
+    public Func<Task<ChangeAuthor?>>? NoteGate { get; set; }
+
+    [RelayCommand(CanExecute = nameof(CanEditNote))]
     private async Task SaveNoteAsync()
     {
+        if (!CanEditNote)
+            return;
+        var author = Author;
+        if (NoteGate != null)
+        {
+            if (await NoteGate() is not { } signedIn)
+            {
+                NoteSaveStatus = "Non enregistré.";
+                return;
+            }
+            author = signedIn;
+        }
         try
         {
-            await _repository.SetActiveNoteAsync(NoteText, Author);
+            await _repository.SetActiveNoteAsync(NoteText, author);
             NoteSaveStatus = "Enregistré.";
         }
         catch (Exception ex)

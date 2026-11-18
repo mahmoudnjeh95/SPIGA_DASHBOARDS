@@ -359,6 +359,7 @@
 
                 <TextBox x:Name="NoteTextBox" Grid.Column="0"
                          Text="{Binding NoteText, UpdateSourceTrigger=PropertyChanged}"
+                         IsReadOnly="{Binding CanEditNote, Converter={StaticResource InverseBool}}"
                          FontSize="16" FontWeight="SemiBold" Foreground="#1B1F26" Background="Transparent"
                          BorderThickness="0" TextWrapping="Wrap" AcceptsReturn="True"
                          VerticalContentAlignment="Center"
@@ -369,7 +370,8 @@
 
                 <Button Grid.Column="2" Content="Enregistrer" Padding="12,6"
                         Background="#1B1F26" Foreground="White" BorderThickness="0"
-                        Command="{Binding SaveNoteCommand}"/>
+                        Command="{Binding SaveNoteCommand}"
+                        Visibility="{Binding CanEditNote, Converter={StaticResource BoolToVisibility}}"/>
             </Grid>
         </Border>
 

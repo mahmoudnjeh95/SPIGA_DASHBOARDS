@@ -10,9 +10,18 @@ namespace Spiga.Data;
 // runs the embedded scripts Migrations/<provider>/NNNN_*.sql not yet in
 // SchemaVersion, each in its own transaction, then seeds the Administrateur
 // role and the waste reasons when missing. Safe to run on every start.
+//
+// Least privilege on SQL Server: the PCs' login only needs to read and write
+// (db_datareader, db_datawriter). A version that changes the tables is then
+// applied by IT with an administrator login ("SpigaDashboards.App.exe
+// --update-database", start menu « Mettre à jour la base SPIGA »); until
+// then the PCs refuse to start on the older tables (SchemaUpdateRequired).
+// A login still allowed to change the tables applies the update itself.
+public sealed class SchemaUpdateRequiredException(string message) : Exception(message);
+
 public sealed partial class Migrator(AppDb db)
 {
-    public const int CurrentVersion = 4;
+    public const int CurrentVersion = 5;
 
     [GeneratedRegex(@"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex GoSeparator();
@@ -34,8 +43,16 @@ public sealed partial class Migrator(AppDb db)
             .OrderBy(s => s.Version)
             .ToList();
 
+        var pending = scripts.Where(s => !applied.Contains(s.Version)).ToList();
+        if (pending.Count > 0 && !await CanChangeTablesAsync(connection))
+            throw new SchemaUpdateRequiredException(
+                $"La base {db.DatabaseName} est en version {(applied.Count == 0 ? 0 : applied.Max())}, cette version de l'application " +
+                $"demande la version {pending.Max(s => s.Version)}. Le compte SQL des postes n'a pas le droit de modifier les tables " +
+                "(c'est voulu) : l'informatique doit lancer une fois « Mettre à jour la base SPIGA » (menu Démarrer, " +
+                "ou SpigaDashboards.App.exe --update-database) avec un compte administrateur SQL.");
+
         var ran = 0;
-        foreach (var (name, version) in scripts.Where(s => !applied.Contains(s.Version)))
+        foreach (var (name, version) in pending)
         {
             var sql = Read(assembly, name);
             using var transaction = connection.BeginTransaction();
@@ -84,6 +101,13 @@ public sealed partial class Migrator(AppDb db)
                     new { kind = kind.ToString(), label, order = order++ });
         }
     }
+
+    // Whether this login may create and alter tables here (always on SQLite).
+    private async Task<bool> CanChangeTablesAsync(System.Data.IDbConnection connection)
+        => db.Provider != AppDbProvider.SqlServer
+           || await connection.ExecuteScalarAsync<int>(
+               "SELECT CASE WHEN HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'CREATE TABLE') = 1 " +
+               "AND HAS_PERMS_BY_NAME('dbo', 'SCHEMA', 'ALTER') = 1 THEN 1 ELSE 0 END") == 1;
 
     private static int VersionOf(string resourceName)
     {

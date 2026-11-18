@@ -41,6 +41,21 @@ builder.Services.AddSpigaSuivi(appDb, production, productionSettings);
 builder.Services.AddSingleton<IDesktopBridge, NoDesktop>();
 
 var app = builder.Build();
+
+// IT: "dotnet Spiga.Web.dll --update-database" applies a version's table
+// changes with the administrator connection Spiga:AppDatabase:AdminSqlServer
+// (not kept in the running site's settings), then stops. The site's own
+// login then only needs to read and write.
+if (args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
+{
+    var admin = builder.Configuration["Spiga:AppDatabase:AdminSqlServer"];
+    var updateOptions = string.IsNullOrWhiteSpace(admin) ? appDb : new AppDbOptions { Provider = AppDbProvider.SqlServer, ConnectionString = admin };
+    var ran = await new Migrator(new AppDb(updateOptions)).MigrateAsync();
+    await AppData.ImportLegacyAsync(production, updateOptions);
+    Console.WriteLine($"{ran} mise(s) à jour appliquée(s) ; base en version {Migrator.CurrentVersion}.");
+    return;
+}
+
 await app.Services.GetRequiredService<Migrator>().MigrateAsync();
 // What versions up to 2.0 wrote in stats (planning, shared settings, note):
 // copied once into the application database, stats being only read now.

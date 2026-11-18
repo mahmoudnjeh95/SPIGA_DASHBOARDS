@@ -25,6 +25,8 @@ public static class Perm
 
     public const string TableauDetaille = "conditionnement:tableau";
     public const string EcranTv = "conditionnement:tv";
+    // The note shown on every screen of the site: over the whole plant.
+    public const string NoteEcran = "conditionnement:note";
     public const string ParametresPoste = "parametres:administrer";
 
     // Responsables: cover several teams (or all). Without it an account is
@@ -77,6 +79,7 @@ public static class PermissionCatalog
         View(Modules.Conditionnement); Export(Modules.Conditionnement);
         Add(Modules.Conditionnement, "tableau", "Tableau de bord détaillé", "Diapositives, historique, synthèse secteur (application poste)");
         Add(Modules.Conditionnement, "tv", "Lancer l'écran TV");
+        Add(Modules.Conditionnement, "note", "Modifier la note de l'écran", "Bandeau affiché sur tous les écrans du site : sur toute l'usine");
 
         View(Modules.Rendement); Export(Modules.Rendement);
 

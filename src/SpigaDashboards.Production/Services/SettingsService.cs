@@ -24,11 +24,32 @@ public class SettingsService
         try
         {
             var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            UpgradePassword(settings);
+            return settings;
         }
         catch (Exception ex) when (ex is IOException or JsonException)
         {
             return new AppSettings();
+        }
+    }
+
+    // A password saved by a version up to 2.0 (machine scope: readable by any
+    // account of the PC) is protected again for this Windows user only.
+    private void UpgradePassword(AppSettings settings)
+    {
+        try
+        {
+            if (PasswordProtector.Upgrade(settings.SqlServer.EncryptedPassword) is { } upgraded)
+            {
+                settings.SqlServer.EncryptedPassword = upgraded;
+                Save(settings);
+                AppLogger.Log("Mot de passe SQL re-chiffré pour ce seul compte Windows.");
+            }
+        }
+        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or IOException or PlatformNotSupportedException)
+        {
+            AppLogger.Log("Mot de passe SQL non re-chiffré : " + ex.Message);
         }
     }
 

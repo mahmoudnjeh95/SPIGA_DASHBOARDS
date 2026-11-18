@@ -78,14 +78,16 @@ public static class NativePages
             CanExport: export != null && actor.Covers(export, permission),
             CanValidate: validate != null && actor.Covers(validate, permission),
             CanSettings: actor.CanEverywhere(Perm.ParametresPoste),
-            CanTv: actor.CanEverywhere(Perm.EcranTv));
+            CanTv: actor.CanEverywhere(Perm.EcranTv),
+            CanEditNote: actor.CanEverywhere(Perm.NoteEcran));
     }
 }
 
 // The rights of the signed-in account in one WPF page. Team: its one team
 // (null = several or all). Machines: those it may see there (null = all).
 public sealed record NativeAccess(
-    string UserLogin, string UserName, string? Team, MachineRule? Machines, bool CanExport, bool CanValidate, bool CanSettings, bool CanTv)
+    string UserLogin, string UserName, string? Team, MachineRule? Machines, bool CanExport, bool CanValidate, bool CanSettings, bool CanTv,
+    bool CanEditNote = false)
 {
     // No account (signed out, locked): nothing.
     public static NativeAccess None { get; } = new("", "", null, new MachineRule("-", (_, _) => false), false, false, false, false);

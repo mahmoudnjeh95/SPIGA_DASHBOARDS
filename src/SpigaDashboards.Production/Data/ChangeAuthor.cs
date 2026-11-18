@@ -22,6 +22,7 @@ internal static class AuditRows
     // Same names as Spiga.Core's Modules / AuditActions, shown by the journal.
     public const string ModuleConditionnement = "conditionnement";
     public const string ModuleParametres = "parametres";
+    public const string ModuleMaintenance = "maintenance";
     public const string NoteUpdated = "Note du tableau de bord modifiée";
     public const string MachineRenamed = "Machine renommée";
 

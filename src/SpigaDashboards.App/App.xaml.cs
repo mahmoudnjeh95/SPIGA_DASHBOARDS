@@ -52,7 +52,8 @@ public partial class App : Application
         {
             var dashboard = new DashboardView(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
                 settingsService, settings, activeFactory, appData, repository, sharedSettings);
-            dashboard.SettingsGate = owner => KioskSettingsGate.AskAsync(owner, settings);
+            dashboard.SettingsGate = owner => KioskSignIn.ForSettingsAsync(owner, settings);
+            dashboard.NoteGate = owner => KioskSignIn.ForNoteAsync(owner, settings);
             return dashboard;
         }
 
@@ -63,6 +64,14 @@ public partial class App : Application
             var scoped = new ProductionRepository(activeFactory, appData, settings, MachineAccess.Nothing());
             return new(new MainViewModel(scoped, settings, teamSchedule, sharedSettings),
                 settingsService, settings, activeFactory, appData, scoped, sharedSettings);
+        }
+
+        // IT: the table changes of this version, with an administrator login.
+        if (e.Args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
+        {
+            DatabaseUpdateTool.Run(settings, activeFactory);
+            Shutdown();
+            return;
         }
 
         // The application database first, in every mode: the dashboard reads
@@ -119,10 +128,11 @@ public partial class App : Application
 
         if (appDbError is { } appDbException)
         {
-            var hint = settings.Provider == DatabaseProvider.SqlServer
-                ? $"\n\nSur le serveur SQL, la base « {settings.AppDatabaseName} » doit exister et le compte des postes " +
-                  "doit pouvoir y créer ses tables : script spiga_suivi.sql, dans le dossier d'installation, à exécuter une fois."
-                : "";
+            // An update waiting for IT says what to do itself.
+            var hint = appDbException is SchemaUpdateRequiredException || settings.Provider != DatabaseProvider.SqlServer
+                ? ""
+                : $"\n\nSur le serveur SQL, la base « {settings.AppDatabaseName} » doit exister et le compte des postes " +
+                  "doit pouvoir y lire et écrire : script spiga_suivi.sql, dans le dossier d'installation, à exécuter une fois.";
             MessageBox.Show(
                 "La base de SPIGA Suivi Production est injoignable :\n" + appDbException.Message + hint +
                 "\n\nLe tableau de bord s'ouvre seul, sans connexion utilisateur.",

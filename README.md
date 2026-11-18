@@ -32,7 +32,20 @@ dotnet test tests/Spiga.Tests
 On the first start, with an empty application database, the application
 asks for the first administrator account. On a dev PC the application
 database is `database/spiga_suivi.db` (created automatically, not in git).
-On site, IT runs `database/spiga_suivi.sql` once on the SQL Server.
+On site, IT runs `database/spiga_suivi.sql` once on the SQL Server (the
+database, and a login for the PCs that only reads and writes it), then
+start menu « Mettre à jour la base SPIGA (informatique) »
+(`SpigaDashboards.App.exe --update-database`) with an administrator login,
+which creates the tables. IT runs it again for each version that changes
+the tables; until then the PCs say the base must be updated. (A login still
+allowed to change the tables, as on sites installed before 2.1, updates
+the base itself; `spiga_suivi.sql` takes that right back.) Browser host:
+`--update-database` with `Spiga:AppDatabase:AdminSqlServer`.
+
+The SQL password of the PCs is encrypted for the Windows account that
+saved it (DPAPI user scope); a password saved by an older version, readable
+by any account of the PC, is re-encrypted at the next start. Windows
+authentication is recommended: no password is stored at all.
 
 The desktop shell needs the Microsoft Edge WebView2 runtime (present on
 Windows 10 and 11).
@@ -123,8 +136,15 @@ Utilisateurs et rôles, without a developer.
   not only when the user moves to another screen: a role, platform or
   account changed by an administrator applies within a minute, a disabled
   account is signed out.
-* **The dashboard's note and machine renames** record who made them (the
-  signed-in account, or « kiosque » on a TV PC) and go to the audit trail.
+* **The dashboard's note and machine renames** record who made them and go
+  to the audit trail. The note shows on every screen of the site: changing
+  it needs « Modifier la note de l'écran » over the whole plant (given in
+  version 2.1 to the roles that had the detailed dashboard); on a TV PC,
+  saving it asks for such an account.
+* **Planning changes are audited:** stop qualifications (and their
+  deletion), maintenance plans, interventions (planned, done, cancelled),
+  planned stops and production orders, each with its author, PC, and the
+  row before and after, in the same transaction as the change.
 * Every service checks the rights itself; the screens only hide what the
   user cannot use.
 * Passwords: PBKDF2-SHA256; temporary passwords must be changed at first

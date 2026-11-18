@@ -35,14 +35,112 @@ public class PlanningRepository
 
     // An update: the row as stored must be in scope too (no moving another
     // machine's row into one's own).
-    private async Task DemandStoredAsync(IDbConnection connection, string table, int id)
+    private async Task DemandStoredAsync(IDbConnection connection, IDbTransaction transaction, string table, int id)
     {
-        if (!Access.IsRestricted)
+        if (!Access.IsRestricted || id == 0)
             return;
-        var stored = await connection.ExecuteScalarAsync<string?>($"SELECT MachineId FROM {table} WHERE Id = @id", new { id });
+        var stored = await connection.ExecuteScalarAsync<string?>($"SELECT MachineId FROM {table} WHERE Id = @id", new { id }, transaction);
         if (stored != null)
             await DemandAsync(stored);
     }
+
+    // Who plans, qualifies, validates: written in the audit trail with each
+    // change (set by the page that opens the planning).
+    public ChangeAuthor Author { get; set; } = ChangeAuthor.Kiosk;
+
+    // One change of a planning row, with its audit row (the row before and
+    // after, its author and PC), in one transaction: no change without its
+    // trace. write returns the row's id.
+    private async Task<int> AuditedAsync(string table, int id, string label,
+        Func<IDbConnection, IDbTransaction, Task<int>> write, bool delete = false)
+    {
+        using var connection = _connectionFactory.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        await DemandStoredAsync(connection, transaction, table, id);
+        var before = id == 0 ? null : await DescribeAsync(connection, transaction, table, id);
+        var rowId = await write(connection, transaction);
+        var after = delete ? null : await DescribeAsync(connection, transaction, table, rowId);
+        if (before != after)
+        {
+            var action = (before, after) switch
+            {
+                (null, _) => $"{label} : création",
+                (_, null) => $"{label} : suppression",
+                _ when after!.Contains("Statut : réalisé") && !before!.Contains("Statut : réalisé") => $"{label} : réalisé / validé",
+                _ when after!.Contains("Statut : annulé") && !before!.Contains("Statut : annulé") => $"{label} : annulation",
+                _ => $"{label} : modification",
+            };
+            await AuditRows.WriteAsync(connection, transaction, Author, AuditRows.ModuleMaintenance, action,
+                $"{label} n°{rowId}", before, after);
+        }
+        transaction.Commit();
+        return rowId;
+    }
+
+    // "Machine : PC01 · Tâche : Graissage · Début : 17/11/2026 06:00 · Statut : planifié..."
+    private static async Task<string?> DescribeAsync(IDbConnection connection, IDbTransaction transaction, string table, int id)
+    {
+        var row = (IDictionary<string, object?>?)await connection.QueryFirstOrDefaultAsync($"SELECT * FROM {table} WHERE Id = @id", new { id }, transaction);
+        if (row == null)
+            return null;
+        static string Text(string column, object? value) => (column, value) switch
+        {
+            (_, null) => "",
+            ("Status", _) => Convert.ToInt32(value) switch { 0 => "planifié", 1 => "réalisé", _ => "annulé" },
+            (_, DateTime d) => Date(d),
+            (_, string text) when DateColumns.Contains(column) && DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d) => Date(d),
+            (_, bool b) => b ? "oui" : "non",
+            ("IsActive" or "IsManual", _) => Convert.ToInt64(value) != 0 ? "oui" : "non",
+            _ => Convert.ToString(value, System.Globalization.CultureInfo.GetCultureInfo("fr-FR")) ?? "",
+        };
+        return string.Join(" · ", row.Where(kv => kv.Key != "Id")
+            .Select(kv => (Label: ColumnLabel(kv.Key), Value: Text(kv.Key, kv.Value)))
+            .Where(c => c.Value.Length > 0)
+            .Select(c => $"{c.Label} : {c.Value}"));
+    }
+
+    private static string Date(DateTime d) => d.ToString(d.TimeOfDay == TimeSpan.Zero ? "dd/MM/yyyy" : "dd/MM/yyyy HH:mm");
+
+    private static readonly HashSet<string> DateColumns = new()
+    {
+        "PlannedStart", "PlannedEnd", "DoneAt", "LastDoneAt", "StopStart", "StopEnd", "ExpectedEnd", "ShiftDate", "CreatedAt",
+    };
+
+    private static string ColumnLabel(string column) => column switch
+    {
+        "MachineId" => "Machine",
+        "OrderNo" => "N°",
+        "Product" => "Produit",
+        "TargetWeightGrams" => "Poids cible (g)",
+        "QuantityBags" => "Sacs",
+        "PlannedStart" => "Début",
+        "PlannedEnd" => "Fin",
+        "Status" => "Statut",
+        "Comment" => "Commentaire",
+        "Task" => "Tâche",
+        "DurationMinutes" => "Durée (min)",
+        "DoneAt" => "Réalisé le",
+        "Technician" => "Technicien",
+        "PlanId" => "Plan",
+        "Kind" => "Type",
+        "IntervalDays" => "Tous les (jours)",
+        "IntervalBags" => "Tous les (sacs)",
+        "LastDoneAt" => "Dernière réalisation",
+        "IsActive" => "Actif",
+        "StopStart" => "Arrêt du",
+        "StopEnd" => "au",
+        "ExpectedEnd" => "Retour prévu",
+        "ShiftDate" => "Jour de poste",
+        "ShiftId" => "Poste",
+        "Team" => "Équipe",
+        "CauseCode" => "Cause",
+        "Component" => "Organe",
+        "IsManual" => "Saisi à la main",
+        "CreatedAt" => "Créé le",
+        _ => column,
+    };
 
     private bool IsSqlServer => _connectionFactory.Provider == DatabaseProvider.SqlServer;
 
@@ -88,32 +186,30 @@ public class PlanningRepository
     public async Task SaveQualificationAsync(StopQualification q)
     {
         await DemandAsync(q.MachineId);
-        using var connection = await OpenAsync();
-        await DemandStoredAsync(connection, "PlanStopQualifications", q.Id);
         if (q.Id == 0)
-        {
             q.CreatedAt = DateTime.Now;
-            q.Id = await connection.ExecuteScalarAsync<int>(
-                @"INSERT INTO PlanStopQualifications (MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode,
-                      Component, Technician, Comment, IsManual, CreatedAt, ExpectedEnd)
-                  VALUES (@MachineId, @StopStart, @StopEnd, @ShiftDate, @ShiftId, @Team, @CauseCode,
-                      @Component, @Technician, @Comment, @IsManual, @CreatedAt, @ExpectedEnd); " + IdentitySelect, q);
-        }
-        else
+        q.Id = await AuditedAsync("PlanStopQualifications", q.Id, "Qualification d'arrêt", async (connection, transaction) =>
         {
+            if (q.Id == 0)
+                return await connection.ExecuteScalarAsync<int>(
+                    @"INSERT INTO PlanStopQualifications (MachineId, StopStart, StopEnd, ShiftDate, ShiftId, Team, CauseCode,
+                          Component, Technician, Comment, IsManual, CreatedAt, ExpectedEnd)
+                      VALUES (@MachineId, @StopStart, @StopEnd, @ShiftDate, @ShiftId, @Team, @CauseCode,
+                          @Component, @Technician, @Comment, @IsManual, @CreatedAt, @ExpectedEnd); " + IdentitySelect, q, transaction);
             await connection.ExecuteAsync(
                 @"UPDATE PlanStopQualifications SET StopStart = @StopStart, StopEnd = @StopEnd, CauseCode = @CauseCode,
                       Component = @Component, Technician = @Technician, Comment = @Comment, ExpectedEnd = @ExpectedEnd
-                  WHERE Id = @Id", q);
-        }
+                  WHERE Id = @Id", q, transaction);
+            return q.Id;
+        });
     }
 
     public async Task DeleteQualificationAsync(int id)
-    {
-        using var connection = await OpenAsync();
-        await DemandStoredAsync(connection, "PlanStopQualifications", id);
-        await connection.ExecuteAsync("DELETE FROM PlanStopQualifications WHERE Id = @id", new { id });
-    }
+        => await AuditedAsync("PlanStopQualifications", id, "Qualification d'arrêt", async (connection, transaction) =>
+        {
+            await connection.ExecuteAsync("DELETE FROM PlanStopQualifications WHERE Id = @id", new { id }, transaction);
+            return id;
+        }, delete: true);
 
     public async Task<List<string>> GetDistinctAsync(string column)
     {
@@ -139,17 +235,18 @@ public class PlanningRepository
     public async Task SavePlanAsync(MaintenancePlan p)
     {
         await DemandAsync(p.MachineId);
-        using var connection = await OpenAsync();
-        await DemandStoredAsync(connection, "PlanMaintenancePlans", p.Id);
-        if (p.Id == 0)
-            p.Id = await connection.ExecuteScalarAsync<int>(
-                @"INSERT INTO PlanMaintenancePlans (MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive)
-                  VALUES (@MachineId, @Task, @Kind, @IntervalDays, @IntervalBags, @DurationMinutes, @LastDoneAt, @IsActive); " + IdentitySelect, p);
-        else
+        p.Id = await AuditedAsync("PlanMaintenancePlans", p.Id, "Plan de maintenance", async (connection, transaction) =>
+        {
+            if (p.Id == 0)
+                return await connection.ExecuteScalarAsync<int>(
+                    @"INSERT INTO PlanMaintenancePlans (MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive)
+                      VALUES (@MachineId, @Task, @Kind, @IntervalDays, @IntervalBags, @DurationMinutes, @LastDoneAt, @IsActive); " + IdentitySelect, p, transaction);
             await connection.ExecuteAsync(
                 @"UPDATE PlanMaintenancePlans SET MachineId = @MachineId, Task = @Task, Kind = @Kind, IntervalDays = @IntervalDays,
                       IntervalBags = @IntervalBags, DurationMinutes = @DurationMinutes, LastDoneAt = @LastDoneAt, IsActive = @IsActive
-                  WHERE Id = @Id", p);
+                  WHERE Id = @Id", p, transaction);
+            return p.Id;
+        });
     }
 
     // A maintenance can last several days: one started this long before a
@@ -180,17 +277,19 @@ public class PlanningRepository
     public async Task SaveEventAsync(MaintenanceEvent e)
     {
         await DemandAsync(e.MachineId);
-        using var connection = await OpenAsync();
-        await DemandStoredAsync(connection, "PlanMaintenanceEvents", e.Id);
-        if (e.Id == 0)
-            e.Id = await connection.ExecuteScalarAsync<int>(
-                @"INSERT INTO PlanMaintenanceEvents (PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment)
-                  VALUES (@PlanId, @Kind, @MachineId, @Task, @PlannedStart, @DurationMinutes, @Status, @DoneAt, @Technician, @Comment); " + IdentitySelect, e);
-        else
+        var label = e.IsStop ? "Arrêt planifié" : "Intervention de maintenance";
+        e.Id = await AuditedAsync("PlanMaintenanceEvents", e.Id, label, async (connection, transaction) =>
+        {
+            if (e.Id == 0)
+                return await connection.ExecuteScalarAsync<int>(
+                    @"INSERT INTO PlanMaintenanceEvents (PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment)
+                      VALUES (@PlanId, @Kind, @MachineId, @Task, @PlannedStart, @DurationMinutes, @Status, @DoneAt, @Technician, @Comment); " + IdentitySelect, e, transaction);
             await connection.ExecuteAsync(
                 @"UPDATE PlanMaintenanceEvents SET Kind = @Kind, MachineId = @MachineId, Task = @Task, PlannedStart = @PlannedStart,
                       DurationMinutes = @DurationMinutes, Status = @Status, DoneAt = @DoneAt, Technician = @Technician, Comment = @Comment
-                  WHERE Id = @Id", e);
+                  WHERE Id = @Id", e, transaction);
+            return e.Id;
+        });
     }
 
     // Maintenance slots and planned stops running at `time` (not done, not
@@ -280,29 +379,31 @@ public class PlanningRepository
     public async Task SaveOrderAsync(ProductionOrder o)
     {
         await DemandAsync(o.MachineId);
-        using var connection = await OpenAsync();
-        await DemandStoredAsync(connection, "PlanProductionOrders", o.Id);
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                if (o.Id == 0)
-                    o.Id = await connection.ExecuteScalarAsync<int>(
-                        @"INSERT INTO PlanProductionOrders (OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment)
-                          VALUES (@OrderNo, @MachineId, @Product, @TargetWeightGrams, @QuantityBags, @PlannedStart, @PlannedEnd, @Status, @Comment); " + IdentitySelect, o);
-                else
+                o.Id = await AuditedAsync("PlanProductionOrders", o.Id, "Ordre de fabrication", async (connection, transaction) =>
+                {
+                    if (o.Id == 0)
+                        return await connection.ExecuteScalarAsync<int>(
+                            @"INSERT INTO PlanProductionOrders (OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment)
+                              VALUES (@OrderNo, @MachineId, @Product, @TargetWeightGrams, @QuantityBags, @PlannedStart, @PlannedEnd, @Status, @Comment); " + IdentitySelect,
+                            o, transaction);
                     await connection.ExecuteAsync(
                         @"UPDATE PlanProductionOrders SET OrderNo = @OrderNo, MachineId = @MachineId, Product = @Product,
                               TargetWeightGrams = @TargetWeightGrams, QuantityBags = @QuantityBags, PlannedStart = @PlannedStart,
                               PlannedEnd = @PlannedEnd, Status = @Status, Comment = @Comment
-                          WHERE Id = @Id", o);
+                          WHERE Id = @Id", o, transaction);
+                    return o.Id;
+                });
                 return;
             }
             catch (Exception ex) when (IsDuplicate(ex))
             {
                 if (o.Id != 0 || !AutoNumber.IsMatch(o.OrderNo) || attempt >= 5)
                     throw new InvalidOperationException($"Le numéro d'ordre {o.OrderNo} est déjà utilisé : choisissez-en un autre.", ex);
-                o.OrderNo = await NextOrderNoAsync(connection, null, DateTime.Now);
+                o.OrderNo = await NextOrderNoAsync(DateTime.Now);
             }
         }
     }

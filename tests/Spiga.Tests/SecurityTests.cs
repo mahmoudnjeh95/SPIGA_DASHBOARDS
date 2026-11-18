@@ -40,7 +40,7 @@ public class SecurityTests
         foreach (var nav in ModuleCatalog.Navigation)
             Assert.NotNull(PermissionCatalog.Find(Perm.View(nav.Module)));
         foreach (var key in new[] { Perm.DechetsSaisir, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsTardif, Perm.DechetsAutrui,
-                     Perm.ComptesGerer, Perm.ComptesDebloquer, Perm.RolesGerer, Perm.SecuriteGerer, Perm.TableauDetaille, Perm.EcranTv, Perm.ParametresPoste, Perm.EquipesMultiples, Perm.PlateformesGerer })
+                     Perm.ComptesGerer, Perm.ComptesDebloquer, Perm.RolesGerer, Perm.SecuriteGerer, Perm.TableauDetaille, Perm.EcranTv, Perm.ParametresPoste, Perm.EquipesMultiples, Perm.PlateformesGerer, Perm.NoteEcran })
             Assert.NotNull(PermissionCatalog.Find(key));
         foreach (var t in RoleTemplates.All)
             Assert.All(t.Permissions, p => Assert.NotNull(PermissionCatalog.Find(p)));

@@ -48,4 +48,9 @@ public sealed class AppDb(AppDbOptions options)
         : "; SELECT last_insert_rowid();";
 
     public string Key => Provider == AppDbProvider.SqlServer ? "[Key]" : "Key";
+
+    // For messages: the database (SQL Server) or the file (SQLite).
+    public string DatabaseName => Provider == AppDbProvider.SqlServer
+        ? new SqlConnectionStringBuilder(options.ConnectionString).InitialCatalog
+        : Path.GetFileName(new SqliteConnectionStringBuilder(options.ConnectionString).DataSource);
 }

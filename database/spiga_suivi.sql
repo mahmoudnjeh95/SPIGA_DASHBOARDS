@@ -9,12 +9,21 @@
 -- update every PC together (a PC left on 2.0 keeps writing in stats, unseen
 -- by the others). Every PC, kiosk / TV ones included, needs this database.
 --
--- The tables themselves are created by the application at its first start
--- (src/Spiga.Data/Migrations), and upgraded the same way by later versions,
--- so the login used by the PCs needs to be able to create tables in THIS
--- database only (db_ddladmin). Replace spiga_dash below by the login set in
--- the PCs' Paramètres if it is another one. The database name can be changed
--- with "AppDatabaseName" in the PCs' settings.json.
+-- The tables are created and upgraded by the application's versioned
+-- migrations (src/Spiga.Data/Migrations). Least privilege: the login used by
+-- the PCs only reads and writes this database (db_datareader,
+-- db_datawriter). When a new version changes the tables, IT applies it once,
+-- before or right after installing it on the PCs, with a login allowed to
+-- change the tables (db_owner or db_ddladmin, or sysadmin):
+--     start menu « Mettre à jour la base SPIGA (informatique) »
+--     (= SpigaDashboards.App.exe --update-database)
+-- Until then the PCs say the base must be updated and do not start on the
+-- older tables. Replace spiga_dash below by the login set in the PCs'
+-- Paramètres if it is another one. The database name can be changed with
+-- "AppDatabaseName" in the PCs' settings.json.
+--
+-- Sites installed before version 2.1 gave db_ddladmin to the PCs' login:
+-- this script takes it back (the PCs could otherwise change or drop tables).
 
 IF DB_ID('spiga_suivi') IS NULL
     CREATE DATABASE spiga_suivi;
@@ -31,6 +40,7 @@ IF USER_ID('spiga_dash') IS NOT NULL
 BEGIN
     ALTER ROLE db_datareader ADD MEMBER spiga_dash;
     ALTER ROLE db_datawriter ADD MEMBER spiga_dash;
-    ALTER ROLE db_ddladmin ADD MEMBER spiga_dash;
+    IF IS_ROLEMEMBER('db_ddladmin', 'spiga_dash') = 1
+        ALTER ROLE db_ddladmin DROP MEMBER spiga_dash;
 END
 GO

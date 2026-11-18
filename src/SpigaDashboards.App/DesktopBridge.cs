@@ -92,7 +92,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
     public void OpenTvScreen() => OnUi(() => Dashboard().OpenTvScreen());
 
     private static string KeyOf(NativeAccess a)
-        => $"{a.UserLogin}|{a.MachinesKey}|{a.Team}|{a.CanExport}|{a.CanValidate}|{a.CanSettings}|{a.CanTv}";
+        => $"{a.UserLogin}|{a.MachinesKey}|{a.Team}|{a.CanExport}|{a.CanValidate}|{a.CanSettings}|{a.CanTv}|{a.CanEditNote}";
 
     private static void Apply(DashboardView dashboard, NativeAccess a)
     {
@@ -100,6 +100,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         dashboard.AllowSettings(a.CanSettings);
         dashboard.AllowTv(a.CanTv);
         dashboard.AllowExport(a.CanExport);
+        dashboard.AllowNote(a.CanEditNote);
         dashboard.Author = a.UserLogin.Length > 0 ? ChangeAuthor.Account(a.UserLogin, a.UserName) : ChangeAuthor.Kiosk;
         dashboard.LockTeam(a.Team);
     }
@@ -206,7 +207,8 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         if (_planning == null)
         {
             _planningKey = KeyOf(access);
-            _planning = Dashboard().CreatePlanningViewModel(AccessFor(access), access.CanValidate);
+            _planning = Dashboard().CreatePlanningViewModel(AccessFor(access), access.CanValidate,
+                ChangeAuthor.Account(access.UserLogin, access.UserName));
             _planning.SectionRequested += s => NavigateRequested?.Invoke(Page(s));
         }
         return _planning;
