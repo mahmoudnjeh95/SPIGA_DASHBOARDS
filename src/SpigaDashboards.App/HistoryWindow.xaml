@@ -129,7 +129,7 @@
                 <TextBlock Text="{Binding Summary.WeightDeviationGrams, StringFormat={}{0:+0.0;-0.0;0.0} g, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>
-                <TextBlock Text="Surpoids (kg)" Style="{StaticResource SummaryLabel}"/>
+                <TextBlock Text="Sur (+) / sous-poids (−) kg" Style="{StaticResource SummaryLabel}"/>
                 <TextBlock Text="{Binding Summary.GiveawayKg, StringFormat={}{0:+#,##0.0;-#,##0.0;0.0}, TargetNullValue=&#x2014;}" Style="{StaticResource SummaryValue}"/>
             </StackPanel>
             <StackPanel>

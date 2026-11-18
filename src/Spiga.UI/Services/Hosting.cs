@@ -154,6 +154,10 @@ public sealed class UiState
     public string? PackagingSector { get; set; }
     public int? PackagingShift { get; set; }
 
+    // Menu: the screens planned for a later version ("à venir") are folded
+    // away unless the user opens them.
+    public bool ShowUpcoming { get; set; }
+
     // How the user set up each chart (SpigaChart), by chart key.
     public Dictionary<string, ChartView> Charts { get; } = new();
 }

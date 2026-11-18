@@ -241,7 +241,7 @@
                         <StackPanel Margin="22,20">
                             <!-- Header -->
                             <DockPanel>
-                                <Border DockPanel.Dock="Right" Background="#1F2ECC71" CornerRadius="12" Padding="10,5" VerticalAlignment="Top"
+                                <Border DockPanel.Dock="Right" Background="#1F2ECC71" CornerRadius="12" Padding="10,5" VerticalAlignment="Top" Margin="12,0,0,0"
                                         Visibility="{Binding ShowTimeline, Converter={StaticResource BoolToVisibility}}">
                                     <StackPanel Orientation="Horizontal">
                                         <Path Data="M0,5 L4,9 L12,0" Stroke="{DynamicResource SuccessBrush}" StrokeThickness="2" Width="12" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
@@ -249,7 +249,7 @@
                                     </StackPanel>
                                 </Border>
                                 <StackPanel>
-                                    <TextBlock Text="{Binding FormTitle}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                    <TextBlock Text="{Binding FormTitle}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap"/>
                                     <TextBlock Text="{Binding FormSubtitle}" Style="{StaticResource Caption}" Margin="0,3,0,0"/>
                                 </StackPanel>
                             </DockPanel>

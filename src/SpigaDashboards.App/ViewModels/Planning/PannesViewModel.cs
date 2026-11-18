@@ -320,14 +320,22 @@ public partial class PannesViewModel : ObservableObject
                 : _ctx.Machines.Where(m => m.MachineName == SelectedMachine).ToList();
             var names = _ctx.Machines.ToDictionary(m => m.MachineId, m => m.MachineName);
 
-            var segments = await _ctx.Production.GetLineSegmentsAsync(machines.Select(m => m.MachineId).ToList(), from, to);
-            var stops = StopDetector.Detect(segments, from, to, _ctx.Settings, _ctx.Teams, names);
-            // Micro-stops: under the threshold, so not listed; counted for the banner.
+            // Off the window's thread: on SQLite (dev PC) the query runs
+            // synchronously and takes seconds; the menu must stay usable and
+            // the loader visible meanwhile.
             var threshold = Math.Max(1, _ctx.Settings.StopThresholdMinutes);
-            var micro = threshold <= 1 ? new List<ProductionStop>()
-                : StopDetector.Detect(segments, from, to, _ctx.Settings, _ctx.Teams, names, 1).Where(s => s.NetMinutes < threshold).ToList();
-            var quals = await _ctx.Planning.GetQualificationsAsync(from.AddHours(-1), to.AddHours(1));
-            _recent30 = await _ctx.Planning.GetQualificationsAsync(DateTime.Now.AddDays(-30), DateTime.Now.AddDays(1));
+            var machineIds = machines.Select(m => m.MachineId).ToList();
+            var (stops, micro) = await Task.Run(async () =>
+            {
+                var segments = await _ctx.Production.GetLineSegmentsAsync(machineIds, from, to);
+                var listed = StopDetector.Detect(segments, from, to, _ctx.Settings, _ctx.Teams, names);
+                // Micro-stops: under the threshold, so not listed; counted for the banner.
+                var small = threshold <= 1 ? new List<ProductionStop>()
+                    : StopDetector.Detect(segments, from, to, _ctx.Settings, _ctx.Teams, names, 1).Where(s => s.NetMinutes < threshold).ToList();
+                return (listed, small);
+            });
+            var quals = await Task.Run(() => _ctx.Planning.GetQualificationsAsync(from.AddHours(-1), to.AddHours(1)));
+            _recent30 = await Task.Run(() => _ctx.Planning.GetQualificationsAsync(DateTime.Now.AddDays(-30), DateTime.Now.AddDays(1)));
             var ids = machines.Select(m => m.MachineId).ToHashSet();
             quals = quals.Where(q => ids.Contains(q.MachineId)).ToList();
 
@@ -378,7 +386,7 @@ public partial class PannesViewModel : ObservableObject
             BannerMicro = micro.Count == 0 ? ""
                 : $"+ {micro.Count} micro-arrêt{(micro.Count > 1 ? "s" : "")} de moins de {threshold} min ({PlanningContext.Duration(micro.Sum(s => s.NetMinutes))}), non listés";
             OpenSummary = open.Count == 0 ? ""
-                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}{(SelectedTeam != AllTeams ? ", " + SelectedTeam : "")}) : les statistiques ne comptent que les arrêts qualifiés.";
+                : $"{BannerTitle} ({PeriodOptions[PeriodIndex].ToLowerInvariant()}{(SelectedTeam != AllTeams ? ", " + SelectedTeam : "")}, d'après la page Qualification des arrêts) : les statistiques ne comptent que les arrêts qualifiés.";
             if (auto > 0)
                 AppLogger.Log($"Pannes : {auto} arrêt(s) qualifié(s) par le calendrier");
 

@@ -123,7 +123,7 @@
                 </Viewbox>
                 <TextBlock Style="{StaticResource KpiSubtextCompact}">
                     <Run Text="{Binding Kpis.WeightDeviationPercent, StringFormat={}{0:+0.00;-0.00;0.00} %, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
-                    <Run Text=" · surpoids"/> <Run Text="{Binding Kpis.GiveawayKg, StringFormat={}{0:+#,##0.0;-#,##0.0;0.0} kg, TargetNullValue=&#x2014;, Mode=OneWay, ConverterCulture=fr-FR}"/>
+                    <Run Text=" · "/><Run Text="{Binding Kpis.GiveawayLabel, Mode=OneWay}"/>
                 </TextBlock>
             </StackPanel>
         </Border>

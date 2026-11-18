@@ -70,7 +70,7 @@ public sealed class OngoingStop
             if (Slot != null)
                 return string.IsNullOrWhiteSpace(Slot.Task) ? (Slot.IsStop ? "Arrêt planifié" : "Maintenance") : Slot.Task.Trim();
             if (Qualification == null)
-                return IsNoData ? "Cause à définir · aucune donnée de StatsViewer" : "Cause à définir";
+                return IsNoData ? "Cause à définir · pas de relevé de la machine" : "Cause à définir";
             return string.Join(" · ", new[] { StopCauses.Label(Qualification.CauseCode), Qualification.Component, Qualification.Technician, Qualification.Comment }
                 .Where(s => !string.IsNullOrWhiteSpace(s)));
         }

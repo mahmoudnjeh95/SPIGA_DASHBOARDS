@@ -44,7 +44,7 @@
             <TextBlock Grid.Column="2" Text="Production" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="3" Text="Poids moyen" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="4" Text="Écart" Style="{StaticResource Head}"/>
-            <TextBlock Grid.Column="5" Text="Surpoids" Style="{StaticResource Head}"/>
+            <TextBlock Grid.Column="5" Text="Sur / sous-poids" Style="{StaticResource Head}"/>
             <TextBlock Grid.Column="6" Text="TRS" Style="{StaticResource Head}"/>
         </Grid>
         <ItemsControl ItemsSource="{Binding Weights, ElementName=Root}">

@@ -125,6 +125,15 @@ public static class KpiCalculator
         return sign + text.Replace(' ', ' ').Replace(' ', ' ');
     }
 
+    // Weight given away (positive) or missing (negative), said in words:
+    // "surpoids 8,1 kg" / "sous-poids 8,1 kg". One wording on every screen.
+    public static string FormatGiveaway(double? kg) => kg switch
+    {
+        null => "—",
+        < 0 => "sous-poids " + FormatMass(-kg.Value),
+        _ => "surpoids " + FormatMass(kg.Value),
+    };
+
     // Average net weights of the weights produced, e.g. "501,2 g" or
     // "501,2 g · 1 003,5 g"; "—" when none is known.
     public static string FormatAverages(IEnumerable<WeightKpi> weights)

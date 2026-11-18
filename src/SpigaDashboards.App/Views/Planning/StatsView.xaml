@@ -32,7 +32,7 @@
                 <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0" Width="290">
                     <TextBlock Text="STATISTIQUES" Style="{StaticResource Eyebrow}"/>
                     <TextBlock Text="Statistiques des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
-                    <TextBlock Text="Calculé sur les arrêts qualifiés (onglet Pannes)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                    <TextBlock Text="Calculé sur les arrêts qualifiés (page Qualification des arrêts)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                 </StackPanel>
                 <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
                     <Border Style="{StaticResource SegTrack}" Margin="0,4,0,4">
@@ -83,12 +83,12 @@
                     <DataTemplate DataType="{x:Type vm:StatTile}">
                         <Border Style="{StaticResource Card}" Margin="7,0">
                             <StackPanel>
-                                <TextBlock Text="{Binding Label}" Style="{StaticResource Small}" FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Label}" Style="{StaticResource Small}" FontSize="13" TextWrapping="Wrap"/>
                                 <TextBlock Text="{Binding Value}" Style="{StaticResource BigValue}" Margin="0,6,0,4"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Delta}" FontSize="12" FontWeight="Bold" Foreground="{Binding DeltaBrush}" Margin="0,0,6,0"/>
-                                    <TextBlock Text="{Binding Hint}" Style="{StaticResource Small}" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Delta}" FontSize="12" FontWeight="Bold" Foreground="{Binding DeltaBrush}" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding Hint}" Style="{StaticResource Small}" TextWrapping="Wrap"/>
+                                </DockPanel>
                             </StackPanel>
                         </Border>
                     </DataTemplate>

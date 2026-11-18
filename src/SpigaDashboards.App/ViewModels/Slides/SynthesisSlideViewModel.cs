@@ -15,7 +15,7 @@ public class SynthesisLineRow
     public KpiSeverity TrsSeverity { get; init; }
     public KpiSeverity WeightDeviationSeverity { get; init; }
     public string ProductionText => KpiCalculator.FormatMass(Kpis.ProductionKg);
-    public string GiveawayText => Kpis.GiveawayKg is { } kg ? KpiCalculator.FormatMass(kg, signed: true) : "—";
+    public string GiveawayText => KpiCalculator.FormatGiveaway(Kpis.GiveawayKg);
     public bool HasWeights => Kpis.Weights.Count > 0;
 }
 

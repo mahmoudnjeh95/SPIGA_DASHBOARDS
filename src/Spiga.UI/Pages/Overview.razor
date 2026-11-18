@@ -3,6 +3,8 @@
 @inject DashboardQueries Queries
 @inject WasteService Waste
 @inject UiState Ui
+@inject PlantData Plant
+@inject IDesktopBridge Desktop
 
 @if (Session.Can(Modules.VueEnsemble, AppAction.Voir))
 {
@@ -35,14 +37,17 @@
                      Sub="@($"D {Fmt.Pct(total?.AvailabilityPercent, 0)} · P {Fmt.Pct(total?.PerformancePercent, 0)} · Q {Fmt.Pct(total?.QualityPercent, 0)}")" />
             <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(total?.WeightDeviationPercent)"
                      Css="@Fmt.Css(WeightBand.Default.Severity(total?.WeightDeviationPercent))"
-                     Sub="@(total?.GiveawayKg is { } g ? $"surpoids {Fmt.Mass(Math.Abs(g))}{(g < 0 ? " (sous-poids)" : "")}" : "pas de pesée sur la période")" />
+                     Sub="@(total?.GiveawayKg is { } g ? Fmt.Giveaway(g) : "pas de pesée sur la période")" />
             <KpiTile Label="Production" Hint="conditionnement" Value="@(total == null ? Fmt.Missing : Fmt.Mass(total.ProductionKg))"
                      Sub="@(total == null ? "" : $"{Fmt.Num(total.TotalBags)} sacs · conformité {Fmt.Pct(total.QualityPercent)}")" />
-            <KpiTile Label="Déchet emballage" Value="@Fmt.Kg(_snap.PackagingWasteKg)"
+            @* No entry is not "0 kg": the tile says nothing was entered. *@
+            <KpiTile Label="Déchet emballage" Value="@(_snap.PackagingEntries == 0 ? "—" : Fmt.Kg(_snap.PackagingWasteKg))"
                      Css="@(_snap.PackagingWasteKg > 0 ? "" : "nd")"
-                     Sub="@($"{(_snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "aucune production")}{(_snap.DraftEntries > 0 ? $" · {_snap.DraftEntries} non validée(s)" : "")}")" />
-            <KpiTile Label="Déchet produit" Value="@Fmt.Kg(_snap.ProductWasteKg)" Css="@(_snap.ProductWasteKg > 0 ? "" : "nd")"
-                     Sub="@string.Join(" · ", _snap.Sectors.Where(s => s.ProductWasteKg > 0).Select(s => $"{Sectors.Label(s.Sector)} {Fmt.Kg(s.ProductWasteKg)}"))" />
+                     Sub="@(_snap.PackagingEntries == 0 ? "aucune saisie sur la période"
+                            : $"{(_snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "aucune production")}{(_snap.DraftEntries > 0 ? $" · {_snap.DraftEntries} non validée(s)" : "")}")" />
+            <KpiTile Label="Déchet produit" Value="@(_snap.ProductEntries == 0 ? "—" : Fmt.Kg(_snap.ProductWasteKg))" Css="@(_snap.ProductWasteKg > 0 ? "" : "nd")"
+                     Sub="@(_snap.ProductEntries == 0 ? "aucune saisie sur la période"
+                            : string.Join(" · ", _snap.Sectors.Where(s => s.ProductWasteKg > 0).Select(s => $"{Sectors.Label(s.Sector)} {Fmt.Kg(s.ProductWasteKg)}")))" />
             <KpiTile Label="Rendement usine" Value="Non disponible" Missing="true" Sub="Saisie des quantités : module à venir" />
         </div>
 
@@ -89,8 +94,8 @@
                                     <td class="@Fmt.Css(TrsBand.ForTarget(s.TrsTarget).Severity(s.Kpi?.TrsPercent))">@Fmt.Pct(s.Kpi?.TrsPercent)</td>
                                     <td>@(s.Kpi == null ? Fmt.Missing : Fmt.Mass(s.Kpi.ProductionKg))</td>
                                     <td class="@Fmt.Css(WeightBand.Default.Severity(s.Kpi?.WeightDeviationPercent))">@Fmt.SignedPct(s.Kpi?.WeightDeviationPercent)</td>
-                                    <td>@Fmt.Kg(s.PackagingWasteKg)</td>
-                                    <td>@Fmt.Kg(s.ProductWasteKg)</td>
+                                    <td>@(s.PackagingEntries == 0 ? "—" : Fmt.Kg(s.PackagingWasteKg))</td>
+                                    <td>@(s.ProductEntries == 0 ? "—" : Fmt.Kg(s.ProductWasteKg))</td>
                                 </tr>
                             }
                         </tbody>
@@ -186,13 +191,37 @@
     {
         var alerts = new List<Alert>();
         var packaging = Session.Can(Modules.Conditionnement, AppAction.Voir) ? "production/conditionnement" : null;
+        // A stopped line: since when, and straight to giving it a cause when
+        // this user may (Windows application: the qualification page).
+        var qualify = Desktop.IsAvailable && Session.Can(NativePages.Permission(NativePage.StopQualification))
+            ? NativePages.Route(NativePage.StopQualification) : null;
+        IReadOnlyDictionary<string, OngoingStop> ongoing;
+        try
+        {
+            ongoing = snap.IsLive ? await Plant.OngoingStopsAsync() : new Dictionary<string, OngoingStop>();
+        }
+        catch (Exception)
+        {
+            ongoing = new Dictionary<string, OngoingStop>();
+        }
 
         foreach (var m in snap.Machines.Where(m => m.State != null))
         {
             if (!m.State!.Connected)
                 alerts.Add(new("off", $"{m.Machine.Id} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(m.State.LastData, Now)}", packaging, "Voir"));
             else if (!m.State.Running)
-                alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt", $"Conditionnement · {m.State.Product ?? "production en cours"}", packaging, "Voir"));
+            {
+                var product = m.State.Product ?? "production en cours";
+                if (ongoing.TryGetValue(m.Machine.Id, out var stop))
+                {
+                    var cause = stop.Qualification?.Cause?.Label;
+                    alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt depuis {Fmt.Since(stop.Start, Now)}",
+                        $"Depuis {stop.Start:HH:mm} · {cause ?? "cause à définir"} · {product}",
+                        cause == null && qualify != null ? qualify : packaging, cause == null && qualify != null ? "Qualifier" : "Voir"));
+                }
+                else
+                    alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt", $"Conditionnement · {product}", packaging, "Voir"));
+            }
         }
 
         var lowTrs = snap.Machines.Where(m => m.Figures.HasProduction && m.Figures.TrsSeverity == KpiSeverity.Bad)

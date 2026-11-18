@@ -33,6 +33,7 @@ public class KpiSummary
     // the target (negative = under), in kg.
     public double ProductionKg { get; set; }
     public double? GiveawayKg { get; set; }
+    public string GiveawayLabel => Services.KpiCalculator.FormatGiveaway(GiveawayKg);
 
     // One entry per target weight produced, heaviest production first.
     public List<WeightKpi> Weights { get; set; } = new();
@@ -59,6 +60,7 @@ public class WeightKpi
 
     public string ProductionText => Services.KpiCalculator.FormatMass(ProductionKg);
     public string GiveawayText => GiveawayKg is { } kg ? Services.KpiCalculator.FormatMass(kg, signed: true) : "—";
+    public string GiveawayLabel => Services.KpiCalculator.FormatGiveaway(GiveawayKg);
 }
 
 // Traffic-light level of a KPI, computed in the view-model (the converter

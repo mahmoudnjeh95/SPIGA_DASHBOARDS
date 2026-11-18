@@ -93,7 +93,7 @@ public static class ExportService
         WriteTable(workbook.Worksheets.Add("Par machine"),
             new[] { "Machine", "Secteur", "TRS cible %", "TRS %", "Disponibilité %", "Performance %", "Qualité %",
                     "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Écart (g)", "Écart (%)",
-                    "Surpoids (kg)", "Conformes", "Sous tol.", "Sur tol.", "Rejets métal" },
+                    "Sur (+) / sous-poids (−) (kg)", "Conformes", "Sous tol.", "Sur tol.", "Rejets métal" },
             report.Machines.Select(m => new object?[]
             {
                 m.MachineName, Machine.SectorLabel(m.Sector), m.TrsTarget, m.Kpis.TrsPercent, m.Kpis.AvailabilityPercent, m.Kpis.PerformancePercent,
@@ -104,7 +104,7 @@ public static class ExportService
 
         WriteTable(workbook.Worksheets.Add("Par poids"),
             new[] { "Machine", "Poids cible (g)", "Produit", "Sachet vide (g)", "Cadence nominale (sacs/min)", "TRS %", "Sacs",
-                    "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Écart (%)", "Surpoids (kg)", "Conformité %",
+                    "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Écart (%)", "Sur (+) / sous-poids (−) (kg)", "Conformité %",
                     "Vitesse moy. (sacs/min)", "Vitesse max (sacs/min)" },
             report.Weights.Select(w => new object?[]
             {
@@ -115,7 +115,7 @@ public static class ExportService
             }));
 
         var groupHeaders = new[] { "TRS %", "Disponibilité %", "Performance %", "Qualité %", "Vitesse moy. (sacs/min)",
-            "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Surpoids (kg)" };
+            "Vitesse max (sacs/min)", "Sacs", "Production nette (kg)", "Poids moyen net (g)", "Écart (g)", "Sur (+) / sous-poids (−) (kg)" };
         WriteTable(workbook.Worksheets.Add("Par équipe"), new[] { "Équipe" }.Concat(groupHeaders).ToArray(),
             report.Teams.Select(GroupCells));
         WriteTable(workbook.Worksheets.Add("Par " + PeriodRanges.GrainName(report.Grain)),
@@ -204,7 +204,7 @@ public static class ExportService
         yield return ("Production nette", KpiCalculator.FormatMass(k.ProductionKg));
         yield return ("Poids moyen net", KpiCalculator.FormatAverages(k.Weights));
         yield return ("Écart de poids", Grams(k.WeightDeviationGrams) + (k.WeightDeviationPercent is { } p ? $" ({p.ToString("+0.00;-0.00;0.00", Numbers)} %)" : ""));
-        yield return ("Surpoids donné", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—");
+        yield return ("Sur / sous-poids", KpiCalculator.FormatGiveaway(k.GiveawayKg));
         yield return ("Sacs conformes", N0(k.BagsInTolerance));
         yield return ("Sacs sous tolérance", N0(k.BagsUnderTolerance));
         yield return ("Sacs sur tolérance", N0(k.BagsOverTolerance));
@@ -294,7 +294,7 @@ public static class ExportService
             ("Production nette", KpiCalculator.FormatMass(k.ProductionKg)),
             ("Poids moyen net", KpiCalculator.FormatAverages(k.Weights)),
             ("Écart de poids", Grams(k.WeightDeviationGrams)),
-            ("Surpoids donné", k.GiveawayKg is { } g ? KpiCalculator.FormatMass(g, signed: true) : "—"),
+            ("Sur / sous-poids", KpiCalculator.FormatGiveaway(k.GiveawayKg)),
             ("Sous / sur tolérance", N0(k.BagsUnderTolerance) + " / " + N0(k.BagsOverTolerance)),
             ("Rejets métal", N0(k.MetalRejects)),
         };
@@ -305,7 +305,7 @@ public static class ExportService
         pdf.NewPage();
         pdf.ChartGrid(charts.Skip(4).ToList(), columns: 2, height: 165);
         pdf.Table("Par machine",
-            new[] { "Machine", "Secteur", "TRS", "Cible", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Surpoids" },
+            new[] { "Machine", "Secteur", "TRS", "Cible", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Sur / sous-poids" },
             new double[] { 85, 55, 50, 40, 50, 50, 50, 50, 50, 65, 70, 55, 60 },
             report.Machines.Select(m => new[]
             {
@@ -315,7 +315,7 @@ public static class ExportService
                 Grams(m.Kpis.WeightDeviationGrams), m.Kpis.GiveawayKg is { } kg ? KpiCalculator.FormatMass(kg, signed: true) : "—",
             }));
         pdf.Table("Par poids (sachet vide déduit)",
-            new[] { "Machine", "Poids", "Produit", "Sachet", "Cadence", "TRS", "Sacs", "Production", "Poids moyen", "Écart", "Écart %", "Surpoids", "Conformité" },
+            new[] { "Machine", "Poids", "Produit", "Sachet", "Cadence", "TRS", "Sacs", "Production", "Poids moyen", "Écart", "Écart %", "Sur / sous-poids", "Conformité" },
             new double[] { 75, 45, 75, 45, 50, 50, 60, 65, 60, 50, 50, 60, 55 },
             report.Weights.Select(w => new[]
             {
@@ -326,7 +326,7 @@ public static class ExportService
                 w.Weight.DeviationPercent is { } p ? p.ToString("+0.00;-0.00;0.00", Numbers) + " %" : "—",
                 w.Weight.GiveawayText, Pct(w.Weight.QualityPercent),
             }));
-        var groupHeaders = new[] { "TRS", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Surpoids" };
+        var groupHeaders = new[] { "TRS", "Dispo.", "Perf.", "Qualité", "Vit. moy.", "Vit. max", "Sacs", "Production", "Écart", "Sur / sous-poids" };
         var groupWidths = new double[] { 110, 55, 55, 55, 55, 55, 55, 70, 75, 60, 65 };
         pdf.Table("Par équipe", new[] { "Équipe" }.Concat(groupHeaders).ToArray(), groupWidths, report.Teams.Select(GroupRow));
         pdf.Table("Par " + PeriodRanges.GrainName(report.Grain), new[] { "Période" }.Concat(groupHeaders).ToArray(), groupWidths,

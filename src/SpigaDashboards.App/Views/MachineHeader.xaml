@@ -39,7 +39,7 @@
                 <TextBlock Text="Connecté" FontSize="16" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
             </StackPanel>
             <Border Background="{DynamicResource DangerBrush}" CornerRadius="12" Padding="14,3"
-                    ToolTip="Aucune donnée reçue de StatsViewer pour cette ligne"
+                    ToolTip="Aucun relevé reçu de cette ligne (PC de collecte ou réseau)"
                     Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}">
                 <TextBlock Text="PAS DE DONNÉES" FontSize="18" FontWeight="Bold" Foreground="White"/>
             </Border>

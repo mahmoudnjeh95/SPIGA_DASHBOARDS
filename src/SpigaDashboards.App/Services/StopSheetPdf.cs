@@ -147,7 +147,7 @@ public static class StopSheetPdf
 
     private static void DrawFooter(XGraphics gfx)
     {
-        gfx.DrawString("« Sans données » : StatsViewer n'a rien enregistré (PC ou réseau arrêté), la machine a pu tourner ou non.",
+        gfx.DrawString("« Sans données » : aucun relevé de la machine n'a été enregistré (PC de collecte ou réseau arrêté), la machine a pu tourner ou non.",
             SmallFont, XBrushes.DimGray, new XRect(Margin, FooterTop, PageWidth - 2 * Margin, 10), XStringFormats.TopLeft);
         gfx.DrawString("Chef d'équipe : ______________________________          Signature : ______________________________",
             FooterFont, XBrushes.Black, new XRect(Margin, FooterTop + 20, PageWidth - 2 * Margin, 14), XStringFormats.TopLeft);

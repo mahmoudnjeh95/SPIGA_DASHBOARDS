@@ -46,7 +46,8 @@ public partial class StatsViewModel : ObservableObject
     // 1 = "Aujourd'hui": the production day, from 06:00 (yesterday's 06:00
     // before then) to now, compared with the day before. 7 / 30 / 90: calendar
     // days up to today, compared with the same number of days before.
-    [ObservableProperty] private int periodDays = 30;
+    // Same default period as the qualification page (7 days).
+    [ObservableProperty] private int periodDays = 7;
     private bool IsToday => PeriodDays == 1;
     [ObservableProperty] private string selectedMachine = AllMachines;
     [ObservableProperty] private string selectedTeam = AllTeams;
@@ -170,15 +171,16 @@ public partial class StatsViewModel : ObservableObject
         var team = SelectedTeam is AllTeams or null ? null : SelectedTeam;
         bool Keep(StopQualification q) => ids.Contains(q.MachineId) && (!PannesOnly || q.IsPanne) && (team == null || q.Team == team);
 
-        var all = (await _ctx.Planning.GetQualificationsAsync(prevFrom, now.AddDays(1))).Where(Keep).ToList();
+        // Reads off the window's thread (SQLite on a dev PC is synchronous).
+        var all = (await Task.Run(() => _ctx.Planning.GetQualificationsAsync(prevFrom, now.AddDays(1)))).Where(Keep).ToList();
         var cur = all.Where(q => q.StopStart >= from).ToList();
         var prev = all.Where(q => q.StopStart < from).ToList();
 
         // Run hours for MTBF / lost availability: day buckets are light; one
         // team needs hour buckets (a day mixes the three postes), and so does
         // today (day buckets start at midnight, the day here at 06:00).
-        var buckets = await _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now,
-            team == null && !today ? BucketSize.Day : BucketSize.Hour);
+        var buckets = await Task.Run(() => _ctx.Production.GetLotsForMachinesAsync(ids.ToList(), from, now,
+            team == null && !today ? BucketSize.Day : BucketSize.Hour));
         var runHours = buckets.Where(b => team == null || _ctx.Teams.TeamOf(b) == team).Sum(b => b.RunMinutes) / 60;
 
         var minutes = cur.Sum(q => q.Minutes);
@@ -237,7 +239,7 @@ public partial class StatsViewModel : ObservableObject
 
         // 12-week trend (independent of the period)
         var weekStart = now.Date.AddDays(-(((int)now.DayOfWeek + 6) % 7));
-        var trend = (await _ctx.Planning.GetQualificationsAsync(weekStart.AddDays(-77), now.AddDays(1))).Where(Keep).ToList();
+        var trend = (await Task.Run(() => _ctx.Planning.GetQualificationsAsync(weekStart.AddDays(-77), now.AddDays(1)))).Where(Keep).ToList();
         var weekly = Enumerable.Range(0, 12).Select(i =>
         {
             var ws = weekStart.AddDays(-7 * (11 - i));

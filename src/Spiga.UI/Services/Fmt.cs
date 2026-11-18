@@ -26,6 +26,10 @@ public static class Fmt
 
     public static string Mass(double kg) => kg >= 1000 ? (kg / 1000).ToString("N1", French) + " t" : Kg(kg);
 
+    // Weight given away (positive) or missing (negative), in words: same
+    // wording as the dashboard.
+    public static string Giveaway(double kg) => kg < 0 ? "sous-poids " + Mass(-kg) : "surpoids " + Mass(kg);
+
     public static string Css(KpiSeverity severity) => severity switch
     {
         KpiSeverity.Good => "ok",
@@ -35,6 +39,19 @@ public static class Fmt
     };
 
     public static string Date(DateTime? value) => value?.ToString("dd/MM/yyyy HH:mm", French) ?? "—";
+
+    // Length of a stop still going on: "12 min", "1 h 05", "2 j 3 h".
+    public static string Since(DateTime start, DateTime now)
+    {
+        var d = now - start;
+        if (d < TimeSpan.FromMinutes(1))
+            return "moins d'une minute";
+        if (d < TimeSpan.FromHours(1))
+            return $"{(int)d.TotalMinutes} min";
+        if (d < TimeSpan.FromDays(1))
+            return $"{(int)d.TotalHours} h {d.Minutes:00}";
+        return $"{(int)d.TotalDays} j {d.Hours} h";
+    }
 
     public static string Ago(DateTime? value, DateTime now)
     {

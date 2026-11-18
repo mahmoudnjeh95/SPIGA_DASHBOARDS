@@ -94,6 +94,11 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
                 status.CurrentProduction?.ProductName);
     }
 
+    // Lines stopped right now, each with the start of its stop (same rules
+    // and cache as the dashboard's stop banner).
+    public Task<IReadOnlyDictionary<string, OngoingStop>> OngoingStopsAsync()
+        => OngoingStopService.GetAsync(repository, settings);
+
     public double AverageTrsTarget(IEnumerable<PlantMachine> machines)
     {
         var targets = machines.Select(m => settings.TrsTarget(m.Id)).ToList();

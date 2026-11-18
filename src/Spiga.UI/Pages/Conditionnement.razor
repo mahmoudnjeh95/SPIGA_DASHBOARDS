@@ -66,10 +66,10 @@
                      Sub="@($"sous tol. {Fmt.Num(total?.BagsUnderTolerance)} · sur tol. {Fmt.Num(total?.BagsOverTolerance)}")" />
             <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(total?.WeightDeviationPercent)"
                      Css="@Fmt.Css(WeightBand.Default.Severity(total?.WeightDeviationPercent))"
-                     Sub="@(total?.GiveawayKg is { } g ? $"surpoids {Fmt.Mass(g)}" : "")" />
+                     Sub="@(total?.GiveawayKg is { } g ? Fmt.Giveaway(g) : "")" />
             <KpiTile Label="Production" Value="@(total == null ? Fmt.Missing : Fmt.Mass(total.ProductionKg))" Sub="@($"{Fmt.Num(total?.TotalBags)} sacs")" />
-            <KpiTile Label="Déchet emballage" Value="@Fmt.Kg(_snap.PackagingWasteKg)" Css="@(_snap.PackagingWasteKg > 0 ? "" : "nd")"
-                     Sub="@(_snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "")" />
+            <KpiTile Label="Déchet emballage" Value="@(_snap.PackagingEntries == 0 ? "—" : Fmt.Kg(_snap.PackagingWasteKg))" Css="@(_snap.PackagingWasteKg > 0 ? "" : "nd")"
+                     Sub="@(_snap.PackagingEntries == 0 ? "aucune saisie sur la période" : _snap.PackagingWastePercent is { } p ? Fmt.Pct(p, 2) + " de la production" : "")" />
         </div>
 
         <div class="row">

@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject PlantData Plant
 @inject IDesktopBridge Desktop
+@inject UiState Ui
 
 <ActivityZone Class="@(RailOnly ? "app rail-only" : "app")">
     <aside class="rail">
@@ -29,6 +30,14 @@
                     </NavLink>
                 }
             }
+            @if (UpcomingCount() > 0)
+            {
+                <button type="button" class="nav nav-more" @onclick="() => Ui.ShowUpcoming = !Ui.ShowUpcoming"
+                        title="Écrans prévus dans une prochaine version">
+                    <span class="nav-ic">@Icons.Svg(Ui.ShowUpcoming ? "less" : "more")</span>
+                    <span>@(Ui.ShowUpcoming ? "Masquer les écrans à venir" : $"Écrans à venir ({UpcomingCount()})")</span>
+                </button>
+            }
         </nav>
         <div class="me">
             <b>@Session.Actor?.DisplayName</b>
@@ -36,6 +45,8 @@
             <small>Périmètre : @Session.Actor?.ScopeSummary</small>
             @if (RailOnly)
             {
+                @* The page beside the menu replaces the top bar: the shift shows here. *@
+                <small class="me-shift"><span class="dot"></span>@_shift</small>
                 <span class="me-links">
                     <a class="link" href="compte">Mon compte</a>
                     <button type="button" class="link" @onclick="Session.SignOutAsync">Se déconnecter</button>
@@ -111,10 +122,17 @@
                 Nav.NavigateTo(NativePages.Route(page));
         });
 
+    private IEnumerable<NavItem> Allowed()
+        => ModuleCatalog.Navigation.Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable));
+
+    // The screen being shown stays in the menu even when it is "à venir".
     private IEnumerable<IGrouping<string?, NavItem>> VisibleGroups()
-        => ModuleCatalog.Navigation
-            .Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable))
-            .GroupBy(n => n.Group);
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+        return Allowed().Where(n => n.Ready || Ui.ShowUpcoming || n.Route == path).GroupBy(n => n.Group);
+    }
+
+    private int UpcomingCount() => Allowed().Count(n => !n.Ready);
 
     private string Crumb()
     {

@@ -121,7 +121,7 @@ public class MachineDaySlideViewModel
     internal static string FormatProduction(ProductionInfo? production, IReadOnlyCollection<ProductionBucket> lots)
     {
         if (production == null)
-            return "Aucune donnée reçue de StatsViewer depuis 6 h";
+            return "Aucun relevé reçu de la machine depuis 6 h";
 
         var state = production.IsTerminated ? "Terminée" : "En cours";
         // Lots of this production in the loaded period first (real lot

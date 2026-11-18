@@ -20,6 +20,9 @@ public sealed class SectorRow
     public double TrsTarget { get; init; }
     public double PackagingWasteKg { get; init; }
     public double ProductWasteKg { get; init; }
+    // Number of entries: none = nothing entered, not "0 kg of waste".
+    public int PackagingEntries { get; init; }
+    public int ProductEntries { get; init; }
     public int Machines { get; init; }
 }
 
@@ -35,6 +38,8 @@ public sealed class PlantSnapshot
     public List<SectorRow> Sectors { get; init; } = new();
     public double PackagingWasteKg { get; init; }
     public double ProductWasteKg { get; init; }
+    public int PackagingEntries { get; init; }
+    public int ProductEntries { get; init; }
     public int DraftEntries { get; init; }
 
     public double? PackagingWastePercent
@@ -98,6 +103,8 @@ public sealed class DashboardQueries(PlantData plant, WasteService waste, TimePr
                     Machines = sectorMachines.Count,
                     PackagingWasteKg = entries.Where(e => e.Kind == WasteKind.Emballage && e.Sector == s).Sum(e => e.QuantityKg),
                     ProductWasteKg = entries.Where(e => e.Kind == WasteKind.Produit && e.Sector == s).Sum(e => e.QuantityKg),
+                    PackagingEntries = entries.Count(e => e.Kind == WasteKind.Emballage && e.Sector == s),
+                    ProductEntries = entries.Count(e => e.Kind == WasteKind.Produit && e.Sector == s),
                 };
             })
             .ToList();
@@ -114,6 +121,8 @@ public sealed class DashboardQueries(PlantData plant, WasteService waste, TimePr
             Sectors = sectors,
             PackagingWasteKg = entries.Where(e => e.Kind == WasteKind.Emballage).Sum(e => e.QuantityKg),
             ProductWasteKg = entries.Where(e => e.Kind == WasteKind.Produit).Sum(e => e.QuantityKg),
+            PackagingEntries = entries.Count(e => e.Kind == WasteKind.Emballage),
+            ProductEntries = entries.Count(e => e.Kind == WasteKind.Produit),
             DraftEntries = entries.Count(e => e.Status == WasteStatus.Brouillon),
         };
     }

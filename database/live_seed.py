@@ -106,7 +106,7 @@ class Line:
         if self.stop_left > 0:
             self.stop_left -= minutes
             self.running = self.stop_left <= 0
-        elif rnd.random() < (0.05 if 6 <= t.hour < 22 else 0.08) * minutes / 5:
+        elif rnd.random() < (0.012 if 6 <= t.hour < 22 else 0.02) * minutes / 5:
             self.stop_left = rnd.choice([1, 1, 2, 3, 6, 12]) * 5
             self.running = False
         bags = int(nominal * self.efficiency * rnd.uniform(0.85, 1.08) * minutes) if self.running else 0

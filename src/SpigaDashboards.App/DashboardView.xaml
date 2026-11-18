@@ -174,7 +174,7 @@
                     Style="{StaticResource BarButton}"
                     Click="HistoryButton_Click"/>
 
-            <Button Grid.Column="5" Content="Arrêts" Margin="12,0,0,0" Padding="12,6"
+            <Button x:Name="StopsButton" Grid.Column="5" Content="Arrêts" Margin="12,0,0,0" Padding="12,6"
                     ToolTip="Arrêts de production par poste et par équipe, fiche à imprimer"
                     Style="{StaticResource BarButton}"
                     Click="StopsButton_Click"/>

@@ -392,7 +392,8 @@ CREATE INDEX IX_lotto_ora_fine ON lotto(ora_fine);
                 if stop_left > 0:
                     stop_left -= 1
                     running = stop_left == 0
-                elif rnd.random() < (0.05 if 6 <= t.hour < 22 else 0.08):
+                # About 3 to 5 stops of 5 min or more per line and day.
+                elif rnd.random() < (0.012 if 6 <= t.hour < 22 else 0.02):
                     stop_left = rnd.choice([1, 1, 2, 3, 6, 12])
                     running = False
                 # Stiavelli closes the running lot when the set weight changes.

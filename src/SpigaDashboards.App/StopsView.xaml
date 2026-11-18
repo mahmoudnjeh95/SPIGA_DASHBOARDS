@@ -34,6 +34,16 @@
         </Style>
     </UserControl.Resources>
 
+    <!-- Same top bar as the other pages beside the menu: title, Fermer. -->
+    <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{DynamicResource TileBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}"
+            BorderThickness="0,0,0,1" Padding="22,12">
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Fermer" Style="{StaticResource BarButton}" Click="CloseButton_Click"/>
+            <TextBlock Text="Arrêts de production" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"
+                       Foreground="{DynamicResource PrimaryTextBrush}"/>
+        </DockPanel>
+    </Border>
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -148,9 +158,9 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="Imprimer la fiche des arrêts (PDF)" Style="{StaticResource SecondaryButton}" Command="{Binding PrintCommand}"
                         ToolTip="Une page par poste et par équipe, avec les colonnes « Cause » et « Action » à remplir à la main"/>
-                <Button Content="Fermer" Style="{StaticResource PrimaryButton}" Click="CloseButton_Click"/>
             </StackPanel>
             <TextBlock Text="{Binding SummaryText}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>
         </DockPanel>
     </Grid>
+    </DockPanel>
 </UserControl>

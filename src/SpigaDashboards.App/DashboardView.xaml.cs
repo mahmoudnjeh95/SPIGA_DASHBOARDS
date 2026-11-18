@@ -162,19 +162,29 @@ public partial class DashboardView : UserControl
     // ---- Used by SPIGA Suivi Production (ShellWindow) ----
 
     // Embedded in the main window: the theme follows the signed-in user's
-    // choice (no theme button of its own), and the menu beside it already
-    // shows the Spiga logo, so the top bar names the page instead.
+    // choice (no theme button of its own), the menu beside it already shows
+    // the Spiga logo, Arrêts and Paramètres, so the top bar names the page
+    // and keeps only what the menu has not (TV, slides, Historique).
     public void SetEmbedded(bool embedded)
     {
+        _embedded = embedded;
         ThemeToggleButton.Visibility = embedded ? Visibility.Collapsed : Visibility.Visible;
         TopBarLogo.Visibility = embedded ? Visibility.Collapsed : Visibility.Visible;
         TopBarTitle.Text = embedded ? "Tableau de bord" : "SPIGA Dashboards";
+        StopsButton.Visibility = embedded ? Visibility.Collapsed : Visibility.Visible;
+        AllowSettings(_settingsAllowed);
     }
+
+    private bool _embedded;
+    private bool _settingsAllowed = true;
 
     // The station's settings (database connection, TV, cadences) stay with
     // the roles that have Paramètres > Administrer.
     public void AllowSettings(bool allowed)
-        => SettingsButton.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
+    {
+        _settingsAllowed = allowed;
+        SettingsButton.Visibility = allowed && !_embedded ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     public void OpenTvScreen() => OpenTvWindow(activate: true);
 
