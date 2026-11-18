@@ -45,13 +45,30 @@ public partial class App : Application
             => new(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
                 settingsService, settings, activeFactory, repository, sharedSettings);
 
-        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk" opens the
-        // dashboard directly, without sign-in, as before.
-        if (e.Args.Any(a => string.Equals(a, "--kiosk", StringComparison.OrdinalIgnoreCase)))
+        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
+        // as a screen (KIOSK=1, see StartMode), opens the dashboard directly,
+        // without sign-in, as before.
+        if (StartMode.IsKiosk(e.Args))
         {
+            AppLogger.Log("Démarrage en mode écran (kiosque)");
             ShowWindow(new KioskWindow(CreateDashboard()));
             return;
         }
+
+        // The sign-in shell is drawn by Microsoft Edge WebView2 (present on
+        // Windows 10 / 11). Missing: the dashboard alone, with the reason.
+        if (StartMode.WebView2Version() is not { } webView2)
+        {
+            AppLogger.Log("WebView2 introuvable : démarrage du tableau de bord seul");
+            MessageBox.Show(
+                "Le composant Microsoft Edge WebView2 n'est pas installé sur ce poste : l'écran de connexion de " +
+                "SPIGA Suivi Production ne peut pas s'afficher.\n\nInstallez « WebView2 Runtime » (Microsoft, gratuit), " +
+                "puis relancez l'application. En attendant, le tableau de bord s'ouvre seul.",
+                "SPIGA Suivi Production", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowWindow(new KioskWindow(CreateDashboard()));
+            return;
+        }
+        AppLogger.Log($"WebView2 {webView2}");
 
         // The site's shared settings (nominal rates, TRS targets, teams), as
         // the dashboard pulls them, so both compute with the same values.
@@ -66,8 +83,12 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLogger.Log("Base applicative SPIGA Suivi Production injoignable : " + ex);
+            var hint = settings.Provider == DatabaseProvider.SqlServer
+                ? $"\n\nSur le serveur SQL, la base « {settings.AppDatabaseName} » doit exister et le compte des postes " +
+                  "doit pouvoir y créer ses tables : script spiga_suivi.sql, dans le dossier d'installation, à exécuter une fois."
+                : "";
             MessageBox.Show(
-                "La base de SPIGA Suivi Production est injoignable :\n" + ex.Message +
+                "La base de SPIGA Suivi Production est injoignable :\n" + ex.Message + hint +
                 "\n\nLe tableau de bord s'ouvre seul, sans connexion utilisateur.",
                 "SPIGA Suivi Production", MessageBoxButton.OK, MessageBoxImage.Warning);
             ShowWindow(new KioskWindow(CreateDashboard()));
