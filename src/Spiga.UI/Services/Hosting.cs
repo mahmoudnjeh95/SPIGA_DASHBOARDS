@@ -17,7 +17,9 @@ public enum NativePage
 {
     Dashboard,
     Stops,
-    Planning,
+    StopQualification,
+    StopStatistics,
+    StopPlanning,
     Settings,
 }
 
@@ -27,7 +29,9 @@ public static class NativePages
     {
         NativePage.Dashboard => "production/tableau-de-bord",
         NativePage.Stops => "maintenance/arrets",
-        NativePage.Planning => "maintenance/planification",
+        NativePage.StopQualification => "maintenance/qualification-arrets",
+        NativePage.StopStatistics => "maintenance/statistiques-arrets",
+        NativePage.StopPlanning => "maintenance/planification",
         _ => "admin/parametres",
     };
 
@@ -35,8 +39,10 @@ public static class NativePages
     {
         NativePage.Dashboard => Perm.TableauDetaille,
         NativePage.Stops => Perm.View(Modules.Maintenance),
-        // The planning board has no read-only mode yet.
-        NativePage.Planning => "maintenance:saisir",
+        // Statistics only read. Qualifying stops writes, and the planning
+        // board has no read-only mode yet.
+        NativePage.StopStatistics => Perm.View(Modules.Maintenance),
+        NativePage.StopQualification or NativePage.StopPlanning => "maintenance:saisir",
         _ => Perm.ParametresPoste,
     };
 
@@ -68,7 +74,8 @@ public interface IDesktopBridge
     // A page was closed with its own button (Fermer, Enregistrer, Annuler).
     event Action<NativePage>? NativeClosed;
 
-    // The dashboard's own Arrêts / Planification / Paramètres buttons.
+    // The dashboard's own Arrêts / Paramètres buttons, and the links between
+    // the stop follow-up pages ("Qualifier →", "Planifier un préventif").
     event Action<NativePage>? NavigateRequested;
 }
 

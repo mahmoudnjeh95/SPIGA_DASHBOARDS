@@ -2,11 +2,13 @@ using System.Windows;
 using Spiga.UI.Services;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
+using SpigaDashboards.App.ViewModels.Planning;
 
 namespace SpigaDashboards.App;
 
 // What the Razor screens ask of the desktop: show a WPF page (dashboard,
-// arrêts, planification, paramètres) in the main window beside the menu,
+// arrêts, qualification / statistiques / planification des arrêts,
+// paramètres) in the main window beside the menu,
 // open the TV screen, follow the user's theme. One view per page, kept while
 // the user goes elsewhere (no edit lost), dropped when it is closed with its
 // own button or on sign-out.
@@ -19,6 +21,8 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
     private NativePage? _wanted;
     private bool _allowSettings;
     private bool? _dark;
+    // Shared by the three stop follow-up pages, so they link up.
+    private PlanningViewModel? _planning;
 
     public bool IsAvailable => true;
 
@@ -55,6 +59,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         _shell?.HideNative();
         foreach (var page in _views.Keys.Where(k => k != NativePage.Dashboard).ToList())
             Drop(page);
+        _planning = null;
     });
 
     public void OpenTvScreen(bool allowSettings) => OnUi(() => Dashboard().OpenTvScreen());
@@ -78,7 +83,6 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
                 NativePage? page = name switch
                 {
                     "arrets" => NativePage.Stops,
-                    "planification" => NativePage.Planning,
                     "parametres" => NativePage.Settings,
                     _ => null,
                 };
@@ -109,10 +113,10 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
                     stops.CloseRequested += () => Close(page);
                     view = stops;
                     break;
-                case NativePage.Planning:
-                    var planning = new PlanningView(Dashboard().CreatePlanningViewModel()) { ShowLogo = false };
-                    planning.CloseRequested += () => Close(page);
-                    view = planning;
+                case NativePage.StopQualification or NativePage.StopStatistics or NativePage.StopPlanning:
+                    var section = new PlanningSectionView(Planning(), Section(page));
+                    section.CloseRequested += () => Close(page);
+                    view = section;
                     break;
                 default:
                     var settings = new SettingsView(await Dashboard().CreateSettingsViewModelAsync());
@@ -128,6 +132,30 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
             _creating.Remove(page);
         }
     }
+
+    private PlanningViewModel Planning()
+    {
+        if (_planning == null)
+        {
+            _planning = Dashboard().CreatePlanningViewModel();
+            _planning.SectionRequested += s => NavigateRequested?.Invoke(Page(s));
+        }
+        return _planning;
+    }
+
+    private static PlanningSection Section(NativePage page) => page switch
+    {
+        NativePage.StopQualification => PlanningSection.Qualification,
+        NativePage.StopStatistics => PlanningSection.Statistics,
+        _ => PlanningSection.Planning,
+    };
+
+    private static NativePage Page(PlanningSection section) => section switch
+    {
+        PlanningSection.Qualification => NativePage.StopQualification,
+        PlanningSection.Statistics => NativePage.StopStatistics,
+        _ => NativePage.StopPlanning,
+    };
 
     // Closed with its own button (Fermer, Enregistrer, Annuler): next time it
     // opens fresh, and the Razor shell goes back to the previous screen.

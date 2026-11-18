@@ -179,11 +179,8 @@
                     Style="{StaticResource BarButton}"
                     Click="StopsButton_Click"/>
 
-            <!-- Pannes (causes of the stops), statistics, week planning and preventive maintenance. -->
-            <Button Grid.Column="6" Content="Planification" Margin="12,0,0,0"
-                    ToolTip="Pannes à qualifier, statistiques des pannes, planning de la semaine et maintenance préventive"
-                    Style="{StaticResource BarButton}"
-                    Click="PlanningButton_Click"/>
+            <!-- Qualification, statistiques and planification des arrêts are
+                 pages of the menu of SPIGA Suivi Production (Maintenance). -->
 
             <Button x:Name="SettingsButton" Grid.Column="7" Content="Paramètres" Margin="12,0,0,0" Padding="12,6"
                     Style="{StaticResource BarButton}"

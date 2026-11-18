@@ -20,6 +20,8 @@ public static class Icons
         ["maintenance"] = "<path d='M22 12h-4l-3 9L9 3l-3 9H2'/>",
         ["arrets"] = "<path d='M7.9 2h8.2L22 7.9v8.2L16.1 22H7.9L2 16.1V7.9z'/><path d='M10 9v6M14 9v6'/>",
         ["planification"] = "<rect x='3' y='4' width='18' height='18' rx='2'/><path d='M16 2v4M8 2v4M3 10h18'/><path d='M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01'/>",
+        ["qualification"] = "<path d='M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/><circle cx='7.5' cy='7.5' r='1.5'/>",
+        ["statistiques-arrets"] = "<path d='M3 3v18h18'/><rect x='7' y='12' width='3' height='6' rx='.5'/><rect x='12' y='7' width='3' height='11' rx='.5'/><rect x='17' y='10' width='3' height='8' rx='.5'/>",
         ["couts"] = "<path d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z'/>",
         ["energie"] = "<path d='M13 2 3 14h9l-1 8 10-12h-9z'/>",
         ["absences"] = "<path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'/>",

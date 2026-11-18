@@ -147,16 +147,6 @@ public partial class DashboardView : UserControl
         new StopsWindow(CreateStopsViewModel()) { Owner = OwnerWindow }.ShowDialog();
     }
 
-    private void PlanningButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (PageRequested != null)
-        {
-            PageRequested("planification");
-            return;
-        }
-        new PlanningWindow(CreatePlanningViewModel()) { Owner = OwnerWindow }.ShowDialog();
-    }
-
     private void AboutButton_Click(object sender, RoutedEventArgs e)
     {
         new AboutWindow { Owner = OwnerWindow }.ShowDialog();
@@ -188,9 +178,9 @@ public partial class DashboardView : UserControl
 
     public void OpenTvScreen() => OpenTvWindow(activate: true);
 
-    // Set in the main window: the Arrêts, Planification and Paramètres
-    // buttons open those pages beside the menu ("arrets", "planification",
-    // "parametres") instead of dialogs. Null in kiosk mode.
+    // Set in the main window: the Arrêts and Paramètres buttons open those
+    // pages beside the menu ("arrets", "parametres") instead of dialogs.
+    // Null in kiosk mode.
     public Action<string>? PageRequested { get; set; }
 
     private void NoteTextBox_GotFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = true;

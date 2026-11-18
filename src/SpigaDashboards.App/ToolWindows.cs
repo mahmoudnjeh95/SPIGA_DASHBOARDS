@@ -2,25 +2,11 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
-using SpigaDashboards.App.ViewModels.Planning;
 
 namespace SpigaDashboards.App;
 
 // The dashboard's dialogs in kiosk mode (KioskWindow): the same views the
 // main window of SPIGA Suivi Production shows beside its menu.
-
-public sealed class PlanningWindow : Window
-{
-    public PlanningWindow(PlanningViewModel viewModel)
-    {
-        ToolWindow.Setup(this, "Planification, maintenance et pannes", 1500, 900);
-        WindowState = WindowState.Maximized;
-        var view = new PlanningView(viewModel);
-        view.CloseRequested += Close;
-        Content = view;
-        WindowSizing.FitToWorkArea(this);
-    }
-}
 
 public sealed class StopsWindow : Window
 {
