@@ -4,63 +4,14 @@
              xmlns:views="clr-namespace:SpigaDashboards.App.Views"
              xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels.Planning">
 
-    <!-- Statistiques tab (StatsViewModel). Bars grow in when shown
-         (SlideMotion.Grow); every mark has a tooltip with its figures. -->
+    <!-- Statistiques tab (StatsViewModel). The charts are ChartCards (kind,
+         parameters on / off, enlarged view with zoom); every mark has a
+         tooltip with its figures. -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="PlanningStyles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-
-            <!-- Horizontal bar row: label | bar | value | count | cumul -->
-            <DataTemplate x:Key="HBarRow" DataType="{x:Type vm:StatBar}">
-                <Grid Margin="0,5" ToolTip="{Binding Tooltip}" Background="Transparent">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="170"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="72"/>
-                        <ColumnDefinition Width="36"/>
-                        <ColumnDefinition Width="48"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"
-                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                    <Grid Grid.Column="1" Margin="8,0" views:SlideMotion.Grow="X">
-                        <Border Height="18" CornerRadius="0,5,5,0" Background="{Binding Fill}" RenderTransformOrigin="0,0.5">
-                            <Border.RenderTransform>
-                                <ScaleTransform ScaleX="{Binding Ratio}"/>
-                            </Border.RenderTransform>
-                        </Border>
-                    </Grid>
-                    <TextBlock Grid.Column="2" Text="{Binding Value}" FontSize="13" FontWeight="Bold" HorizontalAlignment="Right"
-                               Foreground="{DynamicResource PrimaryTextBrush}" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="3" Text="{Binding Detail}" Style="{StaticResource Small}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="4" Text="{Binding Extra}" Style="{StaticResource Small}" FontFamily="Cascadia Mono, Consolas"
-                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                </Grid>
-            </DataTemplate>
-
-            <!-- Vertical bar: bar | label | value -->
-            <DataTemplate x:Key="VBar" DataType="{x:Type vm:StatBar}">
-                <Grid Margin="5,0" ToolTip="{Binding Tooltip}" Background="Transparent">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <Grid views:SlideMotion.Grow="Y" MaxWidth="46">
-                        <Border CornerRadius="5,5,0,0" Background="{Binding Fill}" RenderTransformOrigin="0.5,1">
-                            <Border.RenderTransform>
-                                <ScaleTransform ScaleY="{Binding Ratio}"/>
-                            </Border.RenderTransform>
-                        </Border>
-                    </Grid>
-                    <StackPanel Grid.Row="1" Margin="0,6,0,0">
-                        <TextBlock Text="{Binding Label}" FontFamily="Cascadia Mono, Consolas" FontSize="12" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource PrimaryTextBrush}"/>
-                        <TextBlock Text="{Binding Value}" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                        <TextBlock Text="{Binding Detail}" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                    </StackPanel>
-                </Grid>
-            </DataTemplate>
 
             <ItemsPanelTemplate x:Key="OneRow">
                 <UniformGrid Rows="1"/>
@@ -155,40 +106,14 @@
                     <StackPanel>
                         <TextBlock Text="Pareto par composant" Style="{StaticResource H2}"/>
                         <TextBlock Text="{Binding ParetoCaption}" Style="{StaticResource Caption}" Margin="0,2,0,10"/>
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="72"/>
-                                <ColumnDefinition Width="36"/>
-                                <ColumnDefinition Width="48"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Composant" Style="{StaticResource Small}" FontSize="11"/>
-                            <TextBlock Grid.Column="1" Text="Temps d'arrêt" Style="{StaticResource Small}" FontSize="11" Margin="8,0"/>
-                            <TextBlock Grid.Column="3" Text="Nb" Style="{StaticResource Small}" FontSize="11" HorizontalAlignment="Right"/>
-                            <TextBlock Grid.Column="4" Text="Cumul" Style="{StaticResource Small}" FontSize="11" HorizontalAlignment="Right"/>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding ByComponent}" ItemTemplate="{StaticResource HBarRow}"/>
+                        <views:ChartCard Plain="True" Title="Pareto par composant" Chart="{Binding ComponentChart}" Height="320"/>
                     </StackPanel>
                 </Border>
                 <Border Grid.Column="2" Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Text="Par cause" Style="{StaticResource H2}"/>
                         <TextBlock Text="Temps d'arrêt par type de cause" Style="{StaticResource Caption}" Margin="0,2,0,10"/>
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="72"/>
-                                <ColumnDefinition Width="36"/>
-                                <ColumnDefinition Width="48"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Cause" Style="{StaticResource Small}" FontSize="11"/>
-                            <TextBlock Grid.Column="1" Text="Temps d'arrêt" Style="{StaticResource Small}" FontSize="11" Margin="8,0"/>
-                            <TextBlock Grid.Column="3" Text="Nb" Style="{StaticResource Small}" FontSize="11" HorizontalAlignment="Right"/>
-                            <TextBlock Grid.Column="4" Text="Cumul" Style="{StaticResource Small}" FontSize="11" HorizontalAlignment="Right"/>
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding ByCause}" ItemTemplate="{StaticResource HBarRow}"/>
+                        <views:ChartCard Plain="True" Title="Arrêts par cause" Chart="{Binding CauseChart}" Height="320"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -206,7 +131,7 @@
                             <TextBlock Text="Temps d'arrêt par ligne" Style="{StaticResource H2}"/>
                             <TextBlock Text="{Binding MachineCaption}" Style="{StaticResource Caption}" Margin="0,2,0,12"/>
                         </StackPanel>
-                        <ItemsControl ItemsSource="{Binding ByMachine}" ItemTemplate="{StaticResource VBar}" ItemsPanel="{StaticResource OneRow}" Height="250"/>
+                        <views:ChartCard Plain="True" Title="Temps d'arrêt par ligne" Chart="{Binding MachineChart}" Height="280"/>
                     </DockPanel>
                 </Border>
                 <Border Grid.Column="2" Style="{StaticResource Card}">
@@ -214,9 +139,9 @@
                         <TextBlock Text="Par poste et par équipe" Style="{StaticResource H2}"/>
                         <TextBlock Text="{Binding GroupCaption}" Style="{StaticResource Caption}" Margin="0,2,0,10"/>
                         <TextBlock Text="POSTE" Style="{StaticResource Small}" FontSize="11" FontWeight="Bold" Margin="0,4,0,2"/>
-                        <ItemsControl ItemsSource="{Binding ByPoste}" ItemTemplate="{StaticResource HBarRow}"/>
+                        <views:ChartCard Plain="True" Title="Arrêts par poste" Chart="{Binding PosteChart}" Height="190"/>
                         <TextBlock Text="ÉQUIPE" Style="{StaticResource Small}" FontSize="11" FontWeight="Bold" Margin="0,12,0,2"/>
-                        <ItemsControl ItemsSource="{Binding ByTeam}" ItemTemplate="{StaticResource HBarRow}"/>
+                        <views:ChartCard Plain="True" Title="Arrêts par équipe" Chart="{Binding TeamChart}" Height="190"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -320,7 +245,7 @@
                             <TextBlock Text="Tendance sur 12 semaines" Style="{StaticResource H2}"/>
                             <TextBlock Text="Temps d'arrêt par semaine (la dernière est en cours)" Style="{StaticResource Caption}" Margin="0,2,0,12"/>
                         </StackPanel>
-                        <ItemsControl ItemsSource="{Binding Weeks}" ItemTemplate="{StaticResource VBar}" ItemsPanel="{StaticResource OneRow}" Height="200"/>
+                        <views:ChartCard Plain="True" Title="Tendance des arrêts sur 12 semaines" Chart="{Binding WeekChart}" Height="240"/>
                     </DockPanel>
                 </Border>
                 <Border Grid.Column="2" Style="{StaticResource Card}">

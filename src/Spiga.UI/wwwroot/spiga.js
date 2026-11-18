@@ -114,6 +114,18 @@
         });
     }, { passive: true });
 
+    // ---------- Escape closes an enlarged chart ----------
+    document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape") return;
+        var close = document.querySelector(".spiga-root .chart-modal .chart-close");
+        if (close) close.click();
+    });
+
+    // The wheel zooms an enlarged chart (SpigaChart): the page must not scroll.
+    document.addEventListener("wheel", function (e) {
+        if (e.target && e.target.closest && e.target.closest(".spiga-root .chart-zoom")) e.preventDefault();
+    }, { passive: false });
+
     // ---------- click ripple ----------
     document.addEventListener("pointerdown", function (e) {
         if (reduced) return;

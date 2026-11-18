@@ -1,0 +1,264 @@
+@* Every chart of the web screens. Drawn in SVG (no library: the plant PCs
+   may be offline). The user can change its kind (bars, line, points, area),
+   switch series off and on from the legend, and enlarge it (button or
+   double-click) to zoom with the mouse wheel and move along the X axis.
+   The choice is kept per chart (Key) for the session (UiState). A new chart
+   gets all of it by being a SpigaChart. *@
+@inject UiState Ui
+
+<div class="chart @(_expanded ? "chart-expanded" : "")">
+    @Toolbar(false)
+    @Plot(false)
+</div>
+
+@if (_expanded)
+{
+    <div class="chart-modal" @onclick="Close">
+        <div class="chart-modal-box" @onclick:stopPropagation="true">
+            <div class="chart-modal-head">
+                <h2>@Title</h2>
+                <span class="chart-hint">Molette : zoom · ‹ › : se déplacer · légende : masquer / afficher · Échap : fermer</span>
+                <span class="sp"></span>
+                <button type="button" class="bar small" @onclick="ResetZoom" disabled="@(_from == 0 && _to == Labels.Count)">Réinitialiser le zoom</button>
+                <button type="button" class="bar small chart-close" @onclick="Close">Fermer</button>
+            </div>
+            @Toolbar(true)
+            <div class="chart-zoom" @onwheel="OnWheel">
+                @Plot(true)
+                @if (_to - _from < Labels.Count)
+                {
+                    <div class="chart-pan">
+                        <button type="button" class="seg" @onclick="() => Pan(-1)" disabled="@(_from == 0)" aria-label="Vers la gauche">‹</button>
+                        <span>@Labels[_from] – @Labels[_to - 1]</span>
+                        <button type="button" class="seg" @onclick="() => Pan(1)" disabled="@(_to == Labels.Count)" aria-label="Vers la droite">›</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<string> Labels { get; set; } = Array.Empty<string>();
+    [Parameter, EditorRequired] public IReadOnlyList<ChartSeries> Series { get; set; } = Array.Empty<ChartSeries>();
+    [Parameter] public Func<double, string> Format { get; set; } = v => v.ToString("0.#", CultureInfo.GetCultureInfo("fr-FR"));
+    [Parameter] public double? YMin { get; set; }
+    [Parameter] public double? YMax { get; set; }
+    [Parameter] public string? Key { get; set; }
+    [Parameter] public int Height { get; set; } = 220;
+
+    private bool _expanded;
+    private int _from, _to;
+    private string ChartKey => Key ?? Title;
+
+    private ChartView View => Ui.Charts.TryGetValue(ChartKey, out var v) ? v : new ChartView(ChartKind.Auto, new HashSet<string>());
+
+    protected override void OnParametersSet()
+    {
+        if (_to == 0 || _to > Labels.Count)
+            (_from, _to) = (0, Labels.Count);
+    }
+
+    // ---------- interactions ----------
+
+    private void SetKind(ChartKind kind) => Ui.Charts[ChartKey] = View with { Kind = kind };
+
+    private void Toggle(string name)
+    {
+        var hidden = new HashSet<string>(View.Hidden);
+        if (!hidden.Remove(name))
+        {
+            // The last series shown stays: an empty chart would look like missing data.
+            if (Series.Count(s => !hidden.Contains(s.Name)) <= 1)
+                return;
+            hidden.Add(name);
+        }
+        Ui.Charts[ChartKey] = View with { Hidden = hidden };
+    }
+
+    private void Open()
+    {
+        if (Labels.Count > 0)
+            _expanded = true;
+    }
+
+    private void Close() => _expanded = false;
+
+    private void ResetZoom() => (_from, _to) = (0, Labels.Count);
+
+    // Wheel up: zoom in around the middle of what is shown; down: out.
+    private void OnWheel(WheelEventArgs e)
+    {
+        var count = _to - _from;
+        var next = e.DeltaY < 0 ? Math.Max(2, (int)Math.Round(count * 0.75)) : Math.Min(Labels.Count, (int)Math.Round(count / 0.75) + 1);
+        if (next == count)
+            return;
+        var middle = (_from + _to) / 2.0;
+        _from = Math.Clamp((int)Math.Round(middle - next / 2.0), 0, Labels.Count - next);
+        _to = _from + next;
+    }
+
+    private void Pan(int direction)
+    {
+        var step = Math.Max(1, (_to - _from) / 3);
+        var from = Math.Clamp(_from + direction * step, 0, Labels.Count - (_to - _from));
+        _to = from + (_to - _from);
+        _from = from;
+    }
+
+    // ---------- drawing ----------
+
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private static string N(double v) => v.ToString("0.##", Inv);
+
+    // SVG <text> (Razor reserves the <text> tag inside code).
+    private static MarkupString Txt(string css, double x, double y, string anchor, string content)
+        => new($"<text class=\"{css}\" x=\"{N(x)}\" y=\"{N(y)}\" text-anchor=\"{anchor}\">{System.Net.WebUtility.HtmlEncode(content)}</text>");
+
+    private static readonly (ChartKind Kind, string Label, string Icon)[] Kinds =
+    {
+        (ChartKind.Auto, "D'origine", "<path d='M4 20V10M10 20V4M16 20v-7M22 20H2'/>"),
+        (ChartKind.Bars, "Barres", "<rect x='4' y='10' width='4' height='10' rx='1'/><rect x='10' y='4' width='4' height='16' rx='1'/><rect x='16' y='13' width='4' height='7' rx='1'/>"),
+        (ChartKind.Line, "Courbe", "<path d='m3 17 6-6 4 4 8-8'/>"),
+        (ChartKind.Points, "Points", "<circle cx='6' cy='16' r='2'/><circle cx='11' cy='9' r='2'/><circle cx='16' cy='13' r='2'/><circle cx='20' cy='6' r='2'/>"),
+        (ChartKind.Area, "Aire", "<path d='M3 20V14l5-5 4 4 9-8v15z'/>"),
+    };
+
+    private RenderFragment Toolbar(bool expanded) => __builder =>
+    {
+        var view = View;
+        <div class="chart-head">
+            @if (!expanded)
+            {
+                <h2>@Title</h2>
+            }
+            <div class="chart-legend">
+                @foreach (var s in Series)
+                {
+                    var off = view.Hidden.Contains(s.Name);
+                    <button type="button" class="chart-key @(off ? "off" : "")" title="Cliquer pour masquer / afficher" aria-pressed="@(!off)" @onclick="() => Toggle(s.Name)">
+                        @if (s.Reference)
+                        {
+                            <u style="background:@s.Color"></u>
+                        }
+                        else
+                        {
+                            <i style="background:@s.Color"></i>
+                        }
+                        @s.Name
+                    </button>
+                }
+            </div>
+            <span class="sp"></span>
+            <div class="chart-tools" role="group" aria-label="Type de graphique">
+                @foreach (var (kind, label, icon) in Kinds)
+                {
+                    <button type="button" class="chart-tool @(view.Kind == kind ? "on" : "")" title="@label" aria-pressed="@(view.Kind == kind)" @onclick="() => SetKind(kind)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)icon)</svg>
+                    </button>
+                }
+                @if (!expanded)
+                {
+                    <button type="button" class="chart-tool" title="Agrandir (ou double-clic sur le graphique)" @onclick="Open">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d='M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'/></svg>
+                    </button>
+                }
+            </div>
+        </div>
+    };
+
+    private RenderFragment Plot(bool expanded) => __builder =>
+    {
+        var view = View;
+        int from = expanded ? _from : 0, to = expanded ? _to : Labels.Count;
+        var count = Math.Max(0, to - from);
+        double w = expanded ? 1000 : 480, h = expanded ? 460 : Height;
+        double left = 46, right = 12, top = 22, bottom = 28;
+        double pw = w - left - right, ph = h - top - bottom;
+        var shown = Series.Where(s => !view.Hidden.Contains(s.Name)).ToList();
+        var values = shown.SelectMany(s => s.Values.Skip(from).Take(count)).Where(v => v != null).Select(v => v!.Value).ToList();
+        var min = YMin ?? Math.Min(0, values.DefaultIfEmpty(0).Min());
+        var max = YMax ?? Math.Max(min + 1, values.DefaultIfEmpty(1).Max() * 1.15);
+        double Y(double v) => top + ph - (Math.Clamp(v, min, max) - min) / (max - min) * ph;
+        var band = count == 0 ? pw : pw / count;
+        double X(int i) => left + band * (i + 0.5);
+        var bars = shown.Where(s => !s.Reference && KindOf(s, view.Kind) == ChartKind.Bars).ToList();
+        var barW = Math.Min(expanded ? 70 : 42, band * 0.72 / Math.Max(1, bars.Count));
+        var showLabels = count <= (expanded ? 31 : 16);
+        var labelEvery = Math.Max(1, (int)Math.Ceiling(count / (expanded ? 24.0 : 12.0)));
+
+        <svg class="chart-svg" viewBox="0 0 @N(w) @N(h)" role="img" aria-label="@Title" @ondblclick="Open"
+             style="@(expanded ? "" : $"max-height:{Height + 40}px")">
+            @for (var g = 0; g <= 4; g++)
+            {
+                var v = min + (max - min) * g / 4;
+                <line class="chart-grid" x1="@N(left)" x2="@N(w - right)" y1="@N(Y(v))" y2="@N(Y(v))" />
+                @Txt("chart-axis", left - 6, Y(v) + 4, "end", Format(v))
+            }
+            @for (var i = 0; i < count; i += labelEvery)
+            {
+                @Txt("chart-axis", X(i), h - 8, "middle", Labels[from + i])
+            }
+
+            @* bars first, lines and points over them *@
+            @for (var b = 0; b < bars.Count; b++)
+            {
+                var s = bars[b];
+                @for (var i = 0; i < count; i++)
+                {
+                    if (s.Values[from + i] is not { } v)
+                        continue;
+                    var x = X(i) - barW * bars.Count / 2 + barW * b;
+                    var y0 = Y(Math.Max(min, 0));
+                    var y = Y(v);
+                    <g class="chart-bar" style="--d:@(i * 40)ms">
+                        <title>@Labels[from + i] · @s.Name : @Format(v)</title>
+                        <rect x="@N(x + 1)" y="@N(Math.Min(y, y0))" width="@N(Math.Max(1, barW - 2))" height="@N(Math.Max(1, Math.Abs(y0 - y)))" rx="@N(Math.Min(6, barW / 4))" fill="@s.Color" />
+                        @if (showLabels)
+                        {
+                            @Txt("chart-value", x + barW / 2, Math.Min(y, y0) - 5, "middle", Format(v))
+                        }
+                    </g>
+                }
+            }
+            @foreach (var s in shown.Where(s => s.Reference || KindOf(s, view.Kind) != ChartKind.Bars))
+            {
+                var kind = s.Reference ? ChartKind.Line : KindOf(s, view.Kind);
+                var pts = Enumerable.Range(0, count).Where(i => s.Values[from + i] != null).Select(i => (I: i, X: X(i), Y: Y(s.Values[from + i]!.Value))).ToList();
+                if (pts.Count == 0)
+                    continue;
+                var line = string.Join(" ", pts.Select((p, k) => (k == 0 ? "M" : "L") + N(p.X) + " " + N(p.Y)));
+                if (s.Reference)
+                {
+                    var y = pts[0].Y;
+                    <line class="chart-ref" x1="@N(left)" x2="@N(w - right)" y1="@N(y)" y2="@N(y)" stroke="@s.Color"><title>@s.Name</title></line>
+                    continue;
+                }
+                @if (kind == ChartKind.Area)
+                {
+                    var baseY = N(Y(Math.Max(min, 0)));
+                    <path class="chart-area" d="@($"{line} L{N(pts[^1].X)} {baseY} L{N(pts[0].X)} {baseY} Z")" fill="@s.Color" />
+                }
+                @if (kind is ChartKind.Line or ChartKind.Area)
+                {
+                    <path class="chart-line" d="@line" stroke="@s.Color" pathLength="1" />
+                }
+                @foreach (var p in pts)
+                {
+                    var v = s.Values[from + p.I]!.Value;
+                    <g class="chart-point @(kind == ChartKind.Points ? "big" : "")" style="--d:@(p.I * 40)ms">
+                        <title>@Labels[from + p.I] · @s.Name : @Format(v)</title>
+                        <circle cx="@N(p.X)" cy="@N(p.Y)" r="@(kind == ChartKind.Points ? "7" : "4.5")" fill="@(kind == ChartKind.Points ? s.Color : "var(--tile)")" stroke="@s.Color" />
+                        @if (showLabels)
+                        {
+                            @Txt("chart-value", p.X, p.Y - 11, "middle", Format(v))
+                        }
+                    </g>
+                }
+            }
+        </svg>
+    };
+
+    private static ChartKind KindOf(ChartSeries s, ChartKind chosen) => chosen == ChartKind.Auto ? s.Kind : chosen;
+}

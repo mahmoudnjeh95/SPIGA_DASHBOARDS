@@ -124,22 +124,14 @@
             </section>
 
             <section class="card" style="flex:4 1 380px">
-                <div class="card-head"><h2>TRS par machine</h2></div>
-                <div class="legend"><span><i></i>TRS</span><span><u></u>Cible @Fmt.Num(_snap.TrsTarget) %</span></div>
-                <div class="bars" role="img" aria-label="TRS par machine comparé à la cible">
-                    <u style="bottom:@(_snap.TrsTarget.ToString(CultureInfo.InvariantCulture))%"></u>
-                    @foreach (var m in _snap.Machines)
-                    {
-                        var trs = Math.Clamp(m.Figures.Kpi.TrsPercent ?? 0, 0, 100);
-                        <i style="height:@(trs.ToString("0.#", CultureInfo.InvariantCulture))%" title="@m.Machine.Id : @Fmt.Pct(m.Figures.Kpi.TrsPercent)"></i>
-                    }
-                </div>
-                <div class="xl">
-                    @foreach (var m in _snap.Machines)
-                    {
-                        <span>@m.Machine.Id</span>
-                    }
-                </div>
+                <SpigaChart Title="TRS par machine" Key="cond-trs-machine" YMin="0" YMax="100"
+                            Labels="@_snap.Machines.Select(m => m.Machine.Id).ToList()"
+                            Format="@(v => Fmt.Num(v) + " %")"
+                            Series="@(new[]
+                            {
+                                new ChartSeries("TRS", _snap.Machines.Select(m => m.Figures.Kpi.TrsPercent).ToList(), "var(--bar)"),
+                                new ChartSeries($"Cible {Fmt.Num(_snap.TrsTarget)} %", _snap.Machines.Select(_ => (double?)_snap.TrsTarget).ToList(), "var(--target)", Reference: true),
+                            })" />
                 <p class="nd" style="font-size:12px">Calcul identique au tableau de bord SPIGA : TRS = disponibilité × performance × qualité, arrêts planifiés déduits.</p>
             </section>
         </div>

@@ -5,6 +5,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
+using LiveChartsCore;
+using LiveChartsCore.Measure;
+using LiveChartsCore.SkiaSharpView;
+using LiveChartsCore.SkiaSharpView.Painting;
 using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App.ViewModels.Planning;
@@ -12,7 +16,9 @@ namespace SpigaDashboards.App.ViewModels.Planning;
 public sealed record StatTile(string Label, string Value, string Hint, Brush? DeltaBrush = null, string Delta = "");
 
 // One bar: Ratio (0..1) sizes it against the longest one.
-public sealed record StatBar(string Label, string Value, string Detail, double Ratio, Brush Fill, string Tooltip, string Extra = "");
+// Minutes / Count / Cumul: the figures behind the texts, for the charts.
+public sealed record StatBar(string Label, string Value, string Detail, double Ratio, Brush Fill, string Tooltip, string Extra = "",
+    double Minutes = 0, int Count = 0, double? Cumul = null);
 
 public sealed record HeatCell(Brush Fill, Brush Ink, string Text, string Tooltip);
 public sealed record HeatRow(string Day, IReadOnlyList<HeatCell> Cells);
@@ -70,6 +76,14 @@ public partial class StatsViewModel : ObservableObject
     public ObservableCollection<StatBar> ByPoste { get; } = new();
     public ObservableCollection<StatBar> ByTeam { get; } = new();
     public ObservableCollection<StatBar> Weeks { get; } = new();
+
+    // The same figures as charts (ChartCard: kind, series on / off, zoom).
+    [ObservableProperty] private ChartParts? causeChart;
+    [ObservableProperty] private ChartParts? componentChart;
+    [ObservableProperty] private ChartParts? machineChart;
+    [ObservableProperty] private ChartParts? posteChart;
+    [ObservableProperty] private ChartParts? teamChart;
+    [ObservableProperty] private ChartParts? weekChart;
     public ObservableCollection<HeatRow> Heat { get; } = new();
     public ObservableCollection<string> HeatHours { get; } = new();
     public ObservableCollection<Brush> HeatScale { get; } = new();
@@ -185,6 +199,8 @@ public partial class StatsViewModel : ObservableObject
         Fill(ByCause, Pareto(cur.GroupBy(q => StopCauses.Label(q.CauseCode)), minutes, 8));
         Fill(ByComponent, Pareto(cur.Where(q => !string.IsNullOrEmpty(q.Component))
             .GroupBy(q => q.Component!, StringComparer.OrdinalIgnoreCase), minutes, 8));
+        CauseChart = StatChart(ByCause);
+        ComponentChart = StatChart(ByComponent);
         var top3 = cur.GroupBy(q => q.Component ?? StopCauses.Label(q.CauseCode)).Select(g => g.Sum(q => q.Minutes))
             .OrderByDescending(m => m).Take(3).Sum();
         ParetoCaption = minutes <= 0 ? "Aucun arrêt qualifié sur la période"
@@ -202,8 +218,9 @@ public partial class StatsViewModel : ObservableObject
             ByMachine.Add(new StatBar(m.MachineName, PlanningContext.Duration(mins), $"{list.Count} p.", mins / maxMachine,
                 i < 2 && mins > 0 ? Blue : BlueDim,
                 $"{m.MachineName} : {PlanningContext.Duration(mins)} · {list.Count} arrêt{(list.Count > 1 ? "s" : "")}" + (list.Count > 0 ? $" · MTTR {PlanningContext.Duration(mins / list.Count)}" : ""),
-                Extra: m.MachineName));
+                Extra: m.MachineName, Minutes: mins, Count: list.Count));
         }
+        MachineChart = StatChart(ByMachine);
         var top2 = perMachine.Take(2).Sum(x => x.list.Sum(q => q.Minutes));
         MachineCaption = minutes <= 0 || perMachine.Count < 2 ? "" : $"{perMachine[0].m.MachineName} et {perMachine[1].m.MachineName} : {top2 / minutes * 100:0} % du temps perdu";
 
@@ -213,6 +230,8 @@ public partial class StatsViewModel : ObservableObject
         // By poste and team
         Fill(ByPoste, Groups(cur.GroupBy(q => KpiCalculator.ShiftName(q.ShiftId)), new[] { "Matin", "Après-midi", "Nuit" }));
         Fill(ByTeam, Groups(cur.GroupBy(q => q.Team), _ctx.Teams.TeamNames.ToArray()));
+        PosteChart = StatChart(ByPoste);
+        TeamChart = StatChart(ByTeam);
         var night = cur.Where(q => q.ShiftId == 3).Sum(q => q.Minutes);
         GroupCaption = minutes <= 0 ? "" : $"Le poste de nuit concentre {night / minutes * 100:0} % du temps d'arrêt";
 
@@ -222,17 +241,20 @@ public partial class StatsViewModel : ObservableObject
         var weekly = Enumerable.Range(0, 12).Select(i =>
         {
             var ws = weekStart.AddDays(-7 * (11 - i));
-            return (ws, mins: trend.Where(q => q.StopStart >= ws && q.StopStart < ws.AddDays(7)).Sum(q => q.Minutes));
+            var inWeek = trend.Where(q => q.StopStart >= ws && q.StopStart < ws.AddDays(7)).ToList();
+            return (ws, mins: inWeek.Sum(q => q.Minutes), n: inWeek.Count);
         }).ToList();
         var maxWeek = Math.Max(1, weekly.Max(w => w.mins));
         Weeks.Clear();
-        foreach (var (ws, mins) in weekly)
+        foreach (var (ws, mins, n) in weekly)
         {
             var week = ISOWeek.GetWeekOfYear(ws);
             var current = ws == weekStart;
             Weeks.Add(new StatBar("S" + week, PlanningContext.Duration(mins), "", mins / maxWeek,
                 current ? BlueDim : Blue, $"Semaine {week} : {PlanningContext.Duration(mins)}" + (current ? " (en cours)" : "")));
         }
+
+        WeekChart = StatChart(Weeks);
 
         // Components that keep failing on the same line
         var plans = await _ctx.Planning.GetPlansAsync();
@@ -261,6 +283,79 @@ public partial class StatsViewModel : ObservableObject
             target.Add(item);
     }
 
+    // Stop time (bars, hours axis), number of stops (line, own scale) and,
+    // for a Pareto, the cumulated share (line, 0-100 %): parameters the user
+    // can switch off, and draw as bars / line / points / area (ChartCard).
+    private static ChartParts StatChart(IReadOnlyList<StatBar> bars)
+    {
+        if (bars.Count == 0 || bars.All(b => b.Minutes <= 0))
+            return ChartParts.Empty();
+        var size = bars.Count > 8 ? 12 : ChartHelpers.DataLabelTextSize - 2;
+        var orange = ChartHelpers.Palette[2];
+        var green = ChartHelpers.Palette[1];
+        var series = new List<ISeries>
+        {
+            new ColumnSeries<double>
+            {
+                Name = "Temps d'arrêt",
+                Values = bars.Select(b => Math.Round(b.Minutes / 60, 2)).ToArray(),
+                Fill = new SolidColorPaint(ChartHelpers.Palette[0]),
+                Rx = 6,
+                Ry = 6,
+                MaxBarWidth = 46,
+                DataLabelsPaint = new SolidColorPaint(ChartHelpers.TextColor),
+                DataLabelsPosition = DataLabelsPosition.Top,
+                DataLabelsSize = size,
+                DataLabelsFormatter = p => Hours(p.Coordinate.PrimaryValue),
+            },
+            new LineSeries<double>
+            {
+                Name = "Nombre d'arrêts",
+                Values = bars.Select(b => (double)b.Count).ToArray(),
+                ScalesYAt = 1,
+                Stroke = new SolidColorPaint(orange, 3),
+                GeometryStroke = new SolidColorPaint(orange, 3),
+                GeometrySize = 8,
+                Fill = null,
+                LineSmoothness = 0,
+            },
+        };
+        if (bars.Any(b => b.Cumul != null))
+        {
+            series.Add(new LineSeries<double>
+            {
+                Name = "Cumul (%)",
+                Values = bars.Select(b => Math.Round(b.Cumul ?? 0)).ToArray(),
+                ScalesYAt = 2,
+                Stroke = new SolidColorPaint(green, 2),
+                GeometryStroke = new SolidColorPaint(green, 2),
+                GeometrySize = 6,
+                Fill = null,
+                LineSmoothness = 0.3,
+            });
+        }
+        // Values printed on the bars only (the lines' values are in their
+        // tooltips): three sets of labels overlapped.
+        // Own scale per parameter: hours on the visible axis, the count and
+        // the cumulated share on hidden ones (their values are printed).
+        var maxHours = bars.Max(b => b.Minutes) / 60;
+        var hours = ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: maxHours * 1.3, labeler: v => v <= maxHours * 1.1 ? $"{v:0.#} h" : "");
+        var count = ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: Math.Max(1, bars.Max(b => b.Count)) * 1.5);
+        count.IsVisible = false;
+        var cumul = ChartHelpers.BuildYAxis(minLimit: 0, maxLimit: 125);
+        cumul.IsVisible = false;
+        var x = ChartHelpers.BuildXAxis(bars.Select(b => b.Label));
+        x.TextSize = 13;
+        if (bars.Any(b => b.Label.Length > 10))
+            x.LabelsRotation = -25;
+        return new ChartParts(series.ToArray(), new[] { x }, new[] { hours, count, cumul });
+    }
+
+    // Short bar label: "45 min", "6,5 h", "25 h".
+    private static string Hours(double hours) => hours <= 0 ? ""
+        : hours < 1 ? $"{hours * 60:0} min"
+        : hours.ToString(hours < 10 ? "0.#" : "0", PlanningContext.French) + " h";
+
     private static List<StatBar> Pareto(IEnumerable<IGrouping<string, StopQualification>> groups, double total, int take)
     {
         var list = groups.Select(g => (g.Key, mins: g.Sum(q => q.Minutes), n: g.Count()))
@@ -278,7 +373,7 @@ public partial class StatsViewModel : ObservableObject
             var cumPct = total > 0 ? cum / total * 100 : 0;
             return new StatBar(x.Key, PlanningContext.Duration(x.mins), $"{x.n}", x.mins / max, i < 3 ? Blue : BlueDim,
                 $"{x.Key} : {PlanningContext.Duration(x.mins)} · {x.n} arrêt{(x.n > 1 ? "s" : "")} · {(total > 0 ? x.mins / total * 100 : 0):0} % du total",
-                Extra: $"{cumPct:0} %");
+                Extra: $"{cumPct:0} %", Minutes: x.mins, Count: x.n, Cumul: cumPct);
         }).ToList();
     }
 
@@ -290,7 +385,8 @@ public partial class StatsViewModel : ObservableObject
         return keys.Select(k =>
         {
             var (mins, n) = map.GetValueOrDefault(k);
-            return new StatBar(k, PlanningContext.Duration(mins), $"{n} p.", mins / max, Blue, $"{k} : {PlanningContext.Duration(mins)} · {n} arrêt{(n > 1 ? "s" : "")}");
+            return new StatBar(k, PlanningContext.Duration(mins), $"{n} p.", mins / max, Blue, $"{k} : {PlanningContext.Duration(mins)} · {n} arrêt{(n > 1 ? "s" : "")}",
+                Minutes: mins, Count: n);
         }).ToList();
     }
 

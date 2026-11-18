@@ -146,4 +146,16 @@ public sealed class UiState
     public Period? PackagingPeriod { get; set; }
     public string? PackagingSector { get; set; }
     public int? PackagingShift { get; set; }
+
+    // How the user set up each chart (SpigaChart), by chart key.
+    public Dictionary<string, ChartView> Charts { get; } = new();
 }
+
+public enum ChartKind { Auto, Bars, Line, Points, Area }
+
+public sealed record ChartView(ChartKind Kind, IReadOnlySet<string> Hidden);
+
+// One series of a SpigaChart. Reference = a target / threshold: always a
+// dashed line, never changed into bars or points.
+public sealed record ChartSeries(string Name, IReadOnlyList<double?> Values, string Color,
+    ChartKind Kind = ChartKind.Bars, bool Reference = false);

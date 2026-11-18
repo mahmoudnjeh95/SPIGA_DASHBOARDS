@@ -4,14 +4,89 @@
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
              x:Name="Root">
 
-    <!-- One chart tile: title, chart (ChartParts), optional legend, and a
-         "Pas de donnees" placeholder instead of an empty chart. -->
-    <Border Style="{StaticResource ChartTile}">
+    <UserControl.Resources>
+        <!-- Small round buttons of the chart toolbar. -->
+        <Style x:Key="ChartToolButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A legend entry is a switch: click to hide / show its series. -->
+        <Style x:Key="LegendButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8" Padding="6,2">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBackgroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- One chart tile: title, chart (ChartParts), legend, and a "Pas de
+         donnees" placeholder instead of an empty chart. With a mouse, a
+         toolbar shows on hover: chart kind, series on / off, enlarge
+         (also double-click). The kiosk TV has no mouse: it never shows. -->
+    <Border x:Name="Tile" Style="{StaticResource ChartTile}" MouseLeftButtonDown="Tile_MouseLeftButtonDown">
         <DockPanel>
             <!-- Title, and the legend on the same row (ChartCard.Apply fills it):
                  LiveCharts' own legend took a row of the short tiles' height
                  and covered the values printed above the tallest bars. -->
             <DockPanel DockPanel.Dock="Top">
+                <StackPanel x:Name="Tools" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                            Margin="8,0,0,4" Opacity="0" IsHitTestVisible="False">
+                    <Button x:Name="KindButton" Style="{StaticResource ChartToolButton}" Click="KindButton_Click" Padding="7,0"
+                            ToolTip="Type de graphique : barres, courbe, points, aire">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9D2;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="KindLabel" Text="Type" VerticalAlignment="Center" Margin="6,0,0,0" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SeriesButton" Style="{StaticResource ChartToolButton}" Click="SeriesButton_Click" Padding="7,0"
+                            ToolTip="Afficher ou masquer les paramètres du graphique">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="SeriesLabel" Text="Paramètres" VerticalAlignment="Center" Margin="6,0,0,0" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="ZoomButton" Style="{StaticResource ChartToolButton}" Click="ZoomButton_Click" Padding="0"
+                            ToolTip="Agrandir le graphique (ou double-clic sur le graphique)">
+                        <TextBlock Text="&#xE740;" FontFamily="Segoe MDL2 Assets" FontSize="13"/>
+                    </Button>
+                </StackPanel>
                 <ItemsControl x:Name="Legend" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,4,4">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -20,15 +95,19 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Margin="12,0,0,0">
-                                <!-- OneTime: LegendEntry has no change notification (see ChartCard.LegendEntry). -->
-                                <Ellipse Width="11" Height="11" Fill="{Binding Brush, Mode=OneTime}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="{Binding Name, Mode=OneTime}" FontSize="15" Foreground="{DynamicResource SecondaryTextBrush}" VerticalAlignment="Center"/>
-                            </StackPanel>
+                            <!-- OneTime: LegendEntry has no change notification (see ChartCard.LegendEntry). -->
+                            <Button Style="{StaticResource LegendButton}" Tag="{Binding Name, Mode=OneTime}" Click="LegendEntry_Click"
+                                    Opacity="{Binding Opacity, Mode=OneTime}" ToolTip="Cliquer pour masquer / afficher">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="11" Height="11" Fill="{Binding Brush, Mode=OneTime}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding Name, Mode=OneTime}" FontSize="15" Foreground="{DynamicResource SecondaryTextBrush}"
+                                               TextDecorations="{Binding Decorations, Mode=OneTime}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Title, ElementName=Root}" Style="{StaticResource ChartTitle}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="TitleText" Text="{Binding Title, ElementName=Root}" Style="{StaticResource ChartTitle}" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
             <Grid>
                 <!-- Series and axes are set by ChartCard.Apply (moved in place on a refresh). -->
