@@ -26,6 +26,10 @@ public static class Perm
     public const string EcranTv = "conditionnement:tv";
     public const string ParametresPoste = "parametres:administrer";
 
+    // Responsables: cover several teams (or all). Without it an account is
+    // bound to one team and sees the postes of that team only.
+    public const string EquipesMultiples = "vue-ensemble:equipes";
+
     public static string View(string module) => module + ":voir";
 }
 
@@ -66,6 +70,8 @@ public static class PermissionCatalog
         void Export(string module) => Add(module, "exporter", "Exporter", "Excel / PDF");
 
         View(Modules.VueEnsemble); Export(Modules.VueEnsemble);
+        Add(Modules.VueEnsemble, "equipes", "Couvrir plusieurs équipes",
+            "Responsables. Sans ce droit, le compte est rattaché à une seule équipe et ne voit que ses postes");
 
         View(Modules.Conditionnement); Export(Modules.Conditionnement);
         Add(Modules.Conditionnement, "tableau", "Tableau de bord détaillé", "Diapositives, historique, synthèse secteur (application poste)");

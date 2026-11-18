@@ -52,6 +52,36 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
         return (TeamOnShift(Shifts.ProductionDate(now), shift), shift);
     }
 
+    // Whether this poste is worked by the actor's team (always true for an
+    // account covering several teams, or when the roster is unavailable).
+    public bool IsOwnShift(Actor actor, DateTime productionDate, int shiftId)
+    {
+        if (actor.Team == null)
+            return true;
+        var team = TeamOnShift(productionDate, shiftId);
+        return string.IsNullOrEmpty(team) || actor.IsOwnTeam(team);
+    }
+
+    // Whether the actor's team works this poste on at least one day of
+    // [from, to) (the rotation moves the teams from one poste to another).
+    public bool WorksShift(Actor actor, DateTime from, DateTime to, int shiftId)
+    {
+        if (actor.Team == null)
+            return true;
+        for (var d = from.Date; d < to && d < from.Date.AddDays(28); d = d.AddDays(1))
+            if (IsOwnShift(actor, d, shiftId))
+                return true;
+        return false;
+    }
+
+    // "Le poste Nuit du 18/11 est tenu par Equipe A : vous ne voyez que les postes de Equipe B."
+    public string ForeignShiftMessage(Actor actor, DateTime productionDate, int shiftId)
+    {
+        var team = TeamOnShift(productionDate, shiftId);
+        return $"Ce poste ne concerne pas votre équipe : le poste {Shifts.Label(shiftId)} du {productionDate:dd/MM} est tenu par {team}. "
+               + $"Vous ne voyez et ne saisissez que les postes de {actor.Team}.";
+    }
+
     // The machines where the actor holds `permission` (any team).
     public async Task<IReadOnlyList<PlantMachine>> MachinesFor(Actor actor, string permission, string? sector)
         => (await GetMachinesAsync())

@@ -134,6 +134,21 @@ public sealed class Actor
         return scopes.Any(s => s.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", scopes.Select(s => s.Describe()).Distinct());
     }
 
+    // The one team of a team-bound account: every assignment is on that
+    // team (always the case without "Couvrir plusieurs équipes"). null = the
+    // account covers several or all teams. Postes worked by another team are
+    // shown greyed out to it.
+    public string? Team
+    {
+        get
+        {
+            var teams = Grants.Select(g => g.Scope.Team ?? "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return teams.Count == 1 && teams[0].Length > 0 ? teams[0] : null;
+        }
+    }
+
+    public bool IsOwnTeam(string? team) => Team == null || string.Equals(Team, team, StringComparison.OrdinalIgnoreCase);
+
     public string ScopeSummary
         => Grants.Any(g => g.Scope.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", Grants.Select(g => g.Scope.Describe()).Distinct());
 

@@ -40,7 +40,7 @@ public class SecurityTests
         foreach (var nav in ModuleCatalog.Navigation)
             Assert.NotNull(PermissionCatalog.Find(Perm.View(nav.Module)));
         foreach (var key in new[] { Perm.DechetsSaisir, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsTardif, Perm.DechetsAutrui,
-                     Perm.ComptesGerer, Perm.ComptesDebloquer, Perm.RolesGerer, Perm.SecuriteGerer, Perm.TableauDetaille, Perm.EcranTv, Perm.ParametresPoste })
+                     Perm.ComptesGerer, Perm.ComptesDebloquer, Perm.RolesGerer, Perm.SecuriteGerer, Perm.TableauDetaille, Perm.EcranTv, Perm.ParametresPoste, Perm.EquipesMultiples })
             Assert.NotNull(PermissionCatalog.Find(key));
         foreach (var t in RoleTemplates.All)
             Assert.All(t.Permissions, p => Assert.NotNull(PermissionCatalog.Find(p)));
@@ -110,7 +110,7 @@ public class SecurityTests
     {
         using var app = new TestApp();
         var admin = await app.SetupAdminAsync();
-        // Chef d'équipe for Equipe B everywhere, and operator on couscous whatever the team.
+        // Chef d'équipe for Equipe B everywhere, and operator on couscous (Equipe B too: one team only).
         var user = await app.UserAsync(admin, "polyvalent",
             TestApp.As(await app.RoleAsync("chef-equipe"), TestApp.Team("Equipe B")),
             TestApp.As(await app.RoleAsync("operateur"), TestApp.Sector(Sectors.Couscous)));
@@ -118,8 +118,33 @@ public class SecurityTests
         Assert.Equal("Chef d'équipe, Opérateur de saisie", user.RoleNames);
         Assert.True(user.Allows(Perm.DechetsValider, Sectors.PateCourte, "PC01", "Equipe B"));
         Assert.False(user.Allows(Perm.DechetsValider, Sectors.PateCourte, "PC01", "Equipe A"));
-        Assert.True(user.Allows(Perm.DechetsSaisir, Sectors.Couscous, "CC01", "Equipe A"));
-        Assert.False(user.Allows(Perm.DechetsSaisir, Sectors.PateCourte, "PC01", "Equipe A"));
+        Assert.True(user.Allows(Perm.DechetsSaisir, Sectors.Couscous, "CC01", "Equipe B"));
+        Assert.False(user.Allows(Perm.DechetsSaisir, Sectors.Couscous, "CC01", "Equipe A"));
+        Assert.Equal("Equipe B", user.Team);
+    }
+
+    [Fact]
+    public async Task Only_responsables_cover_several_teams()
+    {
+        using var app = new TestApp();
+        var admin = await app.SetupAdminAsync();
+        var chef = await app.RoleAsync("chef-equipe");
+        var operateur = await app.RoleAsync("operateur");
+        var all = new RoleAssignment { RoleId = chef.Id, RoleName = chef.Name, Scope = DataScope.Everything };
+        await Assert.ThrowsAsync<RuleViolationException>(() =>
+            app.Admin.CreateUserAsync(admin, new UserDraft("chef.all", "Chef", new[] { all })));
+        await Assert.ThrowsAsync<RuleViolationException>(() =>
+            app.Admin.CreateUserAsync(admin, new UserDraft("chef.ab", "Chef", new[]
+            {
+                TestApp.As(chef, TestApp.Team("Equipe A")), TestApp.As(operateur, TestApp.Team("Equipe B")),
+            })));
+
+        var prod = await app.UserAsync(admin, "resp.prod", "resp-production");
+        Assert.Null(prod.Team);
+        Assert.True(prod.IsOwnTeam("Equipe A"));
+        var chefA = await app.UserAsync(admin, "chef.a", "chef-equipe", TestApp.Team("Equipe A"));
+        Assert.Equal("Equipe A", chefA.Team);
+        Assert.False(chefA.IsOwnTeam("Equipe B"));
     }
 
     [Fact]

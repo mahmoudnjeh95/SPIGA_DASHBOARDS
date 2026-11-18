@@ -55,6 +55,14 @@ Utilisateurs et rôles, without a developer.
 * **Users** hold one or more roles, each with its own **scope** (sectors,
   machines, team) and optional **validity dates** (temporary staff,
   replacements). A right applies where one of the user's roles gives it.
+* **One team per account, except responsables.** Only a role with « Vue
+  d'ensemble › Couvrir plusieurs équipes » (the direction and responsables
+  templates) covers several or all teams; any other account is bound to one
+  team, the same on each of its roles. Such an account sees its team's
+  postes only: in Conditionnement, the waste entry screens and the
+  dashboard (with its Historique and Arrêts), the postes worked by another
+  team are greyed out and a click says they do not concern it; the team
+  filter is fixed.
 * **Delegated administration:** a role with « Créer et modifier des
   comptes » can give only the roles listed as assignable on it, only inside
   its holder's own scope, and only to accounts holding nothing else. « Gérer

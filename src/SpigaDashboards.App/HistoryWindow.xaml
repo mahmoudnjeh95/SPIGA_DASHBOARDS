@@ -98,7 +98,9 @@
             </StackPanel>
             <StackPanel Grid.Column="5" Margin="0,0,8,0">
                 <TextBlock Text="Équipe" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"
+                          IsEnabled="{Binding IsTeamFree}" ToolTipService.ShowOnDisabled="True"
+                          ToolTip="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent"/>
             </StackPanel>
             <StackPanel Grid.Column="6" Margin="0,0,8,0">
                 <TextBlock Text="Poids / produit" Style="{StaticResource FieldLabel}"/>

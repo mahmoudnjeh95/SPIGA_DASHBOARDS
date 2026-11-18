@@ -30,6 +30,19 @@ public partial class HistoryViewModel : ObservableObject
     [ObservableProperty] private string selectedSector = AllOption;
     [ObservableProperty] private string selectedShift = AllOption;
     [ObservableProperty] private string selectedTeam = AllOption;
+
+    // Team-bound account: this team only, the filter fixed (see MainViewModel.LockTeam).
+    [ObservableProperty] private bool isTeamFree = true;
+
+    public void LockTeam(string? team)
+    {
+        if (team == null)
+            return;
+        TeamOptions.Clear();
+        TeamOptions.Add(team);
+        SelectedTeam = team;
+        IsTeamFree = false;
+    }
     [ObservableProperty] private MachinePick selectedMachine = AllMachines;
     [ObservableProperty] private string selectedWeight = AllOption;
     [ObservableProperty] private string statusMessage = "";

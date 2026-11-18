@@ -28,6 +28,19 @@ public partial class StopsViewModel : ObservableObject
     [ObservableProperty] private MachinePick selectedMachine = AllMachines;
     [ObservableProperty] private string selectedShift = AllPostes;
     [ObservableProperty] private string selectedTeam = AllOption;
+
+    // Team-bound account: this team only, the filter fixed (see MainViewModel.LockTeam).
+    [ObservableProperty] private bool isTeamFree = true;
+
+    public void LockTeam(string? team)
+    {
+        if (team == null)
+            return;
+        TeamOptions.Clear();
+        TeamOptions.Add(team);
+        SelectedTeam = team;
+        IsTeamFree = false;
+    }
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private string summaryText = "";
     [ObservableProperty] private bool isBusy;

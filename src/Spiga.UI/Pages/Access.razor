@@ -264,6 +264,13 @@
                         </div>
 
                         <h3 class="sub">Rôles attribués</h3>
+                        @if (!FormCoversTeams)
+                        {
+                            <p class="nd" style="font-size:12px;margin:0">
+                                Compte d'équipe : choisissez son équipe, la même sur chaque rôle. Il ne verra que les postes de cette équipe ;
+                                seuls les rôles avec « Couvrir plusieurs équipes » (responsables) en couvrent plusieurs.
+                            </p>
+                        }
                         @for (var i = 0; i < _form.Assignments.Count; i++)
                         {
                             var a = _form.Assignments[i];
@@ -290,7 +297,7 @@
                                     <div class="f">
                                         <label for="@($"a{index}-team")">Équipe</label>
                                         <select id="@($"a{index}-team")" @bind="a.Team" disabled="@(!editable)">
-                                            <option value="">Toutes les équipes</option>
+                                            <option value="" disabled="@(!FormCoversTeams)">Toutes les équipes@(FormCoversTeams ? "" : " (responsables)")</option>
                                             @foreach (var t in Plant.Teams)
                                             {
                                                 <option value="@t">@t</option>
@@ -561,6 +568,10 @@
 
     // The roles offered in an assignment row: the assignable ones, plus the
     // one already there (shown even if this actor could not give it).
+    // A role of the form lets the account cover several teams (responsables).
+    private bool FormCoversTeams
+        => _form?.Assignments.Any(a => _roles.FirstOrDefault(r => r.Id == a.RoleId)?.EffectivePermissions.Has(Perm.EquipesMultiples) == true) == true;
+
     private IEnumerable<Role> RoleChoices(int current)
         => _roles.Where(r => _assignable.Any(a => a.Id == r.Id) || r.Id == current);
 

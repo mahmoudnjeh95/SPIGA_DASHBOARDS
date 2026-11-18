@@ -25,7 +25,11 @@
             <div class="segs" role="group" aria-label="Poste">
                 @foreach (var s in Shifts.All)
                 {
-                    <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => OnShiftAsync(s)">@Shifts.Label(s) <span style="font-weight:400">@Shifts.Hours(s)</span></button>
+                    @* A poste of another team stays visible, greyed out: a click says why. *@
+                    var own = Plant.IsOwnShift(Actor, _date, s);
+                    <button type="button" class="seg @(_shift == s ? "on" : "") @(own ? "" : "off-team")" aria-disabled="@(!own)"
+                            title="@(own ? null : "Poste de " + Plant.TeamOnShift(_date, s) + " : ne concerne pas votre équipe")"
+                            @onclick="() => OnShiftAsync(s)">@Shifts.Label(s) <span style="font-weight:400">@Shifts.Hours(s)</span></button>
                 }
             </div>
         </div>
@@ -33,10 +37,21 @@
             <span>Équipe du poste</span>
             <span class="chip acc" style="align-self:flex-start;margin-top:5px">@_team</span>
         </div>
+        @if (Actor.Team is { } myTeam)
+        {
+            <div class="f">
+                <span>Votre équipe</span>
+                <span class="chip" style="align-self:flex-start;margin-top:5px" title="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent">@myTeam</span>
+            </div>
+        }
         <span class="sp"></span>
         <span class="chip" title="La date et le poste sont attachés à chaque saisie">Contexte de saisie</span>
     </div>
 
+    @if (_teamNote != null)
+    {
+        <div class="notice warn" role="status">@_teamNote</div>
+    }
     <Flash Error="@Error" Info="@Info" />
 
     @if (Session.Can(Modules.SaisieDechets, AppAction.Saisir))
@@ -201,6 +216,7 @@
     private DateTime _date;
     private int _shift;
     private string _team = "";
+    private string? _teamNote;
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
     private IReadOnlyList<WasteReason> _reasons = Array.Empty<WasteReason>();
     private IReadOnlyList<WasteEntry> _entries = Array.Empty<WasteEntry>();
@@ -225,6 +241,7 @@
         {
             _date = Shifts.ProductionDate(Now);
             _shift = Shifts.At(Now);
+            KeepOwnShift();
         }
         if (_loadedKind != Kind || _reasons.Count == 0)
         {
@@ -245,6 +262,8 @@
         if (DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d))
         {
             _date = d.Date;
+            _teamNote = null;
+            KeepOwnShift();
             CancelEdit();
             await LoadAsync();
         }
@@ -252,9 +271,22 @@
 
     private async Task OnShiftAsync(int shift)
     {
+        if (!Plant.IsOwnShift(Actor, _date, shift))
+        {
+            _teamNote = Plant.ForeignShiftMessage(Actor, _date, shift);
+            return;
+        }
+        _teamNote = null;
         _shift = shift;
         CancelEdit();
         await LoadAsync();
+    }
+
+    // A team-bound account starts on (and comes back to) its team's poste of the day.
+    private void KeepOwnShift()
+    {
+        if (!Plant.IsOwnShift(Actor, _date, _shift) && Shifts.All.FirstOrDefault(s => Plant.IsOwnShift(Actor, _date, s)) is var own && own != 0)
+            _shift = own;
     }
 
     private async Task LoadAsync()

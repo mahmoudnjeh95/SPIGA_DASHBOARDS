@@ -66,8 +66,17 @@ public sealed class TestApp : IDisposable
     public Task<Actor> SetupAdminAsync(bool templates = true)
         => Auth.CreateFirstAdminAsync("admin", "Administrateur L2I", AdminPassword, templates);
 
+    // Without "Couvrir plusieurs équipes" an account is bound to one team:
+    // Equipe B (the team of poste 1 in TestPlant) unless the scope names one.
     public static RoleAssignment As(Role role, DataScope? scope = null, DateTime? from = null, DateTime? to = null)
-        => new() { RoleId = role.Id, RoleName = role.Name, Scope = scope ?? DataScope.Everything, ValidFrom = from, ValidTo = to };
+    {
+        scope ??= DataScope.Everything;
+        if (scope.Team == null && !role.EffectivePermissions.Has(Perm.EquipesMultiples))
+            scope = scope with { Team = DefaultTeam };
+        return new() { RoleId = role.Id, RoleName = role.Name, Scope = scope, ValidFrom = from, ValidTo = to };
+    }
+
+    public const string DefaultTeam = "Equipe B";
 
     public async Task<Role> RoleAsync(string code) => await Roles.GetByCodeAsync(code) ?? throw new InvalidOperationException(code);
 

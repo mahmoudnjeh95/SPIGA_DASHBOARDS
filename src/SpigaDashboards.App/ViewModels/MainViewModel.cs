@@ -140,6 +140,75 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool isDatePickerOpen;
     [ObservableProperty] private string machineFilterLabel = "Toutes";
 
+    // Team-bound account (SPIGA Suivi Production): the figures count its
+    // team's postes only, the team filter is fixed and the postes worked by
+    // another team are greyed out. null = every team (kiosk, responsables).
+    private string? _lockedTeam;
+    [ObservableProperty] private bool isTeamFree = true;
+    [ObservableProperty] private bool matinOwn = true;
+    [ObservableProperty] private bool apresMidiOwn = true;
+    [ObservableProperty] private bool nuitOwn = true;
+
+    public string? LockedTeam => _lockedTeam;
+
+    public void LockTeam(string? team)
+    {
+        if (_lockedTeam == team)
+            return;
+        _lockedTeam = team;
+        IsTeamFree = team == null;
+        RefreshFilterOptions();
+        FilterTeam = team ?? AllOption;
+        RefreshOwnShifts();
+    }
+
+    public bool IsShiftOwn(int shiftId) => shiftId switch { 1 => MatinOwn, 2 => ApresMidiOwn, 3 => NuitOwn, _ => true };
+
+    // "Le poste Nuit (Equipe A) ne concerne pas votre équipe (Equipe B)."
+    public string ForeignShiftMessage(int shiftId)
+    {
+        var name = KpiCalculator.ShiftName(shiftId);
+        if (SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift)
+        {
+            var now = DateTime.Now;
+            var date = TeamScheduleService.GetShiftDate(now, KpiCalculator.CurrentShiftId(now));
+            return $"Ce poste ne concerne pas votre équipe : le poste {name} du {date:dd/MM} est tenu par "
+                   + $"{_teamSchedule.GetTeamForShift(date, shiftId)}. Vous ne voyez que les postes de {_lockedTeam}.";
+        }
+        return $"Ce poste ne concerne pas votre équipe : {_lockedTeam} n'a pas tenu le poste {name} sur cette période.";
+    }
+
+    // Today (and the previous poste): the postes of the team today. Longer
+    // periods: the postes it worked on at least one day (the rotation).
+    private void RefreshOwnShifts()
+    {
+        bool Own(int shiftId)
+        {
+            if (_lockedTeam == null)
+                return true;
+            var now = DateTime.Now;
+            var (from, to) = SelectedPeriod is DashboardPeriod.Day or DashboardPeriod.PreviousShift
+                ? (TeamScheduleService.GetShiftDate(now, KpiCalculator.CurrentShiftId(now)), DateTime.MinValue)
+                : CurrentRange;
+            if (to == DateTime.MinValue)
+                to = from.AddDays(1);
+            for (var d = from.Date; d < to && d < from.Date.AddDays(28); d = d.AddDays(1))
+            {
+                var team = _teamSchedule.GetTeamForShift(d, shiftId);
+                if (string.IsNullOrEmpty(team) || string.Equals(team, _lockedTeam, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+        MatinOwn = Own(1);
+        ApresMidiOwn = Own(2);
+        NuitOwn = Own(3);
+        // A poste chosen before, now another team's: back to all (= its own).
+        var chosen = FilterShift switch { "Matin" => 1, "Après-midi" => 2, "Nuit" => 3, _ => 0 };
+        if (chosen != 0 && !IsShiftOwn(chosen))
+            FilterShift = AllOption;
+    }
+
     // "Dates..." button: shows the chosen range once that period is selected.
     public string CustomRangeLabel => SelectedPeriod == DashboardPeriod.Custom
         ? $"{CustomFrom:dd/MM} - {CustomTo:dd/MM}"
@@ -421,6 +490,7 @@ public partial class MainViewModel : ObservableObject
         // "Dates..." opens the date pickers right away.
         if (value == DashboardPeriod.Custom)
             IsDatePickerOpen = true;
+        RefreshOwnShifts();
         _ = ShowSlideAsync(_currentIndex);
     }
 
@@ -430,7 +500,10 @@ public partial class MainViewModel : ObservableObject
     private void OnCustomDatesChanged()
     {
         if (SelectedPeriod == DashboardPeriod.Custom)
+        {
+            RefreshOwnShifts();
             QueueFilterApply();
+        }
     }
 
     // A new sector lists its own machines, all selected.
@@ -498,7 +571,8 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ResetFilters()
     {
-        FilterShift = FilterTeam = FilterWeight = AllOption;
+        FilterShift = FilterWeight = AllOption;
+        FilterTeam = _lockedTeam ?? AllOption;
         if (FilterSector == AllOption)
             SelectAllMachines();
         FilterSector = AllOption;
@@ -561,11 +635,18 @@ public partial class MainViewModel : ObservableObject
     private void RefreshFilterOptions()
     {
         TeamOptions.Clear();
-        TeamOptions.Add(AllOption);
-        foreach (var team in _teamSchedule.TeamNames)
-            TeamOptions.Add(team);
+        if (_lockedTeam != null)
+        {
+            TeamOptions.Add(_lockedTeam);
+        }
+        else
+        {
+            TeamOptions.Add(AllOption);
+            foreach (var team in _teamSchedule.TeamNames)
+                TeamOptions.Add(team);
+        }
         if (!TeamOptions.Contains(FilterTeam))
-            FilterTeam = AllOption;
+            FilterTeam = _lockedTeam ?? AllOption;
 
         WeightOptions.Clear();
         WeightOptions.Add(AllOption);
@@ -866,6 +947,7 @@ public partial class MainViewModel : ObservableObject
 
     private void RefreshCurrentTeam()
     {
+        RefreshOwnShifts();
         var now = DateTime.Now;
         var shiftId = KpiCalculator.CurrentShiftId(now);
         var team = _teamSchedule.GetCurrentTeam(now);

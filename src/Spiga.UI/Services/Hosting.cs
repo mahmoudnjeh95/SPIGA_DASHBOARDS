@@ -58,7 +58,9 @@ public interface IDesktopBridge
     bool IsAvailable { get; }
 
     // A WPF page in the main window beside the navigation rail (null: none).
-    void ShowNative(NativePage? page, bool allowSettings);
+    // team: the one team of a team-bound account (null = several or all):
+    // the WPF pages then show that team's postes only, the others greyed out.
+    void ShowNative(NativePage? page, bool allowSettings, string? team);
 
     // Sign-out / lock: the pages are dropped (unsaved edits with them).
     void DiscardNativePages();
@@ -98,7 +100,7 @@ public sealed class NoSessionStore : ISessionStore
 public sealed class NoDesktop : IDesktopBridge
 {
     public bool IsAvailable => false;
-    public void ShowNative(NativePage? page, bool allowSettings) { }
+    public void ShowNative(NativePage? page, bool allowSettings, string? team) { }
     public void DiscardNativePages() { }
     public void OpenTvScreen(bool allowSettings) { }
     public void ApplyTheme(bool dark) { }

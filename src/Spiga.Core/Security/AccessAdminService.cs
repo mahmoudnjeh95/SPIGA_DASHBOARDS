@@ -303,6 +303,16 @@ public sealed partial class AccessAdminService(
             copy.ValidTo = a.ValidTo?.Date;
             result.Add(copy);
         }
+        // Only the responsables (right "Couvrir plusieurs équipes") cover
+        // several teams; anyone else is bound to one, the same on every role.
+        if (!result.Any(a => all[a.RoleId].EffectivePermissions.Has(Perm.EquipesMultiples)))
+        {
+            var teams = result.Select(a => a.Scope.Team ?? "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (teams.Count > 1 || teams[0].Length == 0)
+                throw new RuleViolationException(
+                    $"Seuls les responsables (droit « {PermissionCatalog.Label(Perm.EquipesMultiples)} ») couvrent plusieurs équipes : "
+                    + "choisissez l'équipe de ce compte, la même sur chacun de ses rôles.");
+        }
         return result;
     }
 

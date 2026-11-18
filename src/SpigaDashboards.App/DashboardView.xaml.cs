@@ -104,7 +104,11 @@ public partial class DashboardView : UserControl
     }
 
     public StopsViewModel CreateStopsViewModel()
-        => new(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
+    {
+        var stops = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
+        stops.LockTeam(_viewModel.LockedTeam);
+        return stops;
+    }
 
     public PlanningViewModel CreatePlanningViewModel()
         => new(new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
@@ -133,6 +137,7 @@ public partial class DashboardView : UserControl
     {
         var historyViewModel = new HistoryViewModel(_repository, new TeamScheduleService(_settings), _settings,
             _viewModel.CurrentFilter, _viewModel.CurrentRange);
+        historyViewModel.LockTeam(_viewModel.LockedTeam);
         var window = new HistoryWindow(historyViewModel) { Owner = OwnerWindow };
         window.ShowDialog();
     }
@@ -192,6 +197,42 @@ public partial class DashboardView : UserControl
     // pages beside the menu ("arrets", "parametres") instead of dialogs.
     // Null in kiosk mode.
     public Action<string>? PageRequested { get; set; }
+
+    // A poste of another team: not selected, a note says why.
+    private void ShiftButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: { } tag } button || !int.TryParse(tag.ToString(), out var shiftId) || _viewModel.IsShiftOwn(shiftId))
+            return;
+        e.Handled = true;
+        ShowNote(button, _viewModel.ForeignShiftMessage(shiftId));
+    }
+
+    private ToolTip? _note;
+
+    private void ShowNote(FrameworkElement target, string text)
+    {
+        if (_note != null)
+            _note.IsOpen = false;
+        _note = new ToolTip
+        {
+            Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
+            PlacementTarget = target,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false,
+            IsOpen = true,
+        };
+        var note = _note;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            note.IsOpen = false;
+        };
+        timer.Start();
+    }
+
+    // The signed-in account's team (null = several or all): see MainViewModel.LockTeam.
+    public void LockTeam(string? team) => _viewModel.LockTeam(team);
 
     private void NoteTextBox_GotFocus(object sender, RoutedEventArgs e) => _viewModel.IsEditingNote = true;
 

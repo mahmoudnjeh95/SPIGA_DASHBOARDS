@@ -234,6 +234,13 @@ body { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; }
 .seg:hover:not(.on) { background: var(--hover); translate: 0 -1px; box-shadow: var(--shadow-sm); }
 .seg:active { scale: .95; }
 .seg.on { background: var(--grad); color: var(--on-accent); font-weight: 700; box-shadow: 0 4px 14px rgba(37, 99, 235, .35); animation: sp-pop .4s var(--spring); }
+/* A poste of another team: greyed out, still clickable (it says why). */
+.seg.off-team {
+    color: var(--off); background: repeating-linear-gradient(135deg, var(--btn) 0 6px, var(--soft) 6px 12px);
+    font-weight: 500; cursor: not-allowed; box-shadow: none;
+}
+.seg.off-team:hover { translate: none; box-shadow: none; background: repeating-linear-gradient(135deg, var(--btn) 0 6px, var(--soft) 6px 12px); }
+.seg.off-team span { color: inherit; }
 .segs { display: flex; flex-wrap: wrap; gap: 5px; }
 .tabrow { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
 .tab {

@@ -292,11 +292,17 @@
                         <StackPanel Orientation="Horizontal">
                             <RadioButton GroupName="Shift" Content="Tous" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Tous}"/>
-                            <RadioButton GroupName="Shift" Content="Matin" Style="{StaticResource Seg}"
+                            <RadioButton GroupName="Shift" Content="Matin" Style="{StaticResource Seg}" Tag="1"
+                                         Opacity="{Binding MatinOwn, Converter={StaticResource OwnShiftOpacity}}"
+                                         PreviewMouseLeftButtonDown="ShiftButton_PreviewMouseLeftButtonDown"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Matin}"/>
-                            <RadioButton GroupName="Shift" Content="Après-midi" Style="{StaticResource Seg}"
+                            <RadioButton GroupName="Shift" Content="Après-midi" Style="{StaticResource Seg}" Tag="2"
+                                         Opacity="{Binding ApresMidiOwn, Converter={StaticResource OwnShiftOpacity}}"
+                                         PreviewMouseLeftButtonDown="ShiftButton_PreviewMouseLeftButtonDown"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Après-midi}"/>
-                            <RadioButton GroupName="Shift" Content="Nuit" Style="{StaticResource Seg}"
+                            <RadioButton GroupName="Shift" Content="Nuit" Style="{StaticResource Seg}" Tag="3"
+                                         Opacity="{Binding NuitOwn, Converter={StaticResource OwnShiftOpacity}}"
+                                         PreviewMouseLeftButtonDown="ShiftButton_PreviewMouseLeftButtonDown"
                                          IsChecked="{Binding FilterShift, Converter={StaticResource ValueToBool}, ConverterParameter=Nuit}"/>
                         </StackPanel>
                     </StackPanel>
@@ -304,7 +310,10 @@
                     <Rectangle Style="{StaticResource BarSeparator}"/>
                     <StackPanel>
                         <TextBlock Text="ÉQUIPE" Style="{StaticResource BarCaption}"/>
+                        <!-- Fixed to its team for a team-bound account (only responsables cover several). -->
                         <ComboBox Style="{StaticResource DarkComboBox}" Width="110" Padding="8,4" FontSize="14"
+                                  IsEnabled="{Binding IsTeamFree}" ToolTipService.ShowOnDisabled="True"
+                                  ToolTip="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent"
                                   ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding FilterTeam}"/>
                     </StackPanel>
 

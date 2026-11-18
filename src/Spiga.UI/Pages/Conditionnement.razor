@@ -3,6 +3,7 @@
 @inject DashboardQueries Queries
 @inject UiState Ui
 @inject IDesktopBridge Desktop
+@inject PlantData Plant
 
 <RequireAccess Module="@Modules.Conditionnement">
     <div class="head">
@@ -37,11 +38,27 @@
                 <button type="button" class="seg @(_shift == null ? "on" : "")" @onclick="() => OnShiftAsync(null)">Tous</button>
                 @foreach (var s in Shifts.All)
                 {
-                    <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => OnShiftAsync(s)">@Shifts.Label(s)</button>
+                    @* A poste your team did not work over the period stays visible, greyed out. *@
+                    var own = OwnShift(s);
+                    <button type="button" class="seg @(_shift == s ? "on" : "") @(own ? "" : "off-team")" aria-disabled="@(!own)"
+                            title="@(own ? null : "Ne concerne pas votre équipe sur cette période")"
+                            @onclick="() => OnShiftAsync(s)">@Shifts.Label(s)</button>
                 }
             </div>
         </div>
+        @if (Actor.Team is { } myTeam)
+        {
+            <div class="f">
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les postes de votre équipe">@myTeam</span>
+            </div>
+        }
     </div>
+
+    @if (_teamNote != null)
+    {
+        <div class="notice warn" role="status">@_teamNote</div>
+    }
 
     <Flash Error="@Error" />
 
@@ -148,7 +165,14 @@
     private Period _period = default!;
     private string? _sector;
     private int? _shift;
+    private string? _teamNote;
     private PlantSnapshot? _snap;
+
+    private bool OwnShift(int shift)
+    {
+        var (from, to) = _period.Range(Now);
+        return Plant.WorksShift(Actor, from, to, shift);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -164,12 +188,17 @@
         }
         if (_sector != null && !Actor.Allows(View, _sector))
             _sector = null;
+        if (_shift is { } kept && !OwnShift(kept))
+            _shift = Ui.PackagingShift = null;
         await LoadAsync();
     }
 
     private async Task OnPeriodAsync(Period p)
     {
         _period = Ui.PackagingPeriod = p;
+        _teamNote = null;
+        if (_shift is { } kept && !OwnShift(kept))
+            _shift = Ui.PackagingShift = null;
         await LoadAsync();
     }
 
@@ -181,6 +210,15 @@
 
     private async Task OnShiftAsync(int? shift)
     {
+        if (shift is { } s && !OwnShift(s))
+        {
+            var (from, to) = _period.Range(Now);
+            _teamNote = to - from <= TimeSpan.FromDays(1)
+                ? Plant.ForeignShiftMessage(Actor, from, s)
+                : $"Ce poste ne concerne pas votre équipe : {Actor.Team} n'a pas tenu le poste {Shifts.Label(s)} sur cette période.";
+            return;
+        }
+        _teamNote = null;
         _shift = Ui.PackagingShift = shift;
         await LoadAsync();
     }

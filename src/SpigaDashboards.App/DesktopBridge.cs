@@ -20,6 +20,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
     private readonly HashSet<NativePage> _creating = new();
     private NativePage? _wanted;
     private bool _allowSettings;
+    private string? _team;
     private bool? _dark;
     // Shared by the three stop follow-up pages, so they link up.
     private PlanningViewModel? _planning;
@@ -37,12 +38,16 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         shell.Closed += (_, _) => _dashboard?.CloseTvForShutdown();
     }
 
-    public void ShowNative(NativePage? page, bool allowSettings) => OnUi(async () =>
+    public void ShowNative(NativePage? page, bool allowSettings, string? team) => OnUi(async () =>
     {
         _wanted = page;
         _allowSettings = allowSettings;
+        _team = team;
         if (_dashboard != null)
+        {
             _dashboard.AllowSettings(allowSettings);
+            _dashboard.LockTeam(team);
+        }
         if (page is not { } p)
         {
             _shell?.HideNative();
@@ -92,6 +97,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
             _views[NativePage.Dashboard] = _dashboard;
         }
         _dashboard.AllowSettings(_allowSettings);
+        _dashboard.LockTeam(_team);
         return _dashboard;
     }
 

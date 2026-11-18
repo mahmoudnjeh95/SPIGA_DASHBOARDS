@@ -105,7 +105,7 @@
     protected override void OnAfterRender(bool firstRender)
     {
         Desktop.ApplyTheme(Session.Theme == "dark");
-        Desktop.ShowNative(CurrentNative, Session.Can(Perm.ParametresPoste));
+        Desktop.ShowNative(CurrentNative, Session.Can(Perm.ParametresPoste), Session.Actor?.Team);
     }
 
     private void OnNativeClosed(NativePage page)
@@ -152,6 +152,8 @@
         {
             var (team, shift) = Plant.CurrentShift();
             _shift = $"{team} - Poste {Shifts.Label(shift)}";
+            if (Session.Actor?.Team is { } mine && !Session.Actor.IsOwnTeam(team))
+                _shift += $" · votre équipe ({mine}) hors poste";
         }
         catch (Exception)
         {

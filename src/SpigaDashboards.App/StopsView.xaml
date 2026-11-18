@@ -83,7 +83,9 @@
             </StackPanel>
             <StackPanel Grid.Column="4" Margin="0,0,8,0">
                 <TextBlock Text="Équipe" Style="{StaticResource FieldLabel}"/>
-                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"/>
+                <ComboBox Style="{StaticResource DarkComboBox}" ItemsSource="{Binding TeamOptions}" SelectedItem="{Binding SelectedTeam}"
+                          IsEnabled="{Binding IsTeamFree}" ToolTipService.ShowOnDisabled="True"
+                          ToolTip="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent"/>
             </StackPanel>
             <Button Grid.Column="5" Content="Rechercher" Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom"
                     Command="{Binding SearchCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"/>
