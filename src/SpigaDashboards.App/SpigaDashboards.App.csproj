@@ -30,6 +30,13 @@
     <ProjectReference Include="..\Spiga.UI\Spiga.UI.csproj" />
   </ItemGroup>
 
+  <!-- For IT, in the install folder: creates the application database of
+       SPIGA Suivi Production on the site's SQL Server (run once). -->
+  <ItemGroup>
+    <None Include="..\..\database\spiga_suivi.sql" Link="spiga_suivi.sql"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Resource Include="Assets\spiga-logo.png" />
     <Resource Include="Assets\machine-running.png" />

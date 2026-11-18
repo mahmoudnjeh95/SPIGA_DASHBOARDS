@@ -1,6 +1,6 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <Package Name="SPIGA Dashboards"
+  <Package Name="SPIGA Suivi Production"
            Manufacturer="L2I - Leader de l'Innovation Industrielle"
            Version="$(var.ProductVersion)"
            UpgradeCode="D28AD530-83ED-4FCE-BE8D-E8AAE001E645"
@@ -8,9 +8,19 @@
            Scope="perUser"
            Compressed="yes">
 
-    <SummaryInformation Description="SPIGA Dashboards - Supervision machines de controle de poids" />
+    <SummaryInformation Description="SPIGA Suivi Production - suivi de production et tableaux de bord" />
 
-    <MajorUpgrade DowngradeErrorMessage="Une version plus recente de SPIGA Dashboards est deja installee." />
+    <MajorUpgrade DowngradeErrorMessage="Une version plus recente de SPIGA Suivi Production est deja installee." />
+
+    <!-- KIOSK=1: a screen PC (TV, hall). The app then starts on the dashboard
+         alone, without sign-in, however it is launched (StartMode.cs reads the
+         registry value below), and the desktop shortcut opens the dashboard.
+         Remembered: an upgrade without KIOSK=1 keeps the PC a screen. To make
+         it an ordinary PC again, uninstall, then install without KIOSK=1. -->
+    <Property Id="KIOSK" Secure="yes">
+      <RegistrySearch Id="KioskModeSearch" Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="KioskMode" Type="raw" />
+    </Property>
+    <SetProperty Id="KIOSK" Value="1" After="AppSearch" Condition='KIOSK = "#1"' Sequence="both" />
 
     <!-- Always overwrite the installed files, whatever their version. Without
          it, an upgrade built with an older .NET patch than the installed one
@@ -37,16 +47,21 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="AppProgramMenuFolder" Name="SPIGA Dashboards" />
+      <Directory Id="AppProgramMenuFolder" Name="SPIGA Suivi Production" />
     </StandardDirectory>
 
     <StandardDirectory Id="DesktopFolder" />
 
-    <Feature Id="Main" Title="SPIGA Dashboards" Level="1">
+    <!-- The install folder and the exe keep their names: startup / watchdog
+         tasks set up on the PCs point to them. -->
+    <Feature Id="Main" Title="SPIGA Suivi Production" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentGroupRef Id="DevDatabase" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartMenuKioskShortcut" />
       <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="DesktopKioskShortcut" />
+      <ComponentRef Id="KioskModeFlag" />
     </Feature>
 
   </Package>
@@ -71,11 +86,12 @@
     </ComponentGroup>
   </Fragment>
 
+  <!-- Start menu: the application (sign-in), and the dashboard alone for a screen. -->
   <Fragment>
     <Component Id="StartMenuShortcut" Directory="AppProgramMenuFolder" Guid="1F2E3D4C-5B6A-4978-8877-665544332211">
       <Shortcut Id="StartMenuShortcutFile"
-                Name="SPIGA Dashboards"
-                Description="Supervision machines de controle de poids"
+                Name="SPIGA Suivi Production"
+                Description="Suivi de production, saisies et tableaux de bord"
                 Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
                 WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="RemoveStartMenuFolder" Directory="AppProgramMenuFolder" On="uninstall" />
@@ -84,13 +100,45 @@
   </Fragment>
 
   <Fragment>
-    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="2A3B4C5D-6E7F-4890-9911-223344556677">
+    <Component Id="StartMenuKioskShortcut" Directory="AppProgramMenuFolder" Guid="5B0C3E71-2D4A-4F86-9C1B-7E3F8A2D6C40">
+      <Shortcut Id="StartMenuKioskShortcutFile"
+                Name="SPIGA Dashboards (écran)"
+                Description="Tableau de bord seul, sans connexion (écran TV, hall)"
+                Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
+                Arguments="--kiosk"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="StartMenuKioskShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <!-- Desktop: one shortcut, the application, or the dashboard on a screen PC. -->
+  <Fragment>
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="2A3B4C5D-6E7F-4890-9911-223344556677" Condition="NOT (KIOSK = 1)">
       <Shortcut Id="DesktopShortcutFile"
-                Name="SPIGA Dashboards"
-                Description="Supervision machines de controle de poids"
+                Name="SPIGA Suivi Production"
+                Description="Suivi de production, saisies et tableaux de bord"
                 Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
                 WorkingDirectory="INSTALLFOLDER" />
       <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <Fragment>
+    <Component Id="DesktopKioskShortcut" Directory="DesktopFolder" Guid="8E4D1A2B-6C3F-4B7E-A590-1D2C3B4A5F68" Condition="KIOSK = 1">
+      <Shortcut Id="DesktopKioskShortcutFile"
+                Name="SPIGA Dashboards"
+                Description="Tableau de bord seul, sans connexion (écran TV, hall)"
+                Target="[INSTALLFOLDER]SpigaDashboards.App.exe"
+                Arguments="--kiosk"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="DesktopKioskShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+
+  <!-- Read by the app at start-up (StartMode.cs): this PC is a screen. -->
+  <Fragment>
+    <Component Id="KioskModeFlag" Directory="INSTALLFOLDER" Guid="3C7A9E15-4B2D-4E8F-B061-9A5D2C7E1F34" Condition="KIOSK = 1">
+      <RegistryValue Root="HKCU" Key="Software\L2I\SpigaDashboards" Name="KioskMode" Type="integer" Value="1" KeyPath="yes" />
     </Component>
   </Fragment>
 
