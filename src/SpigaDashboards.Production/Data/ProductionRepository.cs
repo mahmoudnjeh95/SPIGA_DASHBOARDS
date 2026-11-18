@@ -80,6 +80,9 @@ public class ProductionRepository
     private readonly IDbConnectionFactory _connectionFactory;
     // The application database (spiga_suivi): planning, note, machine names.
     private readonly IDbConnectionFactory _appData;
+
+    // Note and machine names stay in stats while PCs still run 2.0.
+    private readonly PlantDataLocation _location;
     private readonly AppSettings _settings;
 
     // Planned stops (maintenance slots, "Planifié" stops) left out of the TRS.
@@ -102,6 +105,7 @@ public class ProductionRepository
         // Planned stops count in every machine's TRS: read unrestricted, then
         // filtered on the way out.
         _planning = new PlanningRepository(appData, live);
+        _location = new PlantDataLocation(appData, live);
         Access = access ?? MachineAccess.Everything();
     }
 
@@ -1032,12 +1036,20 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
             => provider == DatabaseProvider.SqlServer ? SqlServer : Sqlite;
     }
 
-    // ---- Application data: sticky note, machine names (spiga_suivi) ----
+    // ---- Application data: sticky note, machine names ----
+    // In spiga_suivi; in stats, in their 2.0 shape, while PCs still run 2.0
+    // (PlantDataLocation). The audit trail is always in spiga_suivi.
 
-    // Throws when the application database cannot be read: the caller keeps
-    // what it shows.
+    // Throws when the database cannot be read: the caller keeps what it shows.
     public async Task<NoteEntry?> GetActiveNoteAsync()
     {
+        if (await _location.ModeAsync() != PlantDataMode.Application)
+        {
+            using var stats = _connectionFactory.CreateConnection();
+            return await stats.QueryFirstOrDefaultAsync<NoteEntry>(
+                @"SELECT NoteId, Content, CreatedAt, IsActive FROM Notes
+                  WHERE IsActive = 1 ORDER BY CreatedAt DESC, NoteId DESC");
+        }
         using var connection = _appData.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<NoteEntry>(
             @"SELECT NoteId, Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive FROM Notes
@@ -1045,30 +1057,49 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
     }
 
     // The new note replaces the previous one; who wrote it, and the change,
-    // go to the audit trail in the same transaction.
+    // go to the audit trail (in the same transaction once in spiga_suivi).
     public async Task SetActiveNoteAsync(string content, ChangeAuthor author)
     {
-        using var connection = _appData.CreateConnection();
-        connection.Open();
-        using var transaction = connection.BeginTransaction();
-
-        var previous = await connection.QueryFirstOrDefaultAsync<string?>(
-            "SELECT Content FROM Notes WHERE IsActive = 1 ORDER BY CreatedAt DESC, NoteId DESC", transaction: transaction);
-        if (previous == content)
-            return;
-        await connection.ExecuteAsync("UPDATE Notes SET IsActive = 0 WHERE IsActive = 1", transaction: transaction);
-        await connection.ExecuteAsync(
-            @"INSERT INTO Notes (Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive)
-              VALUES (@content, @login, @name, @workstation, @createdAt, 1)",
-            new { content, login = author.Login, name = author.Name, workstation = author.Workstation, createdAt = DateTime.Now },
-            transaction);
-        await AuditRows.WriteAsync(connection, transaction, author, AuditRows.ModuleConditionnement, AuditRows.NoteUpdated,
-            "Note du tableau de bord", previous, content);
-        transaction.Commit();
+        var target = await _location.WriteTargetAsync();
+        var legacy = !ReferenceEquals(target, _appData);
+        string? previous;
+        using (var connection = target.CreateConnection())
+        {
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+            previous = await connection.QueryFirstOrDefaultAsync<string?>(
+                "SELECT Content FROM Notes WHERE IsActive = 1 ORDER BY CreatedAt DESC, NoteId DESC", transaction: transaction);
+            if (previous == content)
+                return;
+            await connection.ExecuteAsync("UPDATE Notes SET IsActive = 0 WHERE IsActive = 1", transaction: transaction);
+            if (legacy)
+            {
+                // 2.0 shape: no author column (it is in the audit trail).
+                var employeeId = await connection.ExecuteScalarAsync<int?>("SELECT MIN(EmployeeId) FROM Employees", transaction: transaction) ?? 1;
+                await connection.ExecuteAsync(
+                    "INSERT INTO Notes (Content, CreatedByEmployeeId, CreatedAt, IsActive) VALUES (@content, @employeeId, @createdAt, 1)",
+                    new { content, employeeId, createdAt = DateTime.Now }, transaction);
+            }
+            else
+            {
+                await connection.ExecuteAsync(
+                    @"INSERT INTO Notes (Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive)
+                      VALUES (@content, @login, @name, @workstation, @createdAt, 1)",
+                    new { content, login = author.Login, name = author.Name, workstation = author.Workstation, createdAt = DateTime.Now },
+                    transaction);
+                await AuditRows.WriteAsync(connection, transaction, author, AuditRows.ModuleConditionnement, AuditRows.NoteUpdated,
+                    "Note du tableau de bord", previous, content);
+            }
+            transaction.Commit();
+        }
+        if (legacy)
+            await AuditRows.WriteApartAsync(_appData, author, AuditRows.ModuleConditionnement, AuditRows.NoteUpdated,
+                "Note du tableau de bord", previous, content);
     }
 
-    // The name shown for a machine (Paramètres): kept in the application
-    // database over stats.Machines, which is never written. Audited.
+    // The name shown for a machine (Paramètres): in spiga_suivi over
+    // stats.Machines, which is then never written; in stats.Machines itself
+    // while PCs still run 2.0. Audited.
     public async Task UpdateMachineNameAsync(string machineId, string machineName, ChangeAuthor author)
     {
         await Access.DemandAsync(_connectionFactory, machineId);
@@ -1079,6 +1110,16 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
         string? statsName;
         using (var live = _connectionFactory.CreateConnection())
             statsName = await live.ExecuteScalarAsync<string?>("SELECT MachineName FROM Machines WHERE MachineId = @machineId", new { machineId });
+
+        if (!ReferenceEquals(await _location.WriteTargetAsync(), _appData))
+        {
+            if (statsName == machineName)
+                return;
+            using (var live = _connectionFactory.CreateConnection())
+                await live.ExecuteAsync("UPDATE Machines SET MachineName = @machineName WHERE MachineId = @machineId", new { machineId, machineName });
+            await AuditRows.WriteApartAsync(_appData, author, AuditRows.ModuleParametres, AuditRows.MachineRenamed, machineId, statsName, machineName);
+            return;
+        }
 
         using var connection = _appData.CreateConnection();
         connection.Open();
@@ -1108,6 +1149,9 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
     {
         try
         {
+            // While PCs still run 2.0 the names are those of stats.Machines.
+            if (await _location.ModeAsync() != PlantDataMode.Application)
+                return;
             using var connection = _appData.CreateConnection();
             var names = (await connection.QueryAsync<(string MachineId, string Name)>("SELECT MachineId, Name FROM MachineDisplayNames"))
                 .ToDictionary(n => n.MachineId, n => n.Name, StringComparer.OrdinalIgnoreCase);

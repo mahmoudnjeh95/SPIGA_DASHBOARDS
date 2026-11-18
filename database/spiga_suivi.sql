@@ -4,10 +4,11 @@
 -- settings shared by the PCs). Run once on the site's SQL Server by IT.
 --
 -- The production database "stats" (Stiavelli) is never written to: the
--- application only reads it (cahier des charges §16). What versions up to
--- 2.0 wrote in stats is copied here once, by the first PC started on 2.1;
--- update every PC together (a PC left on 2.0 keeps writing in stats, unseen
--- by the others). Every PC, kiosk / TV ones included, needs this database.
+-- application only reads it (cahier des charges §16) -- once every PC runs
+-- 2.1: until then the planning, note and shared settings stay in stats for
+-- every PC, and IT moves them here when the last PC is updated (README,
+-- « Updating from 2.0, PC by PC »). Every PC, kiosk / TV ones included,
+-- needs this database.
 --
 -- The tables are created and upgraded by the application's versioned
 -- migrations (src/Spiga.Data/Migrations). Least privilege: the login used by

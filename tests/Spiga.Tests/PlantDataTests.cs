@@ -24,6 +24,8 @@ public sealed class LiveDb : IDisposable
         if (!withLegacyTables)
             return;
         c.Execute(@"
+            CREATE TABLE Employees (EmployeeId INTEGER PRIMARY KEY, FullName TEXT);
+            INSERT INTO Employees VALUES (1, 'Poste');
             CREATE TABLE Notes (NoteId INTEGER PRIMARY KEY, Content TEXT, CreatedByEmployeeId INTEGER, CreatedAt TEXT, IsActive INTEGER);
             INSERT INTO Notes VALUES (1, 'ancienne', 1, '2026-11-01 08:00:00', 0), (2, 'Nettoyage ligne 2 à 14h', 1, '2026-11-10 08:00:00', 1);
             CREATE TABLE AppSharedSettings (Id INTEGER PRIMARY KEY, Version INTEGER, Json TEXT, UpdatedAt TEXT, UpdatedBy TEXT);
@@ -154,35 +156,94 @@ public class PlantDataTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => pc2.SaveOrderAsync(second));
     }
 
+    // A site where PCs still run 2.0: 2.1 PCs work in stats like them, then IT
+    // switches once the last PC is updated.
     [Fact]
-    public async Task What_version_2_0_wrote_in_stats_is_copied_once()
+    public async Task A_PC_by_PC_rollout_shares_the_data_with_2_0_PCs_until_the_switch()
     {
         using var app = new TestApp();
         using var live = new LiveDb(withLegacyTables: true);
-        var before = live.Hash();
+        var month = (From: new DateTime(2026, 11, 1), To: new DateTime(2026, 12, 1));
 
-        var report = await new LegacyDataImporter(live.Factory, app.AppData).ImportAsync();
+        // Transition: what a 2.1 PC writes, a 2.0 PC sees (stats); the audit is in spiga_suivi.
+        var planning = new PlanningRepository(app.AppData, live.Factory) { Author = Chef };
+        var production = new ProductionRepository(live.Factory, app.AppData, new AppSettings());
+        Assert.Equal(PlantDataMode.Legacy, await new PlantDataLocation(app.AppData, live.Factory).ModeAsync());
+        await planning.SaveOrderAsync(Order("OF-2026-0007", "PC01"));
+        await production.SetActiveNoteAsync("Note écrite en 2.1", Chef);
+        await production.UpdateMachineNameAsync("PC01", "Peseuse ligne 1", Chef);
+        using (var stats = new SqliteConnection(live.Factory.CreateConnection().ConnectionString))
+        {
+            Assert.Equal(3, await stats.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM PlanProductionOrders"));
+            Assert.Equal("Note écrite en 2.1", await stats.ExecuteScalarAsync<string>("SELECT Content FROM Notes WHERE IsActive = 1"));
+            Assert.Equal("Peseuse ligne 1", await stats.ExecuteScalarAsync<string>("SELECT MachineName FROM Machines WHERE MachineId = 'PC01'"));
+        }
+        Assert.Equal(7, (await new SharedSettingsRepository(app.AppData, live.Factory).GetAsync())!.Version);
+        var audit = await app.AuditAsync();
+        Assert.Contains(audit, e => e.Action == "Ordre de fabrication : création" && e.UserLogin == "chef.l1");
+        Assert.Contains(audit, e => e.Action == AuditActions.NoteUpdated && e.UserLogin == "chef.l1");
+        Assert.Contains(audit, e => e.Action == AuditActions.MachineRenamed && e.NewValue == "Peseuse ligne 1");
+
+        // Every PC on 2.1: IT switches. While it copies, writes are refused.
+        await PlantDataLocation.WriteAsync(app.AppData, PlantDataMode.Switching, "test");
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PlanningRepository(app.AppData, live.Factory).SaveOrderAsync(Order("OF-2026-0008", "PC01")));
+        await PlantDataLocation.WriteAsync(app.AppData, PlantDataMode.Legacy, "test");
+        var report = await PlantDataLocation.SwitchToApplicationAsync(app.AppData, live.Factory, "it.admin", pause: TimeSpan.Zero);
         Assert.Equal(6, report.Count);
+        Assert.Equal(PlantDataMode.Application, (await PlantDataLocation.ReadAsync(app.AppData))!.Mode);
 
-        var planning = new PlanningRepository(app.AppData, live.Factory);
-        var orders = await planning.GetOrdersAsync(new DateTime(2026, 11, 1), new DateTime(2026, 12, 1));
-        Assert.Equal(new[] { "OF-2026-0001", "OF-2026-0001-2" }, orders.OrderBy(o => o.Id).Select(o => o.OrderNo));
-        var events = await planning.GetEventsAsync(new DateTime(2026, 11, 1), new DateTime(2026, 12, 1));
+        // Everything is in spiga_suivi now, ids kept, the duplicate number renumbered.
+        var after = new PlanningRepository(app.AppData, live.Factory);
+        var orders = await after.GetOrdersAsync(month.From, month.To);
+        Assert.Equal(new[] { "OF-2026-0001", "OF-2026-0001-2" }, orders.OrderBy(o => o.Id).Select(o => o.OrderNo).Take(2));
+        Assert.Contains(orders, o => o.OrderNo == "OF-2026-0007");
+        var events = await after.GetEventsAsync(month.From, month.To);
         Assert.Equal((8, 3), (events.Single().Id, events.Single().PlanId));
-        Assert.Equal(3, (await planning.GetPlansAsync()).Single().Id);
-        var stop = (await planning.GetQualificationsAsync(new DateTime(2026, 11, 1), new DateTime(2026, 12, 1))).Single();
-        Assert.Equal((5, (DateTime?)null), (stop.Id, stop.ExpectedEnd));
-        Assert.Equal("OF-2026-0002", await planning.NextOrderNoAsync(new DateTime(2026, 11, 17)));
-        var shared = await new SharedSettingsRepository(app.AppData).GetAsync();
-        Assert.Equal(7, shared!.Version);
-        var note = await new ProductionRepository(live.Factory, app.AppData, new AppSettings()).GetActiveNoteAsync();
-        Assert.Equal("Nettoyage ligne 2 à 14h", note!.Content);
+        Assert.Equal(3, (await after.GetPlansAsync()).Single().Id);
+        Assert.Equal(5, (await after.GetQualificationsAsync(month.From, month.To)).Single().Id);
+        Assert.Equal("OF-2026-0008", await after.NextOrderNoAsync(new DateTime(2026, 11, 17)));
+        Assert.Equal(7, (await new SharedSettingsRepository(app.AppData, live.Factory).GetAsync())!.Version);
+        var afterProduction = new ProductionRepository(live.Factory, app.AppData, new AppSettings());
+        Assert.Equal("Note écrite en 2.1", (await afterProduction.GetActiveNoteAsync())!.Content);
 
-        // Once only: rows written later in stats (a PC on 2.0) are not copied again.
-        using (var c = new SqliteConnection(live.Factory.CreateConnection().ConnectionString))
-            await c.ExecuteAsync("INSERT INTO PlanProductionOrders VALUES (9, 'OF-2026-0099', 'PC01', 'Penne', 500, 1, '2026-11-12 06:00:00', '2026-11-12 07:00:00', 0, NULL)");
-        await new LegacyDataImporter(live.Factory, app.AppData).ImportAsync();
-        Assert.Equal(2, (await planning.GetOrdersAsync(new DateTime(2026, 11, 1), new DateTime(2026, 12, 1))).Count);
+        // And stats is only read from now on.
+        var hash = live.Hash();
+        await after.SaveOrderAsync(Order(await after.NextOrderNoAsync(), "PC01"));
+        await afterProduction.SetActiveNoteAsync("Après la bascule", Chef);
+        await afterProduction.UpdateMachineNameAsync("CC01", "Contrôle couscous", Chef);
+        Assert.Equal(hash, live.Hash());
+        Assert.Equal("Contrôle couscous", (await afterProduction.GetMachinesAsync()).Single(m => m.MachineId == "CC01").MachineName);
+    }
+
+    [Fact]
+    public async Task A_failed_switch_leaves_every_PC_on_stats_and_nothing_marked_as_copied()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb(withLegacyTables: true);
+        Assert.Equal(PlantDataMode.Legacy, await new PlantDataLocation(app.AppData, live.Factory).ModeAsync());
+        // The copy breaks on the last table.
+        using (var c = new SqliteConnection(app.AppData.ConnectionString))
+            await c.ExecuteAsync("DROP TABLE Notes");
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            PlantDataLocation.SwitchToApplicationAsync(app.AppData, live.Factory, "it.admin", pause: TimeSpan.Zero));
+
+        Assert.Equal(PlantDataMode.Legacy, (await PlantDataLocation.ReadAsync(app.AppData))!.Mode);
+        using (var c = new SqliteConnection(app.AppData.ConnectionString))
+        {
+            Assert.Equal(0, await c.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM LegacyImports"));
+            Assert.Equal(0, await c.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM PlanProductionOrders"));
+        }
+    }
+
+    [Fact]
+    public async Task A_new_site_uses_the_application_database_at_once()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb();
+        Assert.Equal(PlantDataMode.Application, await new PlantDataLocation(app.AppData, live.Factory).ModeAsync());
+        Assert.Equal(PlantDataMode.Application, (await PlantDataLocation.ReadAsync(app.AppData))!.Mode);
     }
 
     [Fact]

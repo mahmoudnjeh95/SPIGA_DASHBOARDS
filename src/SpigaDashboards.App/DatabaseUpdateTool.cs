@@ -12,14 +12,18 @@ namespace SpigaDashboards.App;
 // "SpigaDashboards.App.exe --update-database" (start menu « Mettre à jour la
 // base SPIGA »), for IT: applies the table changes of this version to the
 // application database with an administrator login, so the PCs' own login
-// only reads and writes (database\spiga_suivi.sql). Then copies, once, what
-// versions up to 2.0 left in stats. Nothing is kept of the administrator's
-// credentials.
+// only reads and writes (database\spiga_suivi.sql).
+//
+// PC-by-PC rollout: while PCs still run 2.0, the planning, note and shared
+// settings stay in stats for every PC (PlantDataLocation). Once the last PC
+// runs 2.1, IT runs this again and answers yes: writes pause for about
+// 90 s, the rows are copied to spiga_suivi in one transaction, and every PC
+// follows within 30 s. Nothing is kept of the administrator's credentials.
 internal static class DatabaseUpdateTool
 {
     private const string Title = "Mettre à jour la base SPIGA Suivi Production";
 
-    public static void Run(AppSettings settings, IDbConnectionFactory production)
+    public static async Task RunAsync(AppSettings settings, IDbConnectionFactory production)
     {
         AppDbOptions options;
         if (settings.Provider == DatabaseProvider.SqlServer)
@@ -33,29 +37,65 @@ internal static class DatabaseUpdateTool
             options = AppDatabase.OptionsFor(settings);
         }
 
+        var appData = AppData.ConnectionFor(options);
+        PlantDataMode mode;
         try
         {
-            var report = Task.Run(async () =>
-            {
-                var ran = await new Migrator(new AppDb(options)).MigrateAsync();
-                var lines = new List<string> { $"{ran} mise(s) à jour appliquée(s) ; base en version {Migrator.CurrentVersion}." };
-                try
-                {
-                    lines.AddRange(await new LegacyDataImporter(production, AppData.ConnectionFor(options)).ImportAsync());
-                }
-                catch (Exception ex)
-                {
-                    lines.Add("Reprise des données de la base de production non faite (elle se fera au démarrage d'un poste) : " + ex.Message);
-                }
-                return lines;
-            }).GetAwaiter().GetResult();
-            AppLogger.Log("Mise à jour de la base applicative par " + Environment.UserName + " : " + string.Join(" | ", report));
-            MessageBox.Show(string.Join("\n", report), Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            var ran = await Task.Run(() => new Migrator(new AppDb(options)).MigrateAsync());
+            await AppData.ImportLegacyAsync(production, options);
+            mode = (await PlantDataLocation.ReadAsync(appData))?.Mode ?? PlantDataMode.Application;
+            var report = $"{ran} mise(s) à jour appliquée(s) ; base en version {Migrator.CurrentVersion}.\n" +
+                         $"Planification, note et réglages partagés : {AppData.Describe(mode)}.";
+            AppLogger.Log($"Mise à jour de la base applicative par {Environment.UserName} : {report.Replace('\n', ' ')}");
+            MessageBox.Show(report, Title, MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             AppLogger.Log("Mise à jour de la base applicative impossible : " + ex);
             MessageBox.Show("La mise à jour a échoué :\n" + ex.Message, Title, MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (mode == PlantDataMode.Application)
+            return;
+        var answer = MessageBox.Show(
+            "Des postes étaient encore en version 2.0 : la planification des arrêts, la note des écrans et les réglages partagés " +
+            "sont encore dans la base de production, pour tous les postes.\n\n" +
+            "Tous les postes, écrans TV compris, sont-ils maintenant en version 2.1 ?\n\n" +
+            "Oui : ces données passent dans la base de l'application (environ 2 minutes ; les enregistrements sont " +
+            "suspendus pendant ce temps, les écrans continuent d'afficher). Un poste resté en 2.0 ne les verrait plus.\n" +
+            "Non : à faire plus tard, quand le dernier poste sera à jour.",
+            Title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        var progressText = new TextBlock { Margin = new Thickness(24), TextWrapping = TextWrapping.Wrap, Text = "Préparation…" };
+        var progress = new Window
+        {
+            Title = Title,
+            Content = progressText,
+            Width = 460,
+            SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+        };
+        progress.Show();
+        try
+        {
+            var copied = await PlantDataLocation.SwitchToApplicationAsync(appData, production, Environment.UserName,
+                text => progressText.Text = text);
+            progress.Close();
+            AppLogger.Log("Données de planification transférées dans la base de l'application : " + string.Join(" | ", copied));
+            MessageBox.Show("Transfert terminé : les postes utilisent maintenant la base de l'application.\n\n" + string.Join("\n", copied) +
+                            "\n\nLe compte des postes peut maintenant être en lecture seule sur la base de production (fin de stiavelli_compat.sql).",
+                Title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            progress.Close();
+            AppLogger.Log("Transfert des données de planification impossible : " + ex);
+            MessageBox.Show("Le transfert a échoué ; rien n'a changé pour les postes (les données restent dans la base de production) :\n" +
+                            ex.Message, Title, MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

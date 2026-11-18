@@ -15,18 +15,18 @@ public class SharedSettingsRow
 // version bumped on every save, so a PC sees a change with one tiny query
 // and a save made from stale values is refused instead of overwriting.
 // In the application database (spiga_suivi), created by its migrations; the
-// production database "stats" is only read.
+// production database "stats" is only read -- except while PCs still run
+// 2.0, which keep these settings in stats: then every PC uses them there
+// (PlantDataLocation).
 public class SharedSettingsRepository
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly PlantDataLocation _location;
 
-    // connectionFactory: the application database.
-    public SharedSettingsRepository(IDbConnectionFactory connectionFactory)
+    // appData: the application database; live: the production database.
+    public SharedSettingsRepository(IDbConnectionFactory appData, IDbConnectionFactory live)
     {
-        _connectionFactory = connectionFactory;
+        _location = new PlantDataLocation(appData, live);
     }
-
-    private bool IsSqlServer => _connectionFactory.Provider == DatabaseProvider.SqlServer;
 
     // Kept for the callers that reset after a database switch: nothing cached.
     public void Reset() { }
@@ -37,14 +37,14 @@ public class SharedSettingsRepository
     public async Task<int> GetVersionAsync()
     {
         await EnsureSchemaAsync();
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = (await _location.ReadTargetAsync()).CreateConnection();
         return await connection.ExecuteScalarAsync<int?>("SELECT Version FROM AppSharedSettings WHERE Id = 1") ?? 0;
     }
 
     public async Task<SharedSettingsRow?> GetAsync()
     {
         await EnsureSchemaAsync();
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = (await _location.ReadTargetAsync()).CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SharedSettingsRow>(
             "SELECT Version, Json, UpdatedAt, UpdatedBy FROM AppSharedSettings WHERE Id = 1");
     }
@@ -54,7 +54,7 @@ public class SharedSettingsRepository
     public async Task<int?> SaveAsync(string json, int expectedVersion, string updatedBy)
     {
         await EnsureSchemaAsync();
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = (await _location.WriteTargetAsync()).CreateConnection();
         var args = new { json, expectedVersion, updatedAt = DateTime.Now, updatedBy };
 
         if (expectedVersion == 0)

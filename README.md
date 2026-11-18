@@ -58,12 +58,35 @@ Windows 10 and 11).
 | `spiga_suivi` (application) | Accounts, roles, platforms, waste entries, audit trail; planning of the stops (`Plan*`), the dashboard's note (with its author), machine display names, the settings shared by the PCs | Yes, through versioned migrations (`src/Spiga.Data/Migrations`) |
 
 Every PC needs both, kiosk / TV PCs included (planning, note and shared
-settings). Up to version 2.0 the application wrote its planning, note,
-machine names and shared settings in `stats`: the first 2.1 PC to start
-copies them once into `spiga_suivi` (`LegacyDataImporter`, recorded in
-`LegacyImports`; production order numbers given twice are renumbered
-`-2`, `-3`...). Update every PC together; once all run 2.1 the login of the
-PCs can be read-only on `stats` (see the end of `stiavelli_compat.sql`).
+settings).
+
+### Updating from 2.0, PC by PC
+
+Up to version 2.0 the application wrote its planning, note, machine names
+and shared settings in `stats`. The PCs do not need to be updated together
+(`PlantDataLocation`):
+
+1. IT runs `spiga_suivi.sql` again, then « Mettre à jour la base SPIGA
+   (informatique) » on one PC (answer *Non* to the transfer question).
+2. The PCs are updated one by one, at any pace. Meanwhile the 2.1 PCs keep
+   the planning, note, machine names and shared settings in `stats`, like
+   the 2.0 PCs, so every PC sees the same (the audit trail is in
+   `spiga_suivi`). Utilisateurs et rôles shows a warning: the 2.0 PCs ignore
+   platforms (an account limited by platform sees all its team's machines
+   there, and an account edited from one loses its platforms) — manage the
+   accounts from 2.1 PCs, and give platforms only to accounts that use
+   updated PCs.
+3. When the last PC (TV screens included) runs 2.1, IT runs « Mettre à
+   jour la base SPIGA » again and answers *Oui*: writes pause for about 90 s
+   (the screens keep showing), everything is copied to `spiga_suivi` in one
+   transaction (ids kept; production order numbers given twice renumbered
+   `-2`, `-3`...), and every PC follows within 30 s. If the copy fails,
+   nothing changes and it can be run again. Browser host:
+   `--update-database --switch-plant-data`.
+4. The login of the PCs can then be read-only on `stats` (end of
+   `stiavelli_compat.sql`); the old tables there can be dropped.
+
+A new site (no 2.0 PC ever) uses `spiga_suivi` from the start.
 
 Production order numbers (`OF-yyyy-nnnn`) are unique in the database: a
 number taken meanwhile by another PC is replaced by the next free one, a

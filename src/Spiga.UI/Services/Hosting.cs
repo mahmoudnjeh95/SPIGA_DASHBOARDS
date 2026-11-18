@@ -165,20 +165,33 @@ public static class AppData
     public static ConnectionStringFactory ConnectionFor(AppDbOptions options)
         => new(options.Provider == AppDbProvider.SqlServer ? DatabaseProvider.SqlServer : DatabaseProvider.Sqlite, options.ConnectionString);
 
-    // At start-up, after the migrations: copies once what older versions
-    // wrote in stats (LegacyDataImporter). Never stops the start-up.
+    // At start-up, after the migrations. A new site (no 2.0 PC ever wrote in
+    // stats): the planning and the rest go straight to spiga_suivi. A site
+    // with PCs on 2.0: they stay in stats, for every PC, until IT switches
+    // them (« Mettre à jour la base SPIGA », PlantDataLocation). Never stops
+    // the start-up.
     public static async Task ImportLegacyAsync(IDbConnectionFactory production, AppDbOptions options)
     {
         try
         {
-            foreach (var line in await new LegacyDataImporter(production, ConnectionFor(options)).ImportAsync())
-                AppLogger.Log("Reprise des données de la base de production : " + line);
+            var location = new PlantDataLocation(ConnectionFor(options), production);
+            var mode = await location.ModeAsync();
+            AppLogger.Log($"Données de planification, note et réglages partagés : {Describe(mode)}.");
+            if (mode == PlantDataMode.Application)
+                await new LegacyDataImporter(production, ConnectionFor(options)).ImportAsync();
         }
         catch (Exception ex)
         {
-            AppLogger.Log("Reprise des données de la base de production impossible pour l'instant (nouvel essai au prochain démarrage) : " + ex.Message);
+            AppLogger.Log("Emplacement des données de planification non vérifié (nouvel essai au prochain démarrage) : " + ex.Message);
         }
     }
+
+    public static string Describe(PlantDataMode mode) => mode switch
+    {
+        PlantDataMode.Legacy => "encore dans la base de production (des postes sont en version 2.0)",
+        PlantDataMode.Switching => "en cours de transfert vers la base de l'application",
+        _ => "dans la base de l'application",
+    };
 }
 
 public static class SpigaServices
@@ -212,6 +225,7 @@ public static class SpigaServices
         services.AddScoped<AuthService>();
         services.AddScoped<AccessAdminService>();
         services.AddScoped<AuditTrailService>();
+        services.AddSingleton(sp => new PlantDataLocation(AppData.ConnectionFor(appDb), production));
         services.AddScoped<WasteService>();
         services.AddScoped<UserSession>();
         services.AddScoped<DashboardQueries>();

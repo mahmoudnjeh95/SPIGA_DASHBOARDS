@@ -7,11 +7,11 @@ namespace SpigaDashboards.App.Data;
 
 // Up to version 2.0 the application wrote its own tables in the production
 // database "stats" (planning of the stops, shared settings, sticky note).
-// They now live in the application database (spiga_suivi). At start-up,
-// once per table, the rows still in "stats" are copied there; LegacyImports
-// records it, so a table is never copied twice. "stats" is only read: the old
-// tables stay there, untouched, for IT to drop when every PC runs this
-// version (a PC on an older version keeps writing there, unseen by others).
+// They now live in the application database (spiga_suivi). When IT switches
+// (PlantDataLocation, once every PC runs 2.1) the rows of "stats" are copied
+// there, all in one transaction; LegacyImports records it, so a table is
+// never copied twice. "stats" is only read: the old tables stay there,
+// untouched, for IT to drop.
 public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionFactory appData)
 {
     private sealed record Table(string Name, string[] Columns, bool KeepIds, string Where = "");
@@ -48,23 +48,28 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
 
         using var source = live.CreateConnection();
         source.Open();
+        // All or nothing: a copy that fails leaves nothing marked as copied.
+        using var transaction = target.BeginTransaction();
         foreach (var table in Tables.Where(t => !done.Contains(t.Name)))
-            report.Add(await CopyAsync(source, target, table));
+            report.Add(await CopyAsync(source, target, transaction, table));
         if (!done.Contains(NotesImport))
-            report.Add(await CopyNoteAsync(source, target));
+            report.Add(await CopyNoteAsync(source, target, transaction));
+        transaction.Commit();
+        foreach (var line in report)
+            AppLogger.Log("Reprise de la base de production : " + line);
         return report;
     }
 
-    private async Task<string> CopyAsync(IDbConnection source, IDbConnection target, Table table)
+    private async Task<string> CopyAsync(IDbConnection source, IDbConnection target, IDbTransaction transaction, Table table)
     {
         var columns = await ColumnsAsync(source, live.Provider, table.Name);
         if (columns.Count == 0)
-            return await MarkAsync(target, table.Name, 0, "absente de la base de production");
-        if (await target.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {table.Name}") > 0)
+            return await MarkAsync(target, transaction, table.Name, 0, "absente de la base de production");
+        if (await target.ExecuteScalarAsync<long>($"SELECT COUNT(*) FROM {table.Name}", transaction: transaction) > 0)
         {
             // Already in use here: copying could clash with its ids.
             AppLogger.Log($"Reprise {table.Name} : la table de la base applicative contient déjà des lignes, rien n'est copié.");
-            return await MarkAsync(target, table.Name, 0, "déjà renseignée, non copiée");
+            return await MarkAsync(target, transaction, table.Name, 0, "déjà renseignée, non copiée");
         }
 
         var copied = table.Columns.Where(c => columns.Contains(c)).ToList();
@@ -74,7 +79,6 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
             Renumber(rows);
 
         var sqlServer = appData.Provider == DatabaseProvider.SqlServer;
-        using var transaction = target.BeginTransaction();
         if (sqlServer && table.KeepIds)
             await target.ExecuteAsync($"SET IDENTITY_INSERT dbo.{table.Name} ON", transaction: transaction);
         var insert = $"INSERT INTO {table.Name} ({string.Join(", ", copied)}) VALUES ({string.Join(", ", copied.Select(c => "@" + c))})";
@@ -89,8 +93,6 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
             await target.ExecuteAsync($"SET IDENTITY_INSERT dbo.{table.Name} OFF", transaction: transaction);
         await target.ExecuteAsync("INSERT INTO LegacyImports (Name, ImportedAt, CopiedRows) VALUES (@name, @now, @count)",
             new { name = table.Name, now = DateTime.Now, count = rows.Count }, transaction);
-        transaction.Commit();
-        AppLogger.Log($"Reprise {table.Name} : {rows.Count} ligne(s) copiée(s) de la base de production vers la base applicative.");
         return $"{table.Name} : {rows.Count} ligne(s)";
     }
 
@@ -114,14 +116,13 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
     }
 
     // Only the note shown: the old table kept no author.
-    private async Task<string> CopyNoteAsync(IDbConnection source, IDbConnection target)
+    private async Task<string> CopyNoteAsync(IDbConnection source, IDbConnection target, IDbTransaction transaction)
     {
         var columns = await ColumnsAsync(source, live.Provider, "Notes");
         var note = columns.Contains("Content")
             ? await source.QueryFirstOrDefaultAsync<OldNote>(
                 "SELECT Content, CreatedAt FROM Notes WHERE IsActive = 1 ORDER BY CreatedAt DESC")
             : null;
-        using var transaction = target.BeginTransaction();
         if (note is { } n && await target.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM Notes", transaction: transaction) == 0)
             await target.ExecuteAsync(
                 @"INSERT INTO Notes (Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive)
@@ -129,14 +130,13 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
                 new { content = n.Content, at = n.CreatedAt }, transaction);
         await target.ExecuteAsync("INSERT INTO LegacyImports (Name, ImportedAt, CopiedRows) VALUES (@name, @now, @count)",
             new { name = NotesImport, now = DateTime.Now, count = note == null ? 0 : 1 }, transaction);
-        transaction.Commit();
         return $"Notes : {(note == null ? 0 : 1)} ligne(s)";
     }
 
-    private static async Task<string> MarkAsync(IDbConnection target, string name, int count, string why)
+    private static async Task<string> MarkAsync(IDbConnection target, IDbTransaction transaction, string name, int count, string why)
     {
         await target.ExecuteAsync("INSERT INTO LegacyImports (Name, ImportedAt, CopiedRows) VALUES (@name, @now, @count)",
-            new { name, now = DateTime.Now, count });
+            new { name, now = DateTime.Now, count }, transaction);
         return $"{name} : {why}";
     }
 

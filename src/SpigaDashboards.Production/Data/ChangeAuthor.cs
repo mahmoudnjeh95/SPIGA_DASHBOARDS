@@ -26,6 +26,26 @@ internal static class AuditRows
     public const string NoteUpdated = "Note du tableau de bord modifiée";
     public const string MachineRenamed = "Machine renommée";
 
+    // The change was written in stats (PCs still on 2.0): the audit row goes
+    // to the application database on its own, right after. Logged if it
+    // cannot be written, never undoing the change already made.
+    public static async Task WriteApartAsync(IDbConnectionFactory appData, ChangeAuthor author,
+        string module, string action, string target, string? oldValue, string? newValue)
+    {
+        try
+        {
+            using var connection = appData.CreateConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+            await WriteAsync(connection, transaction, author, module, action, target, oldValue, newValue);
+            transaction.Commit();
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log($"Journal d'audit non écrit ({action}, {target}, {author.Login}) : {ex.Message}");
+        }
+    }
+
     public static Task WriteAsync(IDbConnection connection, IDbTransaction transaction, ChangeAuthor author,
         string module, string action, string target, string? oldValue, string? newValue)
         => connection.ExecuteAsync(

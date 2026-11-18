@@ -45,7 +45,7 @@ public partial class App : Application
         var appData = new SwitchableConnectionFactory(AppData.ConnectionFor(AppDatabase.OptionsFor(settings)));
         var repository = new ProductionRepository(activeFactory, appData, settings);
         var teamSchedule = new TeamScheduleService(settings);
-        var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(appData), settings, settingsService);
+        var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(appData, activeFactory), settings, settingsService);
         // Kiosk / TV PCs: every machine of the station, no sign-in; their
         // Paramètres ask for an account (KioskSettingsGate).
         DashboardView CreateDashboard()
@@ -69,8 +69,13 @@ public partial class App : Application
         // IT: the table changes of this version, with an administrator login.
         if (e.Args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
         {
-            DatabaseUpdateTool.Run(settings, activeFactory);
-            Shutdown();
+            // Its own windows come and go: the application ends when it is done.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Dispatcher.InvokeAsync(async () =>
+            {
+                await DatabaseUpdateTool.RunAsync(settings, activeFactory);
+                Shutdown();
+            });
             return;
         }
 

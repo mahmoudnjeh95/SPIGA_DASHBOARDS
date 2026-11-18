@@ -11,7 +11,12 @@ namespace SpigaDashboards.App.Data;
 // database "stats" is only read, for the machines' sectors.
 public class PlanningRepository
 {
+    // The application database: the audit trail, and the planning once the
+    // switch is done.
     private readonly IDbConnectionFactory _connectionFactory;
+
+    // stats while PCs still run 2.0 (PlantDataLocation), then spiga_suivi.
+    private readonly PlantDataLocation _location;
     private readonly IDbConnectionFactory _live;
 
     // appData: the application database. live: the production database
@@ -21,6 +26,7 @@ public class PlanningRepository
     public PlanningRepository(IDbConnectionFactory appData, IDbConnectionFactory live, MachineAccess? access = null)
     {
         _connectionFactory = appData;
+        _location = new PlantDataLocation(appData, live);
         _live = live;
         Access = access ?? MachineAccess.Everything();
     }
@@ -50,15 +56,19 @@ public class PlanningRepository
 
     // One change of a planning row, with its audit row (the row before and
     // after, its author and PC), in one transaction: no change without its
-    // trace. write returns the row's id.
+    // trace. write returns the row's id. While the planning is still in
+    // stats (PCs on 2.0), the audit row goes to spiga_suivi right after.
     private async Task<int> AuditedAsync(string table, int id, string label,
         Func<IDbConnection, IDbTransaction, Task<int>> write, bool delete = false)
     {
-        using var connection = _connectionFactory.CreateConnection();
+        var target = await _location.WriteTargetAsync();
+        var sameDatabase = ReferenceEquals(target, _connectionFactory);
+        using var connection = target.CreateConnection();
         connection.Open();
         using var transaction = connection.BeginTransaction();
         await DemandStoredAsync(connection, transaction, table, id);
         var before = id == 0 ? null : await DescribeAsync(connection, transaction, table, id);
+        (string Action, string? Before, string? After)? pendingAudit = null;
         var rowId = await write(connection, transaction);
         var after = delete ? null : await DescribeAsync(connection, transaction, table, rowId);
         if (before != after)
@@ -71,10 +81,16 @@ public class PlanningRepository
                 _ when after!.Contains("Statut : annulé") && !before!.Contains("Statut : annulé") => $"{label} : annulation",
                 _ => $"{label} : modification",
             };
-            await AuditRows.WriteAsync(connection, transaction, Author, AuditRows.ModuleMaintenance, action,
-                $"{label} n°{rowId}", before, after);
+            if (sameDatabase)
+                await AuditRows.WriteAsync(connection, transaction, Author, AuditRows.ModuleMaintenance, action,
+                    $"{label} n°{rowId}", before, after);
+            else
+                pendingAudit = (action, before, after);
         }
         transaction.Commit();
+        if (pendingAudit is { } audit)
+            await AuditRows.WriteApartAsync(_connectionFactory, Author, AuditRows.ModuleMaintenance, audit.Action,
+                $"{label} n°{rowId}", audit.Before, audit.After);
         return rowId;
     }
 
@@ -150,7 +166,9 @@ public class PlanningRepository
     // start-up: nothing to create here any more.
     public Task EnsureSchemaAsync() => Task.CompletedTask;
 
-    private Task<IDbConnection> OpenAsync() => Task.FromResult(_connectionFactory.CreateConnection());
+    // Reads: stats until the switch is done. The two databases are on the same
+    // kind of server (SQLite on a dev PC, SQL Server on site).
+    private async Task<IDbConnection> OpenAsync() => (await _location.ReadTargetAsync()).CreateConnection();
 
     // ---- Stop qualifications ----
 
@@ -165,7 +183,7 @@ public class PlanningRepository
     // Same, for the Arrets window (kept for its callers).
     public async Task<List<StopQualification>> FindQualificationsAsync(DateTime from, DateTime to)
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await QueryQualificationsAsync(connection, from, to)).Where(q => allowed(q.MachineId)).ToList();
     }
@@ -296,7 +314,7 @@ public class PlanningRepository
     // cancelled), for the slides.
     public async Task<List<MaintenanceEvent>> FindActiveSlotsAsync(DateTime time)
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = await OpenAsync();
         var rows = await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT Id, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status
                FROM PlanMaintenanceEvents WHERE PlannedStart >= @early AND PlannedStart <= @time AND Status = 0",
@@ -313,7 +331,7 @@ public class PlanningRepository
     // Read by the KPI queries (which carry on without it if it fails).
     public async Task<List<(string MachineId, DateTime Start, DateTime End)>> GetPlannedStopWindowsAsync(DateTime from, DateTime to)
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = await OpenAsync();
 
         var planned = StopCauses.All.Where(c => c.Family == CauseFamily.Planifie).Select(c => c.Code).ToList();
         var events = await connection.QueryAsync<MaintenanceEvent>(

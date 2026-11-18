@@ -2,6 +2,7 @@
 @inherits SpigaPage
 @inject AccessAdminService Admin
 @inject PlantData Plant
+@inject SpigaDashboards.App.Data.PlantDataLocation PlantDataPlace
 
 <RequireAccess Module="@Modules.Utilisateurs">
     <div class="head">
@@ -22,6 +23,20 @@
         <button type="button" role="tab" class="tab @(_tab == 2 ? "on" : "")" aria-selected="@(_tab == 2)" @onclick="() => _tab = 2">Règles de sécurité</button>
     </div>
 
+    @if (_plantMode is { } mode && mode != SpigaDashboards.App.Data.PlantDataMode.Application)
+    {
+        <div class="notice warn" role="status">
+            <div>
+                <b>Mise à jour des postes en cours : des postes sont encore en version 2.0.</b><br />
+                <span style="font-weight:400">
+                    Ces postes ne connaissent pas les plateformes : un compte limité par plateforme y voit toutes les machines de son équipe,
+                    et un compte modifié depuis l'un d'eux perd ses plateformes. Gérez les comptes depuis un poste à jour, et ne donnez
+                    de plateformes qu'aux comptes qui n'utilisent que des postes à jour. Quand tous les postes sont en 2.1, l'informatique
+                    termine la transition (« Mettre à jour la base SPIGA », menu Démarrer).
+                </span>
+            </div>
+        </div>
+    }
     <Flash Error="@Error" Info="@Info" />
     @if (_secret != null)
     {
@@ -550,6 +565,7 @@
     private HashSet<int> _manageable = new();
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
     private IReadOnlyList<Platform> _platforms = Array.Empty<Platform>();
+    private SpigaDashboards.App.Data.PlantDataMode? _plantMode;
 
     private Platform? _platform;
     private bool _pfEditing;
@@ -599,6 +615,14 @@
         catch (Exception)
         {
             _machines = Array.Empty<PlantMachine>();
+        }
+        try
+        {
+            _plantMode = await PlantDataPlace.ModeAsync();
+        }
+        catch (Exception)
+        {
+            _plantMode = null;
         }
         await ReloadAsync();
     }

@@ -6,9 +6,10 @@
    touching the Stiavelli data:
      - Reference tables the Stiavelli DB doesn't store, read by the
        dashboard's queries: Machines, Shifts, Employees, Products
-       (+ Notes, used by versions up to 2.0 only: from 2.1 the application
-       writes nothing here -- note, machine names, planning and shared
-       settings are in the application database, see spiga_suivi.sql)
+       (+ Notes, used while PCs still run 2.0: once IT has moved the data
+       after the last PC was updated, the application writes nothing here --
+       note, machine names, planning and shared settings are then in the
+       application database, see spiga_suivi.sql and the README)
        (+ MachineStatusLog, kept for older installs / the optional collector)
      - An index on dbo.produzione for the dashboard's time-range reads
      - An index on dbo.lotto (if present) for the weight reads
@@ -155,8 +156,8 @@ CREATE TABLE dbo.MachineStatusLog (
 GO
 
 /* ---------- Notes (versions up to 2.0 only) -----------------------------
-   From 2.1 the note is in the application database; this table is kept for
-   PCs not updated yet, and copied once by the first 2.1 PC to start. */
+   Used by every PC while some still run 2.0; copied to the application
+   database when IT moves the data there (README, PC-by-PC update). */
 IF OBJECT_ID('dbo.Notes','U') IS NULL
 CREATE TABLE dbo.Notes (
     NoteId              INT IDENTITY(1,1) PRIMARY KEY,
@@ -212,10 +213,11 @@ GO
 
 /* ---------- Optional: dedicated SQL login for the dashboard ----------------
    Uncomment and run once (as an admin) to create the login entered in
-   Parametres > Login SQL. From version 2.1 it only reads this database
-   (once every PC runs 2.1, the two GRANT lines can be removed; the old
-   Plan* / AppSharedSettings / Notes tables, already copied to spiga_suivi,
-   can then be dropped).
+   Parametres > Login SQL. While PCs still run 2.0 it writes the note, the
+   machine names, the planning and the shared settings here. Once every PC
+   runs 2.1 and IT has moved those to the application database, it only
+   reads this database: the two GRANT lines can then be removed, and the old
+   Plan* / AppSharedSettings / Notes tables, copied to spiga_suivi, dropped.
 
 USE master;
 CREATE LOGIN spiga_dashboard WITH PASSWORD = 'ChangeMe!2026', CHECK_POLICY = OFF;
