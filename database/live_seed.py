@@ -12,8 +12,8 @@ the last snapshot (the PC was off, the script was not running), up to
 --max-gap hours; beyond that, regenerate the history.
 
 Run from the repo root (Ctrl+C stops it):
-    python database/live_seed.py [--cadence 60] [--seed N] [--while-pid PID]
---while-pid: stop when that process exits (run-dev.ps1 passes the app's).
+    python database/live_seed.py [--cadence 60] [--seed N] [--while-pid PID [PID ...]]
+--while-pid: stop when all these processes have exited (run-dev.ps1 passes the app's).
 """
 import argparse
 import importlib.util
@@ -162,9 +162,11 @@ def write(conn, rows, lots):
             time.sleep(0.5)
 
 
-def alive(pid):
-    if pid is None:
-        return True
+def alive(pids):
+    return pids is None or any(alive_one(p) for p in pids)
+
+
+def alive_one(pid):
     if os.name == "nt":
         import ctypes
         h = ctypes.windll.kernel32.OpenProcess(0x1000 | 0x00100000, False, pid)  # QUERY_LIMITED | SYNCHRONIZE
@@ -186,7 +188,7 @@ def main():
     ap.add_argument("--cadence", type=int, default=60, metavar="SEC", help="seconds between snapshots (default 60)")
     ap.add_argument("--max-gap", type=float, default=48, metavar="H", help="longest gap filled at start-up (hours)")
     ap.add_argument("--seed", type=int, default=None, help="random seed (default: different each run)")
-    ap.add_argument("--while-pid", type=int, default=None, metavar="PID", help="stop when this process exits")
+    ap.add_argument("--while-pid", type=int, nargs="+", default=None, metavar="PID", help="stop when these processes have all exited")
     args = ap.parse_args()
     if not os.path.exists(DB_PATH):
         raise SystemExit(f"{DB_PATH} not found: run generate_seed_data.py --synthetic 30 first")

@@ -6,12 +6,14 @@
 #   powershell -File tools\run-dev.ps1 -NoBuild
 #   powershell -File tools\run-dev.ps1 -Reseed      # new 30-day history first
 #   powershell -File tools\run-dev.ps1 -Kiosk       # classic dashboard only
+#   powershell -File tools\run-dev.ps1 -Both        # sign-in shell AND kiosk dashboard, side by side
 #   powershell -File tools\run-dev.ps1 -Web         # browser host instead (http://localhost:5000)
 param(
     [int]$Cadence = 60,
     [switch]$NoBuild,
     [switch]$Reseed,
     [switch]$Kiosk,
+    [switch]$Both,
     [switch]$Web
 )
 $ErrorActionPreference = 'Stop'
@@ -44,10 +46,14 @@ if ($Web) {
 } else {
     if (-not $NoBuild) { dotnet build SpigaDashboards.sln -c Debug | Select-String 'error|Build succeeded' | Out-Host }
     $exe = Join-Path $root 'src\SpigaDashboards.App\bin\Debug\net8.0-windows\SpigaDashboards.App.exe'
-    $appArgs = @(); if ($Kiosk) { $appArgs += '--kiosk' }
-    $app = if ($appArgs) { Start-Process $exe -ArgumentList $appArgs -WorkingDirectory (Split-Path $exe) -PassThru }
-           else { Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru }
+    $apps = @()
+    # Without --kiosk the app still opens the kiosk on a PC installed as a
+    # screen (registry KioskMode=1): set it to 0 on a dev PC to get the shell.
+    if (-not $Kiosk) { $apps += Start-Process $exe -WorkingDirectory (Split-Path $exe) -PassThru }
+    if ($Kiosk -or $Both) { $apps += Start-Process $exe -ArgumentList '--kiosk' -WorkingDirectory (Split-Path $exe) -PassThru }
 }
+if ($Web) { $apps = @($app) }
 
-Write-Host "App PID $($app.Id): live data every $Cadence s until it closes (Ctrl+C stops the data only)."
-& $python database\live_seed.py --cadence $Cadence --while-pid $app.Id
+$ids = $apps | ForEach-Object { $_.Id }
+Write-Host "App PID(s) $($ids -join ', '): live data every $Cadence s until they close (Ctrl+C stops the data only)."
+& $python database\live_seed.py --cadence $Cadence --while-pid @ids
