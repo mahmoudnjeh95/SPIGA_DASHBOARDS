@@ -23,21 +23,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header: title, filters, declare. The filters wrap onto a second
-             line when the screen is narrower (beside the menu of SPIGA Suivi
-             Production): one line needs about 1100 px. -->
+        <!-- Filters, declare. The title and the explanation are in the header
+             of the page (PlanningSectionView); the filters wrap onto a second
+             line when the screen is narrower. -->
         <Grid Grid.Row="0" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0" Width="250">
-                <TextBlock Text="PANNES &amp; ARRÊTS" Style="{StaticResource Eyebrow}" Foreground="#E66767"/>
-                <TextBlock Text="Qualifier les arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
-                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
-                           Text="Les arrêts sont détectés par le compteur de chaque ligne : la durée est déjà exacte, il ne reste qu'à donner la cause."/>
-            </StackPanel>
-            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                 <Border Style="{StaticResource SegTrack}" Margin="0,4,0,4">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton GroupName="PannesPeriod" Content="Aujourd'hui" Style="{StaticResource Seg}"

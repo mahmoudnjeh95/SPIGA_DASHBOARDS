@@ -1,4 +1,3 @@
-using System.Windows;
 using System.Windows.Controls;
 using SpigaDashboards.App.ViewModels;
 
@@ -20,13 +19,5 @@ public partial class StopsView : UserControl
             _initialized = true;
             await viewModel.InitializeAsync();
         };
-    }
-
-    // "Fermer": the host closes its window, or the main window goes back.
-    public event Action? CloseRequested;
-
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        CloseRequested?.Invoke();
     }
 }

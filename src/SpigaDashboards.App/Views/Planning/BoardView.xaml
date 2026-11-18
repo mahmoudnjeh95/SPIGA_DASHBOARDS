@@ -168,19 +168,11 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header. The buttons wrap onto a second line on a narrower screen
-             (beside the menu of SPIGA Suivi Production). -->
+        <!-- Toolbar. The title and the period shown are in the header of the
+             page (PlanningSectionView); the buttons wrap onto a second line on
+             a narrower screen. -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <StackPanel VerticalAlignment="Bottom" Margin="0,0,16,0" Width="230">
-                <TextBlock Text="PLANIFICATION" Style="{StaticResource Eyebrow}"/>
-                <TextBlock Text="{Binding RangeLabel}" Style="{StaticResource H1}" FontSize="22" Margin="0,2,0,0" TextWrapping="Wrap"
-                           ToolTip="{Binding RangeLabel}"/>
-            </StackPanel>
-            <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                 <!-- Lines shown on the calendar (this PC only, BoardViewModel.LineGroups). -->
                 <ToggleButton x:Name="LinesToggle" Style="{StaticResource LinesToggle}" Margin="0,4,12,4"
                               IsHitTestVisible="{Binding IsOpen, ElementName=LinesPopup, Converter={StaticResource InverseBool}}">

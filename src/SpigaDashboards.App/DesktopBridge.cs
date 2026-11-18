@@ -169,12 +169,10 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
             {
                 case NativePage.Stops:
                     var stops = new StopsView(Dashboard().CreateStopsViewModel(AccessFor(_access), _access.Team, _access.CanExport));
-                    stops.CloseRequested += () => Close(page);
                     view = stops;
                     break;
                 case NativePage.StopQualification or NativePage.StopStatistics or NativePage.StopPlanning:
                     var section = new PlanningSectionView(Planning(_access), Section(page));
-                    section.CloseRequested += () => Close(page);
                     view = section;
                     break;
                 default:

@@ -22,19 +22,11 @@
     <Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="0,0,6,0">
-            <!-- Header. The filters wrap onto a second line on a narrower
-                 screen (beside the menu of SPIGA Suivi Production). -->
+            <!-- Filters. The title is in the header of the page
+                 (PlanningSectionView); they wrap onto a second line on a
+                 narrower screen. -->
             <Grid Margin="0,0,0,14">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Bottom" Margin="0,0,24,0" Width="290">
-                    <TextBlock Text="STATISTIQUES" Style="{StaticResource Eyebrow}"/>
-                    <TextBlock Text="Statistiques des arrêts" Style="{StaticResource H1}" Margin="0,2,0,0"/>
-                    <TextBlock Text="Calculé sur les arrêts qualifiés (page Qualification des arrêts)." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
-                </StackPanel>
-                <WrapPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                     <Border Style="{StaticResource SegTrack}" Margin="0,4,0,4">
                         <StackPanel Orientation="Horizontal">
                             <RadioButton GroupName="StatsPeriod" Content="Aujourd'hui" Style="{StaticResource Seg}"

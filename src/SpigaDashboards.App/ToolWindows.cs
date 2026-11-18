@@ -13,9 +13,7 @@ public sealed class StopsWindow : Window
     public StopsWindow(StopsViewModel viewModel)
     {
         ToolWindow.Setup(this, "Arrêts de production", 1200, 800);
-        var view = new StopsView(viewModel);
-        view.CloseRequested += Close;
-        Content = view;
+        Content = new StopsView(viewModel);
         WindowSizing.FitToWorkArea(this);
     }
 }

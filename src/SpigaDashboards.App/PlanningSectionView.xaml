@@ -17,11 +17,15 @@
 
         <Border Grid.Row="0" Background="{DynamicResource TileBackgroundBrush}" BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="0,0,0,1" Padding="22,12">
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Fermer" Style="{StaticResource BarButton}" Click="CloseButton_Click"/>
+            <!-- The only header of the page: its name (as in the menu) and what
+                 it shows (PlanningSectionView.xaml.cs). No "Fermer": the menu
+                 goes to another page. -->
+            <StackPanel>
                 <TextBlock x:Name="TitleText" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"
                            Foreground="{DynamicResource PrimaryTextBrush}"/>
-            </DockPanel>
+                <TextBlock x:Name="SubtitleText" FontSize="13" Margin="0,2,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+            </StackPanel>
         </Border>
 
         <!-- The name lets UI Automation (screen readers, test drivers) reach the page's content. -->
