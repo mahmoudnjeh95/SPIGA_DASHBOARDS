@@ -14,9 +14,31 @@ public class PlanningRepository
     private readonly IDbConnectionFactory _connectionFactory;
     private bool _schemaReady;
 
-    public PlanningRepository(IDbConnectionFactory connectionFactory)
+    // access: the machines the signed-in account may see and plan (SPIGA
+    // Suivi Production). Not given = every machine (TRS reads, kiosk).
+    public PlanningRepository(IDbConnectionFactory connectionFactory, MachineAccess? access = null)
     {
         _connectionFactory = connectionFactory;
+        Access = access ?? MachineAccess.Everything();
+    }
+
+    // Every read below leaves out the machines outside it; every write on one
+    // of them (or on a row that belongs to one) is refused.
+    public MachineAccess Access { get; }
+
+    private Task<Func<string, bool>> AllowedAsync() => Access.FilterAsync(_connectionFactory);
+
+    private Task DemandAsync(string machineId) => Access.DemandAsync(_connectionFactory, machineId);
+
+    // An update: the row as stored must be in scope too (no moving another
+    // machine's row into one's own).
+    private async Task DemandStoredAsync(IDbConnection connection, string table, int id)
+    {
+        if (!Access.IsRestricted)
+            return;
+        var stored = await connection.ExecuteScalarAsync<string?>($"SELECT MachineId FROM {table} WHERE Id = @id", new { id });
+        if (stored != null)
+            await DemandAsync(stored);
     }
 
     private bool IsSqlServer => _connectionFactory.Provider == DatabaseProvider.SqlServer;
@@ -151,7 +173,8 @@ public class PlanningRepository
     public async Task<List<StopQualification>> GetQualificationsAsync(DateTime from, DateTime to)
     {
         using var connection = await OpenAsync();
-        return await QueryQualificationsAsync(connection, from, to);
+        var allowed = await AllowedAsync();
+        return (await QueryQualificationsAsync(connection, from, to)).Where(q => allowed(q.MachineId)).ToList();
     }
 
     // Same, for the Arrets window: read only, never creates the tables (none
@@ -162,7 +185,10 @@ public class PlanningRepository
         var exists = await connection.ExecuteScalarAsync<int>(IsSqlServer
             ? "SELECT CASE WHEN OBJECT_ID('dbo.PlanStopQualifications') IS NULL THEN 0 ELSE 1 END"
             : "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'PlanStopQualifications'");
-        return exists == 0 ? new() : await QueryQualificationsAsync(connection, from, to);
+        if (exists == 0)
+            return new();
+        var allowed = await AllowedAsync();
+        return (await QueryQualificationsAsync(connection, from, to)).Where(q => allowed(q.MachineId)).ToList();
     }
 
     private async Task<List<StopQualification>> QueryQualificationsAsync(IDbConnection connection, DateTime from, DateTime to)
@@ -182,7 +208,9 @@ public class PlanningRepository
 
     public async Task SaveQualificationAsync(StopQualification q)
     {
+        await DemandAsync(q.MachineId);
         using var connection = await OpenAsync();
+        await DemandStoredAsync(connection, "PlanStopQualifications", q.Id);
         if (q.Id == 0)
         {
             q.CreatedAt = DateTime.Now;
@@ -204,6 +232,7 @@ public class PlanningRepository
     public async Task DeleteQualificationAsync(int id)
     {
         using var connection = await OpenAsync();
+        await DemandStoredAsync(connection, "PlanStopQualifications", id);
         await connection.ExecuteAsync("DELETE FROM PlanStopQualifications WHERE Id = @id", new { id });
     }
 
@@ -211,9 +240,10 @@ public class PlanningRepository
     {
         // Column names come from code only (Component / Technician).
         using var connection = await OpenAsync();
-        var rows = await connection.QueryAsync<string>(
-            $"SELECT DISTINCT {column} FROM PlanStopQualifications WHERE {column} IS NOT NULL");
-        return rows.Where(r => !string.IsNullOrWhiteSpace(r)).ToList();
+        var allowed = await AllowedAsync();
+        var rows = await connection.QueryAsync<(string MachineId, string Value)>(
+            $"SELECT DISTINCT MachineId, {column} AS Value FROM PlanStopQualifications WHERE {column} IS NOT NULL");
+        return rows.Where(r => allowed(r.MachineId) && !string.IsNullOrWhiteSpace(r.Value)).Select(r => r.Value).Distinct().ToList();
     }
 
     // ---- Maintenance plans and events ----
@@ -221,14 +251,17 @@ public class PlanningRepository
     public async Task<List<MaintenancePlan>> GetPlansAsync()
     {
         using var connection = await OpenAsync();
+        var allowed = await AllowedAsync();
         return (await connection.QueryAsync<MaintenancePlan>(
             @"SELECT Id, MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive
-              FROM PlanMaintenancePlans WHERE IsActive = 1")).ToList();
+              FROM PlanMaintenancePlans WHERE IsActive = 1")).Where(p => allowed(p.MachineId)).ToList();
     }
 
     public async Task SavePlanAsync(MaintenancePlan p)
     {
+        await DemandAsync(p.MachineId);
         using var connection = await OpenAsync();
+        await DemandStoredAsync(connection, "PlanMaintenancePlans", p.Id);
         if (p.Id == 0)
             p.Id = await connection.ExecuteScalarAsync<int>(
                 @"INSERT INTO PlanMaintenancePlans (MachineId, Task, Kind, IntervalDays, IntervalBags, DurationMinutes, LastDoneAt, IsActive)
@@ -251,21 +284,25 @@ public class PlanningRepository
             @"SELECT Id, PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
               FROM PlanMaintenanceEvents WHERE PlannedStart >= @from AND PlannedStart < @to AND Status <> 2",
             new { from = from.AddDays(-EventLookbackDays), to });
-        return rows.Where(e => e.PlannedStart >= from || e.ActualEnd > from).ToList();
+        var allowed = await AllowedAsync();
+        return rows.Where(e => allowed(e.MachineId) && (e.PlannedStart >= from || e.ActualEnd > from)).ToList();
     }
 
     // Planned slots of a plan that aren't done yet (to avoid planning it twice).
     public async Task<List<MaintenanceEvent>> GetOpenEventsAsync()
     {
         using var connection = await OpenAsync();
+        var allowed = await AllowedAsync();
         return (await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT Id, PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
-              FROM PlanMaintenanceEvents WHERE Status = 0")).ToList();
+              FROM PlanMaintenanceEvents WHERE Status = 0")).Where(e => allowed(e.MachineId)).ToList();
     }
 
     public async Task SaveEventAsync(MaintenanceEvent e)
     {
+        await DemandAsync(e.MachineId);
         using var connection = await OpenAsync();
+        await DemandStoredAsync(connection, "PlanMaintenanceEvents", e.Id);
         if (e.Id == 0)
             e.Id = await connection.ExecuteScalarAsync<int>(
                 @"INSERT INTO PlanMaintenanceEvents (PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment)
@@ -293,7 +330,8 @@ public class PlanningRepository
             $@"SELECT Id, {kind}, MachineId, Task, PlannedStart, DurationMinutes, Status
                FROM PlanMaintenanceEvents WHERE PlannedStart >= @early AND PlannedStart <= @time AND Status = 0",
             new { early = time.AddDays(-EventLookbackDays), time });
-        return rows.Where(e => e.IsActiveAt(time)).ToList();
+        var allowed = await AllowedAsync();
+        return rows.Where(e => allowed(e.MachineId) && e.IsActiveAt(time)).ToList();
     }
 
     // ---- Planned stops, for the TRS ----
@@ -327,9 +365,10 @@ public class PlanningRepository
               WHERE StopStart >= @early AND StopStart < @to AND CauseCode IN @planned",
             new { early = from.AddDays(-15), to, planned });
 
+        var allowed = await AllowedAsync();
         return events.Select(e => (e.MachineId, e.PlannedStart, e.ActualEnd))
             .Concat(stops.Select(q => (q.MachineId, q.StopStart, q.ExpectedEnd is { } e && e > q.StopEnd ? e : q.StopEnd)))
-            .Where(w => w.Item3 > from && w.Item2 < to && w.Item3 > w.Item2)
+            .Where(w => allowed(w.MachineId) && w.Item3 > from && w.Item2 < to && w.Item3 > w.Item2)
             .ToList();
     }
 
@@ -338,12 +377,15 @@ public class PlanningRepository
     public async Task<List<ProductionOrder>> GetOrdersAsync(DateTime from, DateTime to)
     {
         using var connection = await OpenAsync();
+        var allowed = await AllowedAsync();
         return (await connection.QueryAsync<ProductionOrder>(
             @"SELECT Id, OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment
               FROM PlanProductionOrders WHERE PlannedStart < @to AND PlannedEnd > @from AND Status <> 2",
-            new { from, to })).OrderBy(o => o.PlannedStart).ToList();
+            new { from, to })).Where(o => allowed(o.MachineId)).OrderBy(o => o.PlannedStart).ToList();
     }
 
+    // Every order of the plant, whatever the scope: the order numbers
+    // (OF-yyyy-nnnn) follow it and must stay unique.
     public async Task<int> CountOrdersAsync()
     {
         using var connection = await OpenAsync();
@@ -352,7 +394,9 @@ public class PlanningRepository
 
     public async Task SaveOrderAsync(ProductionOrder o)
     {
+        await DemandAsync(o.MachineId);
         using var connection = await OpenAsync();
+        await DemandStoredAsync(connection, "PlanProductionOrders", o.Id);
         if (o.Id == 0)
             o.Id = await connection.ExecuteScalarAsync<int>(
                 @"INSERT INTO PlanProductionOrders (OrderNo, MachineId, Product, TargetWeightGrams, QuantityBags, PlannedStart, PlannedEnd, Status, Comment)

@@ -159,6 +159,7 @@
         <DockPanel Grid.Row="4" Margin="0,14,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="Imprimer la fiche des arrêts (PDF)" Style="{StaticResource SecondaryButton}" Command="{Binding PrintCommand}"
+                        Visibility="{Binding CanExport, Converter={StaticResource BoolToVisibility}}"
                         ToolTip="Une page par poste et par équipe, avec les colonnes « Cause » et « Action » à remplir à la main"/>
             </StackPanel>
             <TextBlock Text="{Binding SummaryText}" Foreground="{DynamicResource PrimaryTextBrush}" FontWeight="SemiBold" VerticalAlignment="Center"/>

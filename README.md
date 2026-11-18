@@ -78,6 +78,22 @@ Utilisateurs et rôles, without a developer.
   les rôles » defines roles and gives any role; only an administrator gives
   Administrateur. No change can leave the application without an active
   administrator.
+* **Every screen follows the scope**, the Windows pages included
+  (Tableau de bord, Historique, Arrêts, Qualification / Statistiques /
+  Planification des arrêts): each page gets the scope of the right it needs,
+  and its production and planning repositories (`MachineAccess`) never list,
+  read or write a machine outside it — a write on another machine, or moving
+  another machine's row, is refused. When the rights change (another
+  account, a role or a platform edited) the page reloads with the new ones;
+  on sign-out the dashboard empties before the next account.
+* **Buttons need a right covering the page:** Excel / PDF exports
+  (« Exporter » of the module), « Valider les interventions » on the
+  planning board, each held over at least what the page shows.
+* **Station-wide outputs need the whole plant:** Paramètres du poste and the
+  hall TV screen act on every machine, so only accounts whose right covers
+  every machine get them; the Journal d'audit (accounts, rights, entries of
+  every line) needs its right over the whole plant and every team. The kiosk
+  mode (`--kiosk`, TV PCs, no sign-in) shows the station's machines as before.
 * Every service checks the rights itself; the screens only hide what the
   user cannot use.
 * Passwords: PBKDF2-SHA256; temporary passwords must be changed at first

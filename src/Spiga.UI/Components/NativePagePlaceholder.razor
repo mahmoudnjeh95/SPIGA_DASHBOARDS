@@ -11,6 +11,14 @@
         <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(NativePages.Permission(Page)) ». Demandez-le à un administrateur.</p>
     </div>
 }
+else if (!NativePages.IsAllowed(Session.Actor, Page))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Les paramètres du poste s'appliquent à toutes les machines : ils sont réservés aux comptes dont le droit
+           « @PermissionCatalog.Label(Perm.ParametresPoste) » couvre toute l'usine. Votre périmètre est limité (équipe ou plateformes).</p>
+    </div>
+}
 else if (!Desktop.IsAvailable)
 {
     <div class="head"><div><span class="pre">@Group</span><h1>@Title</h1></div></div>

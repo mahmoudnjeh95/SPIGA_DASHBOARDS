@@ -203,14 +203,33 @@ public partial class HistoryViewModel : ObservableObject
         StatusMessage = $"{rowList.Count} ligne(s) trouvée(s) (une par machine, heure et production).";
     }
 
-    [RelayCommand]
+    // « Exporter » (SPIGA Suivi Production): without it the export buttons
+    // are hidden and the commands refuse. Always true in kiosk mode.
+    private bool _canExport = true;
+
+    public bool CanExport
+    {
+        get => _canExport;
+        set
+        {
+            if (SetProperty(ref _canExport, value))
+            {
+                ExportExcelCommand.NotifyCanExecuteChanged();
+                ExportPdfCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
     private void ExportExcel() => Export("Classeur Excel (*.xlsx)|*.xlsx", "xlsx", ExportService.ExportToExcel);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanExport))]
     private void ExportPdf() => Export("Document PDF (*.pdf)|*.pdf", "pdf", ExportService.ExportToPdf);
 
     private void Export(string dialogFilter, string extension, Action<ProductionReport, string> export)
     {
+        if (!CanExport)
+            return;
         if (_report == null || Results.Count == 0)
         {
             StatusMessage = "Aucun résultat à exporter : lancez d'abord une recherche.";

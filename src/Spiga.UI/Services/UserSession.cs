@@ -108,7 +108,7 @@ public sealed class UserSession : IDisposable
         }
         await _store.SaveAsync(fresh.User.Id, _lastActivity);
         var changed = fresh.RoleNames != Actor.RoleNames || !fresh.Permissions.SameAs(Actor.Permissions)
-                      || fresh.ScopeSummary != Actor.ScopeSummary;
+                      || fresh.ScopeSummary != Actor.ScopeSummary || fresh.AccessKey != Actor.AccessKey;
         Actor = fresh;
         if (changed)
             Notify();

@@ -81,6 +81,8 @@ public partial class DashboardView : UserControl
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!_settingsAllowed)
+            return;
         if (PageRequested != null)
         {
             PageRequested("parametres");
@@ -94,8 +96,11 @@ public partial class DashboardView : UserControl
     {
         // Edit the shared settings as the other PCs last saved them.
         await _sharedSettings.PullAsync();
+        // Station-wide: every machine (only accounts covering the whole plant
+        // get here, see AllowSettings), never the dashboard's limited view, or
+        // saving would lose the settings of the machines it does not list.
         return new SettingsViewModel(
-            _settingsService, _settings, _activeFactory, _repository, _sharedSettings,
+            _settingsService, _settings, _activeFactory, new ProductionRepository(_activeFactory, _settings), _sharedSettings,
             onApplied: () =>
             {
                 _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
@@ -103,18 +108,30 @@ public partial class DashboardView : UserControl
             });
     }
 
-    public StopsViewModel CreateStopsViewModel()
+    // access: the machines the page may show (SPIGA Suivi Production: the
+    // scope of the account's right for that page).
+    public StopsViewModel CreateStopsViewModel(MachineAccess access, string? team, bool canExport)
     {
-        var stops = new StopsViewModel(_repository, new TeamScheduleService(_settings), _settings, _viewModel.CurrentRange);
-        stops.LockTeam(_viewModel.LockedTeam);
+        var stops = new StopsViewModel(new ProductionRepository(_activeFactory, _settings, access), new TeamScheduleService(_settings),
+            _settings, _viewModel.CurrentRange);
+        stops.LockTeam(team);
+        stops.CanExport = canExport;
         return stops;
     }
 
-    public PlanningViewModel CreatePlanningViewModel()
-        => new(new PlanningContext(_repository, new PlanningRepository(_activeFactory), _settings, _settingsService,
-            new TeamScheduleService(_settings)));
+    // canValidate: « Valider les interventions » (maintenance done).
+    public PlanningViewModel CreatePlanningViewModel(MachineAccess access, bool canValidate)
+        => new(new PlanningContext(new ProductionRepository(_activeFactory, _settings, access), new PlanningRepository(_activeFactory, access),
+            _settings, _settingsService, new TeamScheduleService(_settings)) { CanValidate = canValidate });
 
-    private void TvScreenButton_Click(object sender, RoutedEventArgs e) => OpenTvWindow(activate: true);
+    // The machines this dashboard shows (and its Historique, Arrêts).
+    public MachineAccess Access => _repository.Access;
+
+    private void TvScreenButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_tvAllowed)
+            OpenTvWindow(activate: true);
+    }
 
     private void OpenTvWindow(bool activate)
     {
@@ -127,7 +144,10 @@ public partial class DashboardView : UserControl
         }
 
         // Its own deck, not this window's: filters set here stay off the TV.
-        var tvViewModel = new MainViewModel(_repository, _settings, new TeamScheduleService(_settings), _sharedSettings);
+        // The hall screen shows the station's machines, whoever opened it
+        // (only accounts covering the whole plant may, see AllowTv).
+        var tvViewModel = new MainViewModel(new ProductionRepository(_activeFactory, _settings), _settings,
+            new TeamScheduleService(_settings), _sharedSettings);
         _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService) { ShowActivated = activate };
         _tvWindow.Closed += (_, _) => _tvWindow = null;
         _tvWindow.Show();
@@ -138,6 +158,7 @@ public partial class DashboardView : UserControl
         var historyViewModel = new HistoryViewModel(_repository, new TeamScheduleService(_settings), _settings,
             _viewModel.CurrentFilter, _viewModel.CurrentRange);
         historyViewModel.LockTeam(_viewModel.LockedTeam);
+        historyViewModel.CanExport = _exportAllowed;
         var window = new HistoryWindow(historyViewModel) { Owner = OwnerWindow };
         window.ShowDialog();
     }
@@ -149,7 +170,7 @@ public partial class DashboardView : UserControl
             PageRequested("arrets");
             return;
         }
-        new StopsWindow(CreateStopsViewModel()) { Owner = OwnerWindow }.ShowDialog();
+        new StopsWindow(CreateStopsViewModel(_repository.Access, _viewModel.LockedTeam, _exportAllowed)) { Owner = OwnerWindow }.ShowDialog();
     }
 
     private void AboutButton_Click(object sender, RoutedEventArgs e)
@@ -189,9 +210,28 @@ public partial class DashboardView : UserControl
     {
         _settingsAllowed = allowed;
         SettingsButton.Visibility = allowed && !_embedded ? Visibility.Visible : Visibility.Collapsed;
+        ReconnectSettingsButton.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public void OpenTvScreen() => OpenTvWindow(activate: true);
+    private bool _tvAllowed = true;
+
+    // The hall screen: « Lancer l'écran TV » over the whole plant.
+    public void AllowTv(bool allowed)
+    {
+        _tvAllowed = allowed;
+        TvScreenButton.Visibility = allowed ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private bool _exportAllowed = true;
+
+    // Excel / PDF of Historique and Arrêts: « Exporter » covering what is shown.
+    public void AllowExport(bool allowed) => _exportAllowed = allowed;
+
+    public void OpenTvScreen()
+    {
+        if (_tvAllowed)
+            OpenTvWindow(activate: true);
+    }
 
     // Set in the main window: the Arrêts and Paramètres buttons open those
     // pages beside the menu ("arrets", "parametres") instead of dialogs.

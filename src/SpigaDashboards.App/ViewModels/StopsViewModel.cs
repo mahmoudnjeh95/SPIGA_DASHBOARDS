@@ -212,9 +212,25 @@ public partial class StopsViewModel : ObservableObject
             .ToList();
     }
 
-    [RelayCommand]
+    // « Exporter » (SPIGA Suivi Production): without it the stop sheet
+    // (a PDF file) is not offered. Always true in kiosk mode.
+    private bool _canExport = true;
+
+    public bool CanExport
+    {
+        get => _canExport;
+        set
+        {
+            if (SetProperty(ref _canExport, value))
+                PrintCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
     private void Print()
     {
+        if (!CanExport)
+            return;
         if (Results.Count == 0)
         {
             StatusMessage = "Aucun arrêt à imprimer : lancez d'abord une recherche.";

@@ -86,12 +86,22 @@ public class ProductionRepository
     // The SQLite dev DB has none: weights then come from media_totale.
     private bool? _hasLotTable;
 
-    public ProductionRepository(IDbConnectionFactory connectionFactory, AppSettings settings)
+    // access: the machines the signed-in account may see (SPIGA Suivi
+    // Production); every machine when not given (kiosk, TV screen, services
+    // that filter themselves).
+    public ProductionRepository(IDbConnectionFactory connectionFactory, AppSettings settings, MachineAccess? access = null)
     {
         _connectionFactory = connectionFactory;
         _settings = settings;
+        // Planned stops count in every machine's TRS: read unrestricted, then
+        // filtered on the way out.
         _planning = new PlanningRepository(connectionFactory);
+        Access = access ?? MachineAccess.Everything();
     }
+
+    // Applied by every method below: machines outside it are never listed,
+    // read or written.
+    public MachineAccess Access { get; }
 
     // Drops pooled connections, which are all dead after a network/server drop
     // and would otherwise make the first queries after a reconnect fail again.
@@ -105,9 +115,10 @@ public class ProductionRepository
     public async Task<List<Machine>> GetMachinesAsync()
     {
         using var connection = _connectionFactory.CreateConnection();
-        var machines = await connection.QueryAsync<Machine>(
-            "SELECT MachineId, MachineName, MachineType, Sector, IPAddress, IsActive FROM Machines ORDER BY MachineId");
-        return machines.ToList();
+        var machines = (await connection.QueryAsync<Machine>(
+            "SELECT MachineId, MachineName, MachineType, Sector, IPAddress, IsActive FROM Machines ORDER BY MachineId")).ToList();
+        Access.Remember(machines);
+        return machines.Where(m => Access.Allows(m.MachineId, m.Sector)).ToList();
     }
 
     private sealed class SnapshotRow
@@ -140,6 +151,8 @@ public class ProductionRepository
     // production (its latest valid snapshot).
     public async Task<MachineStatusSnapshot?> GetLatestStatusAsync(string machineId)
     {
+        if (!(await Access.FilterAsync(_connectionFactory))(machineId))
+            return null;
         var d = Dialect.For(_connectionFactory.Provider);
         using var connection = _connectionFactory.CreateConnection();
         var rows = (await connection.QueryAsync<SnapshotRow>(
@@ -253,20 +266,26 @@ public class ProductionRepository
     // Hourly buckets for one machine (dashboard slides, on/off chart, team
     // history). includeWeights = false skips the weight reads (lotto) for the
     // charts that don't show weights.
-    public Task<List<ProductionBucket>> GetLotsAsync(string machineId, DateTime from, DateTime to, bool includeWeights = true)
-        => QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights);
+    public async Task<List<ProductionBucket>> GetLotsAsync(string machineId, DateTime from, DateTime to, bool includeWeights = true)
+    {
+        if (!(await Access.FilterAsync(_connectionFactory))(machineId))
+            return new List<ProductionBucket>();
+        return await QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights);
+    }
 
     // Buckets for a set of machines (synthesis slides, history, exports). Day
     // buckets are lighter for long ranges but carry no poste (ShiftId 0):
     // callers filtering by poste / team need hour buckets.
-    public Task<List<ProductionBucket>> GetLotsForMachinesAsync(
+    public async Task<List<ProductionBucket>> GetLotsForMachinesAsync(
         IReadOnlyCollection<string> machineIds, DateTime from, DateTime to, BucketSize size = BucketSize.Hour)
     {
+        var allowed = await Access.FilterAsync(_connectionFactory);
+        machineIds = machineIds.Where(allowed).ToList();
         if (machineIds.Count == 0)
-            return Task.FromResult(new List<ProductionBucket>());
+            return new List<ProductionBucket>();
         // Compared through Machines (small table), so the produzione side
         // still seeks its index instead of converting numero_linea.
-        return QueryBucketsAsync(
+        return await QueryBucketsAsync(
             "{0} IN (SELECT MachineId FROM Machines WHERE MachineId IN @machineIds)",
             size, from, to, new { machineIds = machineIds.ToList() }, includeWeights: true);
     }
@@ -405,8 +424,11 @@ rz AS (
     }
 
     // Causes given to stops in the Planification window (Arrets window and sheet).
-    public Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
-        => _planning.FindQualificationsAsync(from, to);
+    public async Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
+    {
+        var allowed = await Access.FilterAsync(_connectionFactory);
+        return (await _planning.FindQualificationsAsync(from, to)).Where(q => allowed(q.MachineId)).ToList();
+    }
 
     // Maintenance slots and planned stops running now (Planification), whole;
     // none if they can't be read.
@@ -414,7 +436,8 @@ rz AS (
     {
         try
         {
-            return await _planning.FindActiveSlotsAsync(DateTime.Now);
+            var allowed = await Access.FilterAsync(_connectionFactory);
+            return (await _planning.FindActiveSlotsAsync(DateTime.Now)).Where(e => allowed(e.MachineId)).ToList();
         }
         catch (Exception ex)
         {
@@ -430,7 +453,9 @@ rz AS (
     {
         try
         {
+            var allowed = await Access.FilterAsync(_connectionFactory);
             return (await _planning.FindActiveSlotsAsync(DateTime.Now))
+                .Where(e => allowed(e.MachineId))
                 .GroupBy(e => e.MachineId)
                 .ToDictionary(g => g.Key, g => g.Max(e => e.Kind));
         }
@@ -471,6 +496,8 @@ rz AS (
     {
         if (from < _settings.DataStartDate)
             from = _settings.DataStartDate;
+        var allowed = await Access.FilterAsync(_connectionFactory);
+        machineIds = machineIds.Where(allowed).ToList();
         if (machineIds.Count == 0 || to <= from)
             return new List<LineSegment>();
 
@@ -815,6 +842,8 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
     // snapshot). null = no lotto table (SQLite dev DB): caller falls back.
     public async Task<List<LotSpan>?> GetLotSpansAsync(string machineId, DateTime from, DateTime to)
     {
+        if (!(await Access.FilterAsync(_connectionFactory))(machineId))
+            return new List<LotSpan>();
         var d = Dialect.For(_connectionFactory.Provider);
         using var connection = _connectionFactory.CreateConnection();
         if (!await HasLotTableAsync(connection, d))
@@ -1024,6 +1053,7 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
 
     public async Task UpdateMachineNameAsync(string machineId, string machineName)
     {
+        await Access.DemandAsync(_connectionFactory, machineId);
         using var connection = _connectionFactory.CreateConnection();
         await connection.ExecuteAsync(
             "UPDATE Machines SET MachineName = @machineName WHERE MachineId = @machineId",

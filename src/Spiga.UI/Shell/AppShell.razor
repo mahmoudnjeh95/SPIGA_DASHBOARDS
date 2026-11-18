@@ -59,9 +59,9 @@
             <span class="crumb">@((MarkupString)Crumb())</span>
             <span class="pill" title="Équipe en poste selon le roulement"><span class="dot"></span>@_shift</span>
             <span class="sp"></span>
-            @if (Desktop.IsAvailable && Session.Can(Perm.EcranTv))
+            @if (Desktop.IsAvailable && Session.Actor?.CanEverywhere(Perm.EcranTv) == true)
             {
-                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(Session.Can(Perm.ParametresPoste))">@Icons.Svg("tv")Écran TV</button>
+                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen()">@Icons.Svg("tv")Écran TV</button>
             }
             <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@Icons.Svg(Session.Theme == "dark" ? "sun" : "moon")@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
             <a class="bar" href="compte">@Icons.Svg("user")Mon compte</a>
@@ -96,7 +96,7 @@
     // A WPF page (dashboard, arrêts, planification, paramètres): in the
     // Windows application the window shows the rail here and the page beside it.
     private NativePage? CurrentNative
-        => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && Session.Can(NativePages.Permission(page))
+        => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && NativePages.IsAllowed(Session.Actor, page)
             ? page
             : null;
 
@@ -105,7 +105,8 @@
     protected override void OnAfterRender(bool firstRender)
     {
         Desktop.ApplyTheme(Session.Theme == "dark");
-        Desktop.ShowNative(CurrentNative, Session.Can(Perm.ParametresPoste), Session.Actor?.Team);
+        var page = CurrentNative;
+        Desktop.ShowNative(page, page is { } p && Session.Actor is { } actor ? NativePages.Access(actor, p) : NativeAccess.None);
     }
 
     private void OnNativeClosed(NativePage page)
@@ -118,12 +119,14 @@
     private void OnNavigateRequested(NativePage page)
         => _ = InvokeAsync(() =>
         {
-            if (Session.Can(NativePages.Permission(page)))
+            if (NativePages.IsAllowed(Session.Actor, page))
                 Nav.NavigateTo(NativePages.Route(page));
         });
 
     private IEnumerable<NavItem> Allowed()
-        => ModuleCatalog.Navigation.Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable));
+        => ModuleCatalog.Navigation.Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable)
+                                               && (NativePages.FromRoute(n.Route) is not { } page || NativePages.IsAllowed(Session.Actor, page))
+                                               && (n.Module != Modules.Audit || Session.Actor?.CanUnrestricted(Perm.View(Modules.Audit)) == true));
 
     // The screen being shown stays in the menu even when it is "à venir".
     private IEnumerable<IGrouping<string?, NavItem>> VisibleGroups()

@@ -235,6 +235,7 @@ public partial class MainViewModel : ObservableObject
         _settings = settings;
         _teamSchedule = teamSchedule;
         _sharedSettings = sharedSettings;
+        _repository.Access.Changed += OnAccessChanged;
 
         _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _filterTimer.Tick += async (_, _) =>
@@ -362,8 +363,28 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // Another account, or its team / platforms changed (SPIGA Suivi
+    // Production): the repository now serves other machines. What is on
+    // screen goes at once; the deck is rebuilt from what is allowed now.
+    private bool _started;
+
+    private void OnAccessChanged()
+    {
+        DismissStopAlert();
+        _alertedStops.Clear();
+        if (!_started)
+            return;
+        CurrentSlide = null;
+        _ = RunGuardedAsync(async () =>
+        {
+            await RebuildSlidesAsync();
+            await RefreshStopAlertsAsync();
+        });
+    }
+
     public async Task InitializeAsync()
     {
+        _started = true;
         _suspended = true;
         _rotationTimer.Stop();
         _noteTimer.Stop();

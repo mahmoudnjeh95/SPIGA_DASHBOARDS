@@ -1,8 +1,16 @@
 @inject UserSession Session
 
-@if (Session.Can(Module, Action))
+@if (Session.Can(Module, Action) && (!PlantWide || Session.Actor?.CanUnrestricted(PermissionCatalog.Key(Module, Action) ?? "") == true))
 {
     @ChildContent
+}
+else if (Session.Can(Module, Action))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>« @(ModuleCatalog.Find(Module)?.Label ?? Module) » couvre toute l'usine et toutes les équipes : il faut ce droit sans
+            limite d'équipe ni de plateforme. Votre périmètre est limité (@Session.Actor?.ScopeSummary).</p>
+    </div>
 }
 else
 {
@@ -17,4 +25,8 @@ else
     [Parameter, EditorRequired] public string Module { get; set; } = "";
     [Parameter] public AppAction Action { get; set; } = AppAction.Voir;
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // The page cannot be limited to a team or platforms: the right must be
+    // held over the whole plant and every team.
+    [Parameter] public bool PlantWide { get; set; }
 }

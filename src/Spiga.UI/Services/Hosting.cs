@@ -48,6 +48,47 @@ public static class NativePages
 
     public static NativePage? FromRoute(string path)
         => Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(p => Route(p!.Value) == path);
+
+    // Paramètres du poste act on every machine of the station (TV, rates,
+    // hidden lines): only for an account whose right covers the whole plant.
+    public static bool IsAllowed(Actor? actor, NativePage page)
+        => actor != null && actor.Can(Permission(page)) && (page != NativePage.Settings || actor.CanEverywhere(Perm.ParametresPoste));
+
+    // The export right of a page, if it has exports.
+    public static string? ExportPermission(NativePage page) => page switch
+    {
+        NativePage.Dashboard => PermissionCatalog.Key(Modules.Conditionnement, AppAction.Exporter),
+        NativePage.Stops or NativePage.StopStatistics => PermissionCatalog.Key(Modules.Maintenance, AppAction.Exporter),
+        _ => null,
+    };
+
+    // What the account may see and do in this WPF page: the scope of the
+    // page's right (team and machines), and the rights for its buttons, each
+    // held only if it covers all that the page shows.
+    public static NativeAccess Access(Actor actor, NativePage page)
+    {
+        var permission = Permission(page);
+        var export = ExportPermission(page);
+        var validate = PermissionCatalog.Key(Modules.Maintenance, AppAction.Valider);
+        return new NativeAccess(
+            actor.Team,
+            actor.MachineRuleFor(permission),
+            CanExport: export != null && actor.Covers(export, permission),
+            CanValidate: validate != null && actor.Covers(validate, permission),
+            CanSettings: actor.CanEverywhere(Perm.ParametresPoste),
+            CanTv: actor.CanEverywhere(Perm.EcranTv));
+    }
+}
+
+// The rights of the signed-in account in one WPF page. Team: its one team
+// (null = several or all). Machines: those it may see there (null = all).
+public sealed record NativeAccess(string? Team, MachineRule? Machines, bool CanExport, bool CanValidate, bool CanSettings, bool CanTv)
+{
+    // No account (signed out, locked): nothing.
+    public static NativeAccess None { get; } = new(null, new MachineRule("-", (_, _) => false), false, false, false, false);
+
+    // Changes whenever the machines may have changed.
+    public string MachinesKey => Machines?.Key ?? "*";
 }
 
 // What only the desktop app can do. The web host registers NoDesktop.
@@ -57,15 +98,17 @@ public interface IDesktopBridge
 {
     bool IsAvailable { get; }
 
-    // A WPF page in the main window beside the navigation rail (null: none).
-    // team: the one team of a team-bound account (null = several or all):
-    // the WPF pages then show that team's postes only, the others greyed out.
-    void ShowNative(NativePage? page, bool allowSettings, string? team);
+    // A WPF page in the main window beside the navigation rail (null: none),
+    // with what the account may see and do there (NativePages.Access): its
+    // team's postes only (the others greyed out), the machines of its scope
+    // only (enforced by the pages' repositories), and its buttons' rights.
+    void ShowNative(NativePage? page, NativeAccess access);
 
     // Sign-out / lock: the pages are dropped (unsaved edits with them).
     void DiscardNativePages();
 
-    void OpenTvScreen(bool allowSettings);
+    // The station's hall screen: for NativeAccess.CanTv only.
+    void OpenTvScreen();
 
     // The WPF pages follow the signed-in user's light / dark choice.
     void ApplyTheme(bool dark);
@@ -100,9 +143,9 @@ public sealed class NoSessionStore : ISessionStore
 public sealed class NoDesktop : IDesktopBridge
 {
     public bool IsAvailable => false;
-    public void ShowNative(NativePage? page, bool allowSettings, string? team) { }
+    public void ShowNative(NativePage? page, NativeAccess access) { }
     public void DiscardNativePages() { }
-    public void OpenTvScreen(bool allowSettings) { }
+    public void OpenTvScreen() { }
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }
     public event Action<NativePage>? NativeClosed { add { } remove { } }

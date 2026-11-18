@@ -19,6 +19,11 @@ public sealed class PlanningContext
     public TeamScheduleService Teams { get; }
     public List<Machine> Machines { get; private set; } = new();
 
+    // « Valider les interventions » (SPIGA Suivi Production): marking a
+    // maintenance done. Without it the board shows them but cannot close
+    // them. Production and Planning are limited to the account's machines.
+    public bool CanValidate { get; init; } = true;
+
     public PlanningContext(ProductionRepository production, PlanningRepository planning, AppSettings settings,
         SettingsService settingsService, TeamScheduleService teams)
     {

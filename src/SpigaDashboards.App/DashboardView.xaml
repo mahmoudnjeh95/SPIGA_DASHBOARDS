@@ -387,7 +387,7 @@
                     <Button Content="Reconnecter" Padding="18,10" Margin="0,0,10,0" Style="{StaticResource AccentBarButton}"
                             Command="{Binding ReconnectCommand}"
                             IsEnabled="{Binding IsReconnecting, Converter={StaticResource InverseBool}}"/>
-                    <Button Content="Paramètres" Padding="18,10"
+                    <Button x:Name="ReconnectSettingsButton" Content="Paramètres" Padding="18,10"
                             Style="{StaticResource BarButton}"
                             Click="SettingsButton_Click"/>
                 </StackPanel>

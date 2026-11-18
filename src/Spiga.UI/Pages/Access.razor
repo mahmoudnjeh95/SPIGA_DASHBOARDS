@@ -853,11 +853,16 @@
         _user = null;
     }
 
-    // The platforms offered in an assignment row: all of them (the service
-    // refuses those outside a delegated manager's own scope), plus any the
-    // row already names.
+    // The platforms offered in an assignment row: all of them for a manager
+    // of roles; for a delegated manager, those inside its own scope (the
+    // service checks it again). Plus any the row already names.
     private IEnumerable<Platform> PlatformChoices(AssignmentForm a)
-        => _platforms.Concat(a.Platforms.Where(id => _platforms.All(p => p.Id != id)).Select(Platform.Missing));
+        => _platforms.Where(p => CanRoles || a.Platforms.Contains(p.Id) || WithinMyScope(p))
+            .Concat(a.Platforms.Where(id => _platforms.All(p => p.Id != id)).Select(Platform.Missing));
+
+    private bool WithinMyScope(Platform p)
+        => Actor.Grants.Where(g => g.Role.EffectivePermissions.Has(Perm.ComptesGerer))
+            .Any(g => DataScope.Of(g.Scope.Team, new[] { p }).IsWithin(g.Scope));
 
     private static void ToggleIn<T>(List<T> list, T value, bool on)
     {

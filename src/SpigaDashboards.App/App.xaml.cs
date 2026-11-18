@@ -41,9 +41,19 @@ public partial class App : Application
         var repository = new ProductionRepository(activeFactory, settings);
         var teamSchedule = new TeamScheduleService(settings);
         var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(activeFactory), settings, settingsService);
+        // Kiosk / TV PCs: every machine of the station, no sign-in.
         DashboardView CreateDashboard()
             => new(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
                 settingsService, settings, activeFactory, repository, sharedSettings);
+
+        // Signed-in shell: its own repository, showing no machine until the
+        // account opening it gives its scope (DesktopBridge, MachineAccess).
+        DashboardView CreateScopedDashboard()
+        {
+            var scoped = new ProductionRepository(activeFactory, settings, MachineAccess.Nothing());
+            return new(new MainViewModel(scoped, settings, teamSchedule, sharedSettings),
+                settingsService, settings, activeFactory, scoped, sharedSettings);
+        }
 
         // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
         // as a screen (KIOSK=1, see StartMode), opens the dashboard directly,
@@ -101,7 +111,7 @@ public partial class App : Application
         services.AddBlazorWebViewDeveloperTools();
 #endif
         services.AddSpigaSuivi(appDb, activeFactory, settings);
-        var bridge = new DesktopBridge(CreateDashboard);
+        var bridge = new DesktopBridge(CreateScopedDashboard);
         services.AddSingleton<IDesktopBridge>(bridge);
         var shell = new ShellWindow(services.BuildServiceProvider());
         bridge.Attach(shell);

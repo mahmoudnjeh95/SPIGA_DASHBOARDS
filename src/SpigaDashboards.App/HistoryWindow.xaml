@@ -187,8 +187,10 @@
         <views:PastaLoader Grid.Row="3" IsActive="{Binding IsBusy}" Text="Recherche en cours…" Background="{DynamicResource LoadingVeilBrush}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="Exporter le rapport Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"/>
-            <Button Content="Exporter le rapport PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"/>
+            <Button Content="Exporter le rapport Excel" Style="{StaticResource SecondaryButton}" Command="{Binding ExportExcelCommand}"
+                    Visibility="{Binding CanExport, Converter={StaticResource BoolToVisibility}}"/>
+            <Button Content="Exporter le rapport PDF" Style="{StaticResource SecondaryButton}" Command="{Binding ExportPdfCommand}"
+                    Visibility="{Binding CanExport, Converter={StaticResource BoolToVisibility}}"/>
             <Button Content="Fermer" Style="{StaticResource PrimaryButton}" Click="CloseButton_Click"/>
         </StackPanel>
     </Grid>

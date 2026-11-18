@@ -765,6 +765,9 @@ public static class PlanningErrors
     // TABLE rights needs database/planning.sql run once by an administrator.
     public static string Describe(Exception ex)
     {
+        // A machine outside the account's team / platforms (MachineAccess).
+        if (ex is UnauthorizedAccessException)
+            return ex.Message;
         var message = ex.Message;
         if (message.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase)
             || message.Contains("permission", StringComparison.OrdinalIgnoreCase))

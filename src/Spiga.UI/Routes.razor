@@ -108,7 +108,7 @@
         if (Session.Actor == null)
             Desktop.DiscardNativePages();
         else if (!showsApp)
-            Desktop.ShowNative(null, false, null);
+            Desktop.ShowNative(null, NativeAccess.None);
     }
 
     public void Dispose() => Session.Changed -= OnSessionChanged;

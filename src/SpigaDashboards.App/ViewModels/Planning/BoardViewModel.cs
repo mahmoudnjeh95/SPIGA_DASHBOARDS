@@ -646,7 +646,7 @@ public partial class BoardViewModel : ObservableObject
             Preventives.Add(new PreventiveRow(p.MachineId, _ctx.NameOf(p.MachineId), p.Task, MaintenanceText.Rule(p) + state.Detail,
                 state.DueText, statusText, PlanningContext.Brush(statusColor), p.LastDoneAt != null, Math.Clamp(state.Ratio, 0, 1),
                 new RelayCommand(() => PlanFromRule(plan, state.Due)),
-                new RelayCommand(() => ConfirmPlanDone(plan)),
+                new RelayCommand(() => ConfirmPlanDone(plan), () => _ctx.CanValidate),
                 new RelayCommand(() => EditPlan(plan))));
         }
         OnPropertyChanged(nameof(HasPreventives));
@@ -875,7 +875,7 @@ public partial class BoardViewModel : ObservableObject
                     DetailNoteBrush = red;
                 }
                 CanEditSelected = e.Status == PlanStatus.Planned;
-                CanCloseSelected = e.Status == PlanStatus.Planned;
+                CanCloseSelected = e.Status == PlanStatus.Planned && _ctx.CanValidate;
                 // In progress: ends it now, like a planned stop.
                 CloseSelectedText = e.IsActiveAt(now) ? "Terminer" : "Valider";
                 break;
@@ -929,6 +929,9 @@ public partial class BoardViewModel : ObservableObject
                     e.DurationMinutes = Math.Max(1, (int)Math.Round((now - e.PlannedStart).TotalMinutes));
                     await _ctx.Planning.SaveEventAsync(e);
                     break;
+                case MaintenanceEvent when !_ctx.CanValidate:
+                    StatusMessage = NoValidation;
+                    return;
                 case MaintenanceEvent e:
                     // Ended early: the rest of the slot goes back to the TRS.
                     if (e.IsActiveAt(now))
@@ -1464,8 +1467,17 @@ public partial class BoardViewModel : ObservableObject
     }
 
     private void ConfirmPlanDone(MaintenancePlan p)
-        => Confirm($"« {p.Task} » ({_ctx.NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée",
+    {
+        if (!_ctx.CanValidate)
+        {
+            StatusMessage = NoValidation;
+            return;
+        }
+        Confirm($"« {p.Task} » ({_ctx.NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée",
             () => MarkPlanDoneAsync(p));
+    }
+
+    private const string NoValidation = "Valider une intervention demande le droit « Maintenance › Valider les interventions ».";
 
     private async Task MarkPlanDoneAsync(MaintenancePlan p)
     {

@@ -149,6 +149,53 @@ public sealed class Actor
 
     public bool IsOwnTeam(string? team) => Team == null || string.Equals(Team, team, StringComparison.OrdinalIgnoreCase);
 
+    // Every role and scope held, as a stable text: changes with any change
+    // of the account's rights, including the machines of its platforms.
+    public string AccessKey
+        => string.Join(" ; ", Grants.Select(g => $"{g.Role.Id}:{Key(g.Scope)}").OrderBy(k => k, StringComparer.Ordinal));
+
+    // Where this permission applies, as a stable text: equal for two
+    // permissions given over exactly the same scopes. Changes when an
+    // administrator changes the scopes or the machines of a platform.
+    public string ScopeKey(string permission)
+        => string.Join(" ; ", Grants.Where(g => g.Role.EffectivePermissions.Has(permission))
+            .Select(g => Key(g.Scope)).Distinct().OrderBy(k => k, StringComparer.Ordinal));
+
+    // The machines where this permission applies, whatever the team; null
+    // when it applies to every machine of the plant.
+    public MachineRule? MachineRuleFor(string permission)
+    {
+        var scopes = Grants.Where(g => g.Role.EffectivePermissions.Has(permission)).Select(g => g.Scope).ToList();
+        if (scopes.Any(s => s.Sectors.Count == 0 && s.Machines.Count == 0 && s.Platforms.Count == 0))
+            return null;
+        return new MachineRule(ScopeKey(permission), (machineId, sector) => scopes.Any(s => s.AllowsMachine(machineId, sector)));
+    }
+
+    // Whether `permission` applies everywhere `over` does (same scopes, or
+    // the whole plant): an export or a validation then covers all that the
+    // page shows.
+    public bool Covers(string permission, string over)
+        => Can(permission)
+           && (Grants.Any(g => g.Role.EffectivePermissions.Has(permission) && g.Scope.IsUnrestricted)
+               || ScopeKey(permission) == ScopeKey(over));
+
+    // Station-wide outputs (Paramètres du poste, écran TV of the hall) are
+    // for accounts whose right covers every machine.
+    public bool CanEverywhere(string permission) => Can(permission) && MachineRuleFor(permission) == null;
+
+    // Held over the whole plant and every team: for what cannot be split
+    // by machine or team (the audit trail).
+    public bool CanUnrestricted(string permission)
+        => Grants.Any(g => g.Role.EffectivePermissions.Has(permission) && g.Scope.IsUnrestricted);
+
+    private static string Key(DataScope s)
+        => string.Join("|",
+            "t:" + (s.Team ?? "").ToLowerInvariant(),
+            "s:" + string.Join(",", s.Sectors.Select(x => x.ToLowerInvariant()).OrderBy(x => x, StringComparer.Ordinal)),
+            "m:" + string.Join(",", s.Machines.Select(x => x.ToLowerInvariant()).OrderBy(x => x, StringComparer.Ordinal)),
+            "p:" + string.Join(",", s.Platforms.OrderBy(p => p.Id).Select(p =>
+                $"{p.Id}{(p.IsActive ? "" : "!")}[{string.Join(",", p.Machines.Select(m => m.MachineId.ToLowerInvariant()).OrderBy(x => x, StringComparer.Ordinal))}]")));
+
     public string ScopeSummary
         => Grants.Any(g => g.Scope.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", Grants.Select(g => g.Scope.Describe()).Distinct());
 
@@ -165,6 +212,16 @@ public sealed class Actor
             throw new AccessDeniedException(
                 $"Vos rôles ne donnent pas le droit « {AppActions.Label(action)} » dans « {ModuleCatalog.Find(module)?.Label ?? module} ».");
     }
+}
+
+// The machines one right reaches (see Actor.MachineRuleFor). Key changes
+// whenever the set may have changed, so the pages that hold data know to
+// reload.
+public sealed class MachineRule(string key, Func<string, string, bool> allows)
+{
+    public string Key { get; } = key;
+
+    public bool Allows(string machineId, string sector) => allows(machineId, sector);
 }
 
 public sealed class AccessDeniedException(string message) : Exception(message);

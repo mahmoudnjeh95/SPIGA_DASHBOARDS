@@ -2,7 +2,9 @@
 @inherits SpigaPage
 @inject IAuditLog Audit
 
-<RequireAccess Module="@Modules.Audit">
+@* The trail has no machine or team to filter on (accounts, rights,
+   entries of every line): plant-wide accounts only. *@
+<RequireAccess Module="@Modules.Audit" PlantWide="true">
     <div class="head">
         <div>
             <span class="pre">Administration</span><h1>Journal d'audit</h1>
@@ -85,7 +87,7 @@
 
     private async Task LoadAsync()
     {
-        if (!Session.Can(Modules.Audit, AppAction.Voir))
+        if (Session.Actor?.CanUnrestricted(Perm.View(Modules.Audit)) != true)
             return;
         var (from, to) = _period.Range(Now);
         _entries = await Audit.QueryAsync(new AuditQuery(from, to, NullIfEmpty(_user), NullIfEmpty(_module), Limit));
