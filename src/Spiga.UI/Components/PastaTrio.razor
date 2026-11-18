@@ -1,0 +1,64 @@
+@* The three SPIGA products - couscous, a penne (pâte courte), a spaghetti
+   nest (pâte longue) - hopping in turn over a strand of spaghetti that keeps
+   drawing itself. Same drawing and timing as the WPF PastaLoader of the
+   dashboard (Views/PastaLoader.xaml), so loading looks the same everywhere.
+   The motion is CSS only (spiga.css, "pasta"). *@
+<svg class="pasta-trio @Class" viewBox="0 0 220 112" aria-hidden="true" focusable="false">
+    <defs>
+        <linearGradient id="sp-penne-@_id" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFDC80" />
+            <stop offset=".45" stop-color="#F2BE4E" />
+            <stop offset="1" stop-color="#D6982A" />
+        </linearGradient>
+    </defs>
+    <ellipse class="pp-shadow" cx="45" cy="83.5" rx="18" ry="3.5" />
+    <ellipse class="pp-shadow" style="animation-delay:.18s" cx="110" cy="83.5" rx="18" ry="3.5" />
+    <ellipse class="pp-shadow" style="animation-delay:.36s" cx="175" cy="83.5" rx="18" ry="3.5" />
+
+    <g transform="translate(25 44)">
+        <g class="pp" style="--spin:0deg">
+            <g fill="#F2BE4E" stroke="#C58A1C" stroke-width=".9">
+                <ellipse cx="8" cy="34" rx="3.6" ry="3.3" /><ellipse cx="15" cy="35" rx="3.6" ry="3.3" />
+                <ellipse cx="22" cy="35" rx="3.6" ry="3.3" /><ellipse cx="29" cy="35" rx="3.6" ry="3.3" />
+                <ellipse cx="35" cy="34" rx="3.4" ry="3.1" /><ellipse cx="11.5" cy="28" rx="3.6" ry="3.3" />
+                <ellipse cx="18.5" cy="28.5" rx="3.6" ry="3.3" /><ellipse cx="25.5" cy="28.5" rx="3.6" ry="3.3" />
+                <ellipse cx="32" cy="28" rx="3.4" ry="3.1" /><ellipse cx="15" cy="22" rx="3.6" ry="3.3" />
+                <ellipse cx="22" cy="22" rx="3.6" ry="3.3" /><ellipse cx="28.5" cy="22.5" rx="3.4" ry="3.1" />
+                <ellipse cx="18.5" cy="16" rx="3.5" ry="3.2" /><ellipse cx="25" cy="16.5" rx="3.4" ry="3.1" />
+                <ellipse cx="21.5" cy="10.5" rx="3.3" ry="3" />
+            </g>
+        </g>
+    </g>
+
+    <g transform="translate(90 44)">
+        <g class="pp" style="--spin:24deg;animation-delay:.18s">
+            <g transform="translate(20 26) rotate(-28)">
+                <path d="M-15,-8 L7,-8 L15,8 L-7,8 Z" fill="url(#sp-penne-@_id)" stroke="#C58A1C" stroke-width="1.2" stroke-linejoin="round" />
+                <path d="M-12,-4 L9,-4 M-10,0 L11,0 M-8,4 L13,4" stroke="#C58A1C" stroke-width=".9" opacity=".7" stroke-linecap="round" />
+                <g transform="translate(11 0) skewX(26.6)">
+                    <ellipse rx="4" ry="8" fill="#FFD36A" stroke="#C58A1C" stroke-width="1.1" />
+                    <ellipse rx="2" ry="4.5" fill="#8A5A10" />
+                </g>
+            </g>
+        </g>
+    </g>
+
+    <g transform="translate(155 44)">
+        <g class="pp" style="--spin:-18deg;animation-delay:.36s">
+            <g transform="translate(19 24) scale(1 .72)" fill="none" stroke-linecap="round">
+                <path d="M0,0 A2,2 0 0 1 4,0 A4,4 0 0 1 -4,0 A6,6 0 0 1 8,0 A8,8 0 0 1 -8,0 A10,10 0 0 1 12,0 A12,12 0 0 1 -12,0 A14,14 0 0 1 16,0" stroke="#C58A1C" stroke-width="4.4" />
+                <path d="M0,0 A2,2 0 0 1 4,0 A4,4 0 0 1 -4,0 A6,6 0 0 1 8,0 A8,8 0 0 1 -8,0 A10,10 0 0 1 12,0 A12,12 0 0 1 -12,0 A14,14 0 0 1 16,0" stroke="#F2BE4E" stroke-width="2.6" />
+            </g>
+        </g>
+    </g>
+
+    <path class="pp-track" d="M12,100 C32,92 52,108 72,100 S112,92 132,100 S172,108 208,100" />
+    <path class="pp-strand" d="M12,100 C32,92 52,108 72,100 S112,92 132,100 S172,108 208,100" />
+</svg>
+
+@code {
+    [Parameter] public string? Class { get; set; }
+
+    // Gradient ids must be unique in the page (two loaders can be shown).
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+}

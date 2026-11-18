@@ -1,0 +1,12 @@
+@* Shown while data is being read: the hopping pasta of the dashboard and a
+   caption. It only appears if the wait lasts (CSS delay), so a fast answer
+   never flashes it. Full: centred on the whole window (start-up). *@
+<div class="loading pasta @(Full ? "full" : "")" role="status" aria-live="polite">
+    <PastaTrio />
+    <span class="pasta-caption">@Text</span>
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; } = "Chargement…";
+    [Parameter] public bool Full { get; set; }
+}

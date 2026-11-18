@@ -14,11 +14,15 @@
     }
     else if (!_ready)
     {
-        <div class="loading">Chargement…</div>
+        <Loader Full="true" />
     }
     else if (_needsSetup)
     {
         <Setup OnDone="() => _needsSetup = false" />
+    }
+    else if (Session.Actor == null && !_welcomed)
+    {
+        <Welcome OnContinue="() => _welcomed = true" />
     }
     else if (Session.Actor == null)
     {
@@ -61,6 +65,10 @@
     [Parameter] public string? Workstation { get; set; }
 
     private bool _ready;
+    // The welcome screen comes before the sign-in form, at start-up and
+    // again after each sign-out (the next person at the PC).
+    private bool _welcomed;
+    private bool _hadActor;
     private bool _needsSetup;
     private string? _error;
 
@@ -74,6 +82,7 @@
             _needsSetup = await Auth.NeedsSetupAsync();
             if (!_needsSetup && Session.Actor == null)
                 await Session.TryResumeAsync();
+            _hadActor = Session.Actor != null;
             _ready = true;
         }
         catch (Exception ex)
@@ -82,7 +91,13 @@
         }
     }
 
-    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnSessionChanged()
+    {
+        if (_hadActor && Session.Actor == null)
+            _welcomed = false;
+        _hadActor = Session.Actor != null;
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     // Sign-in, lock, first setup: no WPF page beside the rail (AppShell shows
     // it again on its page). Signed out: the pages are dropped, so the next

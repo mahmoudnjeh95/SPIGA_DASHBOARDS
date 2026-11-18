@@ -2,32 +2,63 @@
 @inject UserSession Session
 @inject ClientInfo Client
 
-<div class="gate">
+<div class="gate @(_greeting != null ? "gate-leave" : "")">
     <form class="gate-card" @onsubmit="SubmitAsync">
         <Brand />
-        <h1>Connexion</h1>
+        @if (_greeting != null)
+        {
+            <h1 class="gate-hello">Bonjour, @_greeting</h1>
+        }
+        else
+        {
+            <h1>Connexion</h1>
+        }
         @if (_error != null)
         {
             <div class="notice error" role="alert">@_error</div>
         }
         <div class="f">
             <label for="login">Identifiant</label>
-            <input id="login" @bind="_login" @bind:event="oninput" autocomplete="username" autofocus />
+            <input id="login" @ref="_loginInput" @bind="_login" @bind:event="oninput" autocomplete="username" autofocus />
         </div>
         <div class="f">
             <label for="password">Mot de passe</label>
             <input id="password" type="password" @bind="_password" @bind:event="oninput" autocomplete="current-password" />
         </div>
-        <button class="bar acc" type="submit" disabled="@_busy">Se connecter</button>
+        <button class="bar acc @(_greeting != null ? "done" : "")" type="submit" disabled="@(_busy || _greeting != null)">
+            @if (_greeting != null)
+            {
+                <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path pathLength="1" d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                <span>Connecté</span>
+            }
+            else
+            {
+                <span>Se connecter</span>
+            }
+        </button>
         <p class="gate-foot">Poste @Client.Workstation · mot de passe oublié : un administrateur peut le réinitialiser.</p>
     </form>
 </div>
 
 @code {
+    // After a good password: the button turns into a tick, the card greets
+    // the person and leaves, then the application comes up.
+    private static readonly TimeSpan SuccessTime = TimeSpan.FromMilliseconds(650);
+
+    private ElementReference _loginInput;
     private string _login = "";
     private string _password = "";
     private string? _error;
+    private string? _greeting;
     private bool _busy;
+
+    // autofocus only works on a page load; the form also comes up after the
+    // welcome screen.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await _loginInput.FocusAsync();
+    }
 
     private async Task SubmitAsync()
     {
@@ -38,7 +69,12 @@
             var result = await Auth.LoginAsync(_login, _password);
             _password = "";
             if (result.Status == LoginStatus.Success)
+            {
+                _greeting = result.Actor!.DisplayName;
+                StateHasChanged();
+                await Task.Delay(SuccessTime);
                 await Session.SignInAsync(result.Actor!);
+            }
             else
                 _error = result.Message;
         }

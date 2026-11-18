@@ -1,0 +1,112 @@
+@* Welcome screen, before the sign-in form: the Spiga mark is revealed, the
+   word "Bienvenue" builds up letter by letter, then the greeting, the time
+   and the three products. Any key, a click or a tap continues to the sign-in
+   form (the screen leaves first, then the form rises). On a shared plant PC
+   it is also the screen left after a sign-out. *@
+@implements IDisposable
+@inject TimeProvider Clock
+
+<div class="welcome @(_leaving ? "leaving" : "")" tabindex="0" @ref="_root"
+     @onclick="ContinueAsync" @onkeydown="OnKeyAsync" aria-label="Accueil SPIGA Suivi Production">
+    <div class="wl-grains" aria-hidden="true">
+        @for (var i = 0; i < 18; i++)
+        {
+            <i style="@Grain(i)"></i>
+        }
+    </div>
+    <svg class="wl-strands" viewBox="0 0 1200 220" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path pathLength="1" d="M-20,150 C140,110 260,190 420,150 S700,110 860,150 S1100,190 1220,140" />
+        <path pathLength="1" d="M-20,175 C160,140 300,215 460,172 S760,130 920,170 S1120,205 1220,165" />
+        <path pathLength="1" d="M-20,198 C120,170 280,230 470,196 S780,160 940,194 S1130,222 1220,190" />
+    </svg>
+
+    <div class="wl-center">
+        <div class="wl-logo">
+            <img src="_content/Spiga.UI/img/spiga-logo.png" alt="Spiga" />
+            <i class="wl-shine" aria-hidden="true"></i>
+        </div>
+        <h1 class="wl-title" aria-label="Bienvenue">
+            @for (var i = 0; i < Word.Length; i++)
+            {
+                <span aria-hidden="true" style="--i:@i">@Word[i]</span>
+            }
+        </h1>
+        <p class="wl-sub">SPIGA <b>·</b> Suivi de production</p>
+        <p class="wl-greet">
+            <span>@Greeting</span>
+            <span class="wl-time num">@_now.ToString("HH:mm", Fr)</span>
+            <span>@Date</span>
+        </p>
+        <PastaTrio Class="wl-trio" />
+        <button type="button" class="bar acc wl-go">
+            Commencer
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </button>
+        <p class="wl-hint">Appuyez sur une touche ou touchez l'écran pour vous connecter</p>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnContinue { get; set; }
+
+    private const string Word = "Bienvenue";
+    private static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
+    // The screen leaves (ease-in) before the sign-in form comes up.
+    private static readonly TimeSpan LeaveTime = TimeSpan.FromMilliseconds(420);
+
+    private ElementReference _root;
+    private DateTime _now;
+    private Timer? _timer;
+    private bool _leaving;
+
+    private string Greeting => _now.Hour is >= 5 and < 18 ? "Bonjour" : "Bonsoir";
+    private string Date
+    {
+        get
+        {
+            var text = _now.ToString("dddd d MMMM yyyy", Fr);
+            return char.ToUpper(text[0], Fr) + text[1..];
+        }
+    }
+
+    // Grains: spread across the width, each with its own speed, drift, size
+    // and brightness, and already on their way when the screen opens.
+    private static string Grain(int i) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"--x:{3 + i * 5.5}%;--dx:{(i - 9) * 6}px;--o:{.25 + i % 4 * .12};--s:{.7 + i % 3 * .25};--t:{14 + i * 7 % 9}s;--d:{-1.7 * i}s");
+
+    protected override void OnInitialized()
+    {
+        _now = Clock.GetLocalNow().DateTime;
+        // The clock on screen: once a second is enough to turn the minute.
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            var now = Clock.GetLocalNow().DateTime;
+            if (now.Minute == _now.Minute && now.Hour == _now.Hour)
+                return;
+            _now = now;
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus, so that a key press continues straight away.
+        if (firstRender)
+            await _root.FocusAsync();
+    }
+
+    private Task OnKeyAsync(KeyboardEventArgs e) =>
+        e.Key is "Tab" or "Shift" or "Control" or "Alt" or "Meta" or "CapsLock" ? Task.CompletedTask : ContinueAsync();
+
+    private async Task ContinueAsync()
+    {
+        if (_leaving)
+            return;
+        _leaving = true;
+        StateHasChanged();
+        await Task.Delay(LeaveTime);
+        await OnContinue.InvokeAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

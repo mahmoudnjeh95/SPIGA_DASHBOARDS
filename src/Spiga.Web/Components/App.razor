@@ -9,6 +9,13 @@
     <title>SPIGA Suivi Production</title>
 </head>
 <body>
+    <div id="boot" class="spiga-root boot" aria-hidden="true">
+        <div class="boot-in">
+            <img class="boot-logo" src="_content/Spiga.UI/img/spiga-logo.png" alt="" />
+            <svg class="boot-strand" viewBox="0 0 220 24"><path class="pp-track" d="M12,12 C32,4 52,20 72,12 S112,4 132,12 S172,20 208,12" /><path class="pp-strand" d="M12,12 C32,4 52,20 72,12 S112,4 132,12 S172,20 208,12" /></svg>
+            <span>Démarrage de SPIGA Suivi Production…</span>
+        </div>
+    </div>
     <Routes @rendermode="Interactive" Workstation="@HttpContext?.Connection.RemoteIpAddress?.ToString()" />
     <script src="_content/Spiga.UI/spiga.js"></script>
     <script src="_framework/blazor.web.js"></script>
