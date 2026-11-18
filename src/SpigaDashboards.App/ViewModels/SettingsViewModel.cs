@@ -105,14 +105,25 @@ public partial class SettingsViewModel : ObservableObject
 
     public event EventHandler? SettingsApplied;
 
+    // The application database follows the connection chosen here (same
+    // server, database AppDatabaseName).
+    private readonly SwitchableConnectionFactory _appData;
+
+    // Who saves: written with the machine names, in the audit trail.
+    private readonly ChangeAuthor _author;
+
     public SettingsViewModel(
         SettingsService settingsService,
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
+        SwitchableConnectionFactory appData,
         ProductionRepository repository,
         SharedSettingsSync sharedSettings,
+        ChangeAuthor author,
         Action onApplied)
     {
+        _appData = appData;
+        _author = author;
         _settingsService = settingsService;
         _settings = settings;
         _activeFactory = activeFactory;
@@ -816,6 +827,23 @@ public partial class SettingsViewModel : ObservableObject
         // The shared part goes to the base chosen above (a new PC's first
         // save only sets its connection: nothing shared is sent).
         _activeFactory.SwitchTo(BuildFactoryFromFields());
+        // The application database of that server, brought to this version
+        // (and what older versions wrote in its stats copied) before the
+        // shared settings go there.
+        var appDb = AppDatabase.OptionsFor(_settings);
+        _appData.SwitchTo(Spiga.UI.Services.AppData.ConnectionFor(appDb));
+        try
+        {
+            await Task.Run(async () =>
+            {
+                await new Spiga.Data.Migrator(new Spiga.Data.AppDb(appDb)).MigrateAsync();
+                await Spiga.UI.Services.AppData.ImportLegacyAsync(_activeFactory, appDb);
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Base applicative injoignable après changement de connexion : " + ex);
+        }
         _sharedSettings.Reset();
         var shared = await _sharedSettings.PushAsync(_sharedAtOpen);
         SharedSettingsMessage = shared.Message;
@@ -833,7 +861,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 try
                 {
-                    await _repository.UpdateMachineNameAsync(machine.MachineId, trimmedName);
+                    await _repository.UpdateMachineNameAsync(machine.MachineId, trimmedName, _author);
                 }
                 catch (Exception ex)
                 {

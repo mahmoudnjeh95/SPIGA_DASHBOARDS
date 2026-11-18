@@ -491,12 +491,15 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // Who writes the note (DashboardView.Author).
+    public ChangeAuthor Author { get; set; } = ChangeAuthor.Kiosk;
+
     [RelayCommand]
     private async Task SaveNoteAsync()
     {
         try
         {
-            await _repository.SetActiveNoteAsync(NoteText);
+            await _repository.SetActiveNoteAsync(NoteText, Author);
             NoteSaveStatus = "Enregistré.";
         }
         catch (Exception ex)
@@ -984,7 +987,16 @@ public partial class MainViewModel : ObservableObject
         if (IsEditingNote)
             return;
 
-        var note = await _repository.GetActiveNoteAsync();
-        NoteText = note?.Content ?? "";
+        try
+        {
+            var note = await _repository.GetActiveNoteAsync();
+            NoteText = note?.Content ?? "";
+        }
+        catch (Exception ex)
+        {
+            // Application database unreachable: the note shown stays, the
+            // production keeps showing (it is in another database).
+            AppLogger.Log("Note du tableau de bord illisible (base applicative) : " + ex.Message);
+        }
     }
 }

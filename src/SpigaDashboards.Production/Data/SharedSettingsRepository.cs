@@ -11,17 +11,16 @@ public class SharedSettingsRow
     public string UpdatedBy { get; set; } = "";
 }
 
-// dbo.AppSharedSettings: one row (Id = 1) holding SharedSettings as JSON and
-// a version bumped on every save, so a PC sees a change with one tiny query
+// AppSharedSettings: one row (Id = 1) holding SharedSettings as JSON and a
+// version bumped on every save, so a PC sees a change with one tiny query
 // and a save made from stale values is refused instead of overwriting.
-// Created on first use when the login may (Windows login on the server);
-// database/shared_settings.sql does the same for a DBA, with the grants for
-// the dashboard login.
+// In the application database (spiga_suivi), created by its migrations; the
+// production database "stats" is only read.
 public class SharedSettingsRepository
 {
     private readonly IDbConnectionFactory _connectionFactory;
-    private bool _schemaReady;
 
+    // connectionFactory: the application database.
     public SharedSettingsRepository(IDbConnectionFactory connectionFactory)
     {
         _connectionFactory = connectionFactory;
@@ -29,28 +28,10 @@ public class SharedSettingsRepository
 
     private bool IsSqlServer => _connectionFactory.Provider == DatabaseProvider.SqlServer;
 
-    // Forget the check after a database switch (Parametres).
-    public void Reset() => _schemaReady = false;
+    // Kept for the callers that reset after a database switch: nothing cached.
+    public void Reset() { }
 
-    private async Task EnsureSchemaAsync()
-    {
-        if (_schemaReady)
-            return;
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(IsSqlServer
-            ? @"IF OBJECT_ID('dbo.AppSharedSettings') IS NULL
-                CREATE TABLE dbo.AppSharedSettings (
-                    Id INT NOT NULL PRIMARY KEY CHECK (Id = 1),
-                    Version INT NOT NULL,
-                    Json NVARCHAR(MAX) NOT NULL,
-                    UpdatedAt DATETIME2(0) NOT NULL,
-                    UpdatedBy NVARCHAR(100) NOT NULL)"
-            : @"CREATE TABLE IF NOT EXISTS AppSharedSettings (
-                    Id INTEGER NOT NULL PRIMARY KEY CHECK (Id = 1),
-                    Version INTEGER NOT NULL, Json TEXT NOT NULL,
-                    UpdatedAt TEXT NOT NULL, UpdatedBy TEXT NOT NULL)");
-        _schemaReady = true;
-    }
+    private static Task EnsureSchemaAsync() => Task.CompletedTask;
 
     // 0 = nothing shared yet.
     public async Task<int> GetVersionAsync()

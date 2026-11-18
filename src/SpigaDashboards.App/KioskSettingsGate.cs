@@ -1,0 +1,162 @@
+using System.Security.Principal;
+using System.Windows;
+using System.Windows.Controls;
+using Dapper;
+using Spiga.Core.Security;
+using Spiga.Data;
+using Spiga.UI.Services;
+using SpigaDashboards.App.Data;
+using SpigaDashboards.App.Models;
+using SpigaDashboards.App.Services;
+
+namespace SpigaDashboards.App;
+
+// Kiosk / TV PCs have no sign-in, but their Paramètres change the station
+// (database connection, rates, lines shown): they open only for an account
+// whose « Paramètres › Modifier les paramètres du poste » covers the whole
+// plant, checked like a sign-in (lockout, audit trail).
+//
+// When the application database cannot be reached there is no account to
+// check, and Paramètres are where the connection is repaired: they then open
+// only for a Windows administrator (the application started with « Exécuter
+// en tant qu'administrateur »).
+internal static class KioskSettingsGate
+{
+    private const string Title = "Paramètres du poste";
+
+    public static async Task<ChangeAuthor?> AskAsync(Window? owner, AppSettings settings)
+    {
+        var appDb = AppDatabase.OptionsFor(settings);
+        if (!await ReachableAsync(appDb))
+        {
+            if (IsWindowsAdministrator())
+            {
+                AppLogger.Log($"Paramètres ouverts sans compte par l'administrateur Windows {Environment.UserName} (base applicative injoignable).");
+                return new ChangeAuthor(Environment.UserName, "Administrateur Windows (base applicative injoignable)", Environment.MachineName);
+            }
+            Say(owner,
+                "La base SPIGA Suivi Production est injoignable : les comptes ne peuvent pas être vérifiés.\n\n" +
+                "Pour réparer la connexion, relancez l'application en tant qu'administrateur Windows " +
+                "(clic droit › Exécuter en tant qu'administrateur), puis ouvrez Paramètres.",
+                MessageBoxImage.Warning);
+            return null;
+        }
+
+        if (Ask(owner) is not { } credentials)
+            return null;
+
+        var db = new AppDb(appDb);
+        var auth = new AuthService(new UserStore(db), new RoleStore(db), new SettingsStore(db), new AuditStore(db),
+            TimeProvider.System, new ClientInfo());
+        LoginResult result;
+        try
+        {
+            result = await Task.Run(() => auth.LoginAsync(credentials.Login, credentials.Password));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Vérification du compte pour les Paramètres impossible : " + ex);
+            Say(owner, "Le compte n'a pas pu être vérifié : " + ex.Message, MessageBoxImage.Error);
+            return null;
+        }
+
+        string? refusal = result.Status switch
+        {
+            LoginStatus.Success when result.MustChangePassword =>
+                "Ce compte a un mot de passe temporaire : changez-le d'abord dans SPIGA Suivi Production.",
+            LoginStatus.Success when !result.Actor!.CanEverywhere(Perm.ParametresPoste) =>
+                $"Le compte {result.Actor.Login} n'a pas le droit « {PermissionCatalog.Label(Perm.ParametresPoste)} » sur toute l'usine.",
+            LoginStatus.Success => null,
+            _ => string.IsNullOrEmpty(result.Message) ? "Identifiant ou mot de passe incorrect." : result.Message,
+        };
+        if (refusal != null)
+        {
+            Say(owner, refusal, MessageBoxImage.Warning);
+            return null;
+        }
+        var actor = result.Actor!;
+        AppLogger.Log($"Paramètres ouverts sur l'écran par {actor.Login}.");
+        return ChangeAuthor.Account(actor.Login, actor.DisplayName);
+    }
+
+    private static void Say(Window? owner, string text, MessageBoxImage icon)
+    {
+        if (owner != null)
+            MessageBox.Show(owner, text, Title, MessageBoxButton.OK, icon);
+        else
+            MessageBox.Show(text, Title, MessageBoxButton.OK, icon);
+    }
+
+    private static async Task<bool> ReachableAsync(AppDbOptions options)
+    {
+        try
+        {
+            return await Task.Run(async () =>
+            {
+                using var connection = AppData.ConnectionFor(options).CreateConnection();
+                await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM Users");
+                return true;
+            });
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Base applicative injoignable pour vérifier le compte des Paramètres : " + ex.Message);
+            return false;
+        }
+    }
+
+    private static bool IsWindowsAdministrator()
+    {
+        try
+        {
+            return new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Identifier and password; null when cancelled.
+    private static (string Login, string Password)? Ask(Window? owner)
+    {
+        var login = new TextBox { Margin = new Thickness(0, 4, 0, 10), Padding = new Thickness(6, 4, 6, 4) };
+        var password = new PasswordBox { Margin = new Thickness(0, 4, 0, 14), Padding = new Thickness(6, 4, 6, 4) };
+        var ok = new Button { Content = "Ouvrir les paramètres", IsDefault = true, Padding = new Thickness(14, 6, 14, 6), Margin = new Thickness(0, 0, 8, 0) };
+        var cancel = new Button { Content = "Annuler", IsCancel = true, Padding = new Thickness(14, 6, 14, 6) };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+
+        var panel = new StackPanel { Margin = new Thickness(20) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Les paramètres du poste modifient l'écran pour tous. Connectez-vous avec un compte SPIGA Suivi Production " +
+                   "ayant le droit « Modifier les paramètres du poste » sur toute l'usine.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 14),
+        });
+        panel.Children.Add(new TextBlock { Text = "Identifiant" });
+        panel.Children.Add(login);
+        panel.Children.Add(new TextBlock { Text = "Mot de passe" });
+        panel.Children.Add(password);
+        panel.Children.Add(buttons);
+
+        var dialog = new Window
+        {
+            Title = Title,
+            Content = panel,
+            Width = 420,
+            SizeToContent = SizeToContent.Height,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = owner != null ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
+            Owner = owner,
+            ShowInTaskbar = false,
+        };
+        ok.Click += (_, _) => dialog.DialogResult = true;
+        dialog.Loaded += (_, _) => login.Focus();
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(login.Text))
+            return null;
+        return (login.Text.Trim(), password.Password);
+    }
+}

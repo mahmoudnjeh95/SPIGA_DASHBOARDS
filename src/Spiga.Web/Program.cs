@@ -18,7 +18,7 @@ var productionConnection = builder.Configuration["Spiga:Production:SqlServer"];
 if (!string.IsNullOrWhiteSpace(productionConnection))
 {
     productionSettings.Provider = DatabaseProvider.SqlServer;
-    production = new ConnectionStringFactory(productionConnection);
+    production = new ConnectionStringFactory(DatabaseProvider.SqlServer, productionConnection);
 }
 else
 {
@@ -27,10 +27,6 @@ else
     var sqliteFile = builder.Configuration["Spiga:Production:SqliteFile"];
     production = new SqliteConnectionFactory(string.IsNullOrWhiteSpace(sqliteFile) ? DatabasePathResolver.ResolveSqlitePath() : sqliteFile);
 }
-
-// The site's shared settings (nominal rates, TRS targets, teams), as the
-// desktop dashboard pulls them.
-await new SharedSettingsSync(new SharedSettingsRepository(production), productionSettings, new SettingsService()).PullAsync();
 
 // Application database: SQL Server spiga_suivi on site, a SQLite file
 // beside the dev database otherwise.
@@ -46,6 +42,13 @@ builder.Services.AddSingleton<IDesktopBridge, NoDesktop>();
 
 var app = builder.Build();
 await app.Services.GetRequiredService<Migrator>().MigrateAsync();
+// What versions up to 2.0 wrote in stats (planning, shared settings, note):
+// copied once into the application database, stats being only read now.
+await AppData.ImportLegacyAsync(production, appDb);
+
+// The site's shared settings (nominal rates, TRS targets, teams), as the
+// desktop dashboard pulls them (application database).
+await new SharedSettingsSync(new SharedSettingsRepository(AppData.ConnectionFor(appDb)), productionSettings, new SettingsService()).PullAsync();
 
 if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -56,11 +59,3 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(Routes).Assembly);
 
 app.Run();
-
-// SQL Server production database from a plain connection string (the
-// desktop app builds it from its Paramètres instead).
-internal sealed class ConnectionStringFactory(string connectionString) : IDbConnectionFactory
-{
-    public DatabaseProvider Provider => DatabaseProvider.SqlServer;
-    public System.Data.IDbConnection CreateConnection() => new Microsoft.Data.SqlClient.SqlConnection(connectionString);
-}

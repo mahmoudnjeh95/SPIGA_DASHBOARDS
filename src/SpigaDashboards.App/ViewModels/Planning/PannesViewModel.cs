@@ -761,17 +761,18 @@ public partial class PannesViewModel : ObservableObject
 
 public static class PlanningErrors
 {
-    // The Plan* tables are created by the app: a SQL login without CREATE
-    // TABLE rights needs database/planning.sql run once by an administrator.
+    // The Plan* tables are in the application database, created by its
+    // migrations at start-up (spiga_suivi.sql gives the SQL rights).
     public static string Describe(Exception ex)
     {
-        // A machine outside the account's team / platforms (MachineAccess).
-        if (ex is UnauthorizedAccessException)
+        // A machine outside the account's team / platforms (MachineAccess),
+        // an order number already used.
+        if (ex is UnauthorizedAccessException or InvalidOperationException)
             return ex.Message;
         var message = ex.Message;
         if (message.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase)
             || message.Contains("permission", StringComparison.OrdinalIgnoreCase))
-            return "Les tables de planification n'ont pas pu être créées (droits SQL). Faites exécuter database\\planning.sql une fois sur la base, puis rouvrez cette fenêtre.";
+            return "La base applicative SPIGA Suivi Production refuse l'accès (droits SQL) : faites exécuter spiga_suivi.sql une fois sur le serveur (dossier d'installation), puis relancez l'application.";
         return "Erreur : " + message;
     }
 }

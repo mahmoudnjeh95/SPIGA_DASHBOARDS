@@ -37,6 +37,25 @@ On site, IT runs `database/spiga_suivi.sql` once on the SQL Server.
 The desktop shell needs the Microsoft Edge WebView2 runtime (present on
 Windows 10 and 11).
 
+## Databases
+
+| Database | Holds | Written by the application |
+|---|---|---|
+| `stats` (Stiavelli, production) | Live machine data (`produzione`, `lotto`, status log) and the reference tables IT installs with `database/stiavelli_compat.sql` (`Machines`, `Products`, `Shifts`, `Employees`) | **Never** (from 2.1) |
+| `spiga_suivi` (application) | Accounts, roles, platforms, waste entries, audit trail; planning of the stops (`Plan*`), the dashboard's note (with its author), machine display names, the settings shared by the PCs | Yes, through versioned migrations (`src/Spiga.Data/Migrations`) |
+
+Every PC needs both, kiosk / TV PCs included (planning, note and shared
+settings). Up to version 2.0 the application wrote its planning, note,
+machine names and shared settings in `stats`: the first 2.1 PC to start
+copies them once into `spiga_suivi` (`LegacyDataImporter`, recorded in
+`LegacyImports`; production order numbers given twice are renumbered
+`-2`, `-3`...). Update every PC together; once all run 2.1 the login of the
+PCs can be read-only on `stats` (see the end of `stiavelli_compat.sql`).
+
+Production order numbers (`OF-yyyy-nnnn`) are unique in the database: a
+number taken meanwhile by another PC is replaced by the next free one, a
+number typed by hand that is already used is refused.
+
 ## Access control
 
 Roles are data, not code: administrators create as many as they need in
@@ -74,7 +93,8 @@ Utilisateurs et rôles, without a developer.
   filter is fixed.
 * **Delegated administration:** a role with « Créer et modifier des
   comptes » can give only the roles listed as assignable on it, only inside
-  its holder's own scope, and only to accounts holding nothing else. « Gérer
+  its holder's own scope, and only to accounts holding nothing else. It sees
+  only its own account and those with a role inside its scope. « Gérer
   les rôles » defines roles and gives any role; only an administrator gives
   Administrateur. No change can leave the application without an active
   administrator.
@@ -92,8 +112,19 @@ Utilisateurs et rôles, without a developer.
 * **Station-wide outputs need the whole plant:** Paramètres du poste and the
   hall TV screen act on every machine, so only accounts whose right covers
   every machine get them; the Journal d'audit (accounts, rights, entries of
-  every line) needs its right over the whole plant and every team. The kiosk
-  mode (`--kiosk`, TV PCs, no sign-in) shows the station's machines as before.
+  every line) needs its right over the whole plant and every team, checked
+  by its service (`AuditTrailService`). The kiosk mode (`--kiosk`, TV PCs,
+  no sign-in) shows the station's machines as before, but its Paramètres
+  open only after signing in with an account whose « Modifier les
+  paramètres du poste » covers the whole plant (audited, lockout applies);
+  when `spiga_suivi` cannot be reached, only for the application started as
+  a Windows administrator, to repair the connection.
+* **Rights are read again every minute** in the signed-in application,
+  not only when the user moves to another screen: a role, platform or
+  account changed by an administrator applies within a minute, a disabled
+  account is signed out.
+* **The dashboard's note and machine renames** record who made them (the
+  signed-in account, or « kiosque » on a TV PC) and go to the audit trail.
 * Every service checks the rights itself; the screens only hide what the
   user cannot use.
 * Passwords: PBKDF2-SHA256; temporary passwords must be changed at first

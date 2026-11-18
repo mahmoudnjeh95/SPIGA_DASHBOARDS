@@ -37,22 +37,52 @@ public partial class App : Application
             ? $"Démarrage avec SQL Server {settings.SqlServer.Host}/{settings.SqlServer.Database}"
             : "Démarrage avec SQLite (dev)");
 
+        // stats: the production database, only read. appData: the
+        // application database (spiga_suivi), where the planning, the note,
+        // the machine names and the shared settings are written. Paramètres
+        // can switch both (SwitchableConnectionFactory).
         var activeFactory = new SwitchableConnectionFactory(BuildFactory(settings));
-        var repository = new ProductionRepository(activeFactory, settings);
+        var appData = new SwitchableConnectionFactory(AppData.ConnectionFor(AppDatabase.OptionsFor(settings)));
+        var repository = new ProductionRepository(activeFactory, appData, settings);
         var teamSchedule = new TeamScheduleService(settings);
-        var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(activeFactory), settings, settingsService);
-        // Kiosk / TV PCs: every machine of the station, no sign-in.
+        var sharedSettings = new SharedSettingsSync(new SharedSettingsRepository(appData), settings, settingsService);
+        // Kiosk / TV PCs: every machine of the station, no sign-in; their
+        // Paramètres ask for an account (KioskSettingsGate).
         DashboardView CreateDashboard()
-            => new(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
-                settingsService, settings, activeFactory, repository, sharedSettings);
+        {
+            var dashboard = new DashboardView(new MainViewModel(repository, settings, teamSchedule, sharedSettings),
+                settingsService, settings, activeFactory, appData, repository, sharedSettings);
+            dashboard.SettingsGate = owner => KioskSettingsGate.AskAsync(owner, settings);
+            return dashboard;
+        }
 
         // Signed-in shell: its own repository, showing no machine until the
         // account opening it gives its scope (DesktopBridge, MachineAccess).
         DashboardView CreateScopedDashboard()
         {
-            var scoped = new ProductionRepository(activeFactory, settings, MachineAccess.Nothing());
+            var scoped = new ProductionRepository(activeFactory, appData, settings, MachineAccess.Nothing());
             return new(new MainViewModel(scoped, settings, teamSchedule, sharedSettings),
-                settingsService, settings, activeFactory, scoped, sharedSettings);
+                settingsService, settings, activeFactory, appData, scoped, sharedSettings);
+        }
+
+        // The application database first, in every mode: the dashboard reads
+        // its planning, note and shared settings there. What older versions
+        // wrote in stats is copied over once.
+        var appDb = AppDatabase.OptionsFor(settings);
+        Exception? appDbError = null;
+        try
+        {
+            // Off the UI thread: the awaits inside must not wait for it.
+            Task.Run(async () =>
+            {
+                await new Migrator(new AppDb(appDb)).MigrateAsync();
+                await AppData.ImportLegacyAsync(activeFactory, appDb);
+            }).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            appDbError = ex;
+            AppLogger.Log("Base applicative SPIGA Suivi Production injoignable : " + ex);
         }
 
         // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
@@ -60,10 +90,17 @@ public partial class App : Application
         // without sign-in, as before.
         if (StartMode.IsKiosk(e.Args))
         {
+            if (appDbError == null)
+                Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
             AppLogger.Log("Démarrage en mode écran (kiosque)");
             ShowWindow(new KioskWindow(CreateDashboard()));
             return;
         }
+
+        // The site's shared settings (nominal rates, TRS targets, teams), as
+        // the dashboard pulls them, so both compute with the same values.
+        if (appDbError == null)
+            Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
 
         // The sign-in shell is drawn by Microsoft Edge WebView2 (present on
         // Windows 10 / 11). Missing: the dashboard alone, with the reason.
@@ -80,25 +117,14 @@ public partial class App : Application
         }
         AppLogger.Log($"WebView2 {webView2}");
 
-        // The site's shared settings (nominal rates, TRS targets, teams), as
-        // the dashboard pulls them, so both compute with the same values.
-        Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
-
-        var appDb = AppDatabaseOptions(settings);
-        try
+        if (appDbError is { } appDbException)
         {
-            // Off the UI thread: the awaits inside must not wait for it.
-            Task.Run(() => new Migrator(new AppDb(appDb)).MigrateAsync()).GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Log("Base applicative SPIGA Suivi Production injoignable : " + ex);
             var hint = settings.Provider == DatabaseProvider.SqlServer
                 ? $"\n\nSur le serveur SQL, la base « {settings.AppDatabaseName} » doit exister et le compte des postes " +
                   "doit pouvoir y créer ses tables : script spiga_suivi.sql, dans le dossier d'installation, à exécuter une fois."
                 : "";
             MessageBox.Show(
-                "La base de SPIGA Suivi Production est injoignable :\n" + ex.Message + hint +
+                "La base de SPIGA Suivi Production est injoignable :\n" + appDbException.Message + hint +
                 "\n\nLe tableau de bord s'ouvre seul, sans connexion utilisateur.",
                 "SPIGA Suivi Production", MessageBoxButton.OK, MessageBoxImage.Warning);
             ShowWindow(new KioskWindow(CreateDashboard()));
@@ -174,28 +200,6 @@ public partial class App : Application
             AppLogger.Log($"Redémarrage impossible : {ex.Message}");
         }
         Environment.Exit(1);
-    }
-
-    // SQL Server on site: same server and credentials as the production
-    // database, database AppSettings.AppDatabaseName (created by IT, see
-    // database\spiga_suivi.sql). Dev PC: a SQLite file beside the settings.
-    private static AppDbOptions AppDatabaseOptions(AppSettings settings)
-    {
-        if (settings.Provider == DatabaseProvider.SqlServer)
-        {
-            var factory = new SqlServerConnectionFactory(settings.SqlServer);
-            return new AppDbOptions { Provider = AppDbProvider.SqlServer, ConnectionString = factory.ConnectionStringFor(settings.AppDatabaseName) };
-        }
-        string folder;
-        try
-        {
-            folder = Path.GetDirectoryName(DatabasePathResolver.ResolveSqlitePath())!;
-        }
-        catch (FileNotFoundException)
-        {
-            folder = SettingsService.SettingsFolder;
-        }
-        return AppDbOptions.ForSqliteFile(Path.Combine(folder, "spiga_suivi.db"));
     }
 
     private static IDbConnectionFactory BuildFactory(AppSettings settings)

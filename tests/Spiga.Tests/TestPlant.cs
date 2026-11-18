@@ -52,6 +52,10 @@ public sealed class TestApp : IDisposable
     }
 
     public FixedClock Clock { get; } = new(new DateTime(2026, 11, 17, 10, 0, 0));
+
+    // The same application database, as the dashboard's repositories see it.
+    public SpigaDashboards.App.Data.ConnectionStringFactory AppData
+        => new(SpigaDashboards.App.Models.DatabaseProvider.Sqlite, $"Data Source={_path}");
     public AppDb Db { get; }
     public UserStore Users { get; }
     public RoleStore Roles { get; }

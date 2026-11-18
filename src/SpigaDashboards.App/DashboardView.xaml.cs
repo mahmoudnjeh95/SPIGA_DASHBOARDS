@@ -15,6 +15,8 @@ public partial class DashboardView : UserControl
     private readonly SettingsService _settingsService;
     private readonly AppSettings _settings;
     private readonly SwitchableConnectionFactory _activeFactory;
+    // The application database (spiga_suivi): planning, note, machine names.
+    private readonly SwitchableConnectionFactory _appData;
     private readonly ProductionRepository _repository;
     private readonly SharedSettingsSync _sharedSettings;
     private TvWindow? _tvWindow;
@@ -25,6 +27,7 @@ public partial class DashboardView : UserControl
         SettingsService settingsService,
         AppSettings settings,
         SwitchableConnectionFactory activeFactory,
+        SwitchableConnectionFactory appData,
         ProductionRepository repository,
         SharedSettingsSync sharedSettings)
     {
@@ -33,6 +36,7 @@ public partial class DashboardView : UserControl
         _settingsService = settingsService;
         _settings = settings;
         _activeFactory = activeFactory;
+        _appData = appData;
         _repository = repository;
         _sharedSettings = sharedSettings;
 
@@ -88,11 +92,31 @@ public partial class DashboardView : UserControl
             PageRequested("parametres");
             return;
         }
-        var window = new SettingsWindow(await CreateSettingsViewModelAsync()) { Owner = OwnerWindow };
+        // Kiosk: an account covering the whole plant signs in for it.
+        var author = Author;
+        if (SettingsGate != null)
+        {
+            if (await SettingsGate(OwnerWindow) is not { } signedIn)
+                return;
+            author = signedIn;
+        }
+        var window = new SettingsWindow(await CreateSettingsViewModelAsync(author)) { Owner = OwnerWindow };
         window.ShowDialog();
     }
 
-    public async Task<SettingsViewModel> CreateSettingsViewModelAsync()
+    // Who writes the note and renames machines from this dashboard: the
+    // signed-in account (set by DesktopBridge), else the kiosk.
+    public ChangeAuthor Author
+    {
+        get => _viewModel.Author;
+        set => _viewModel.Author = value;
+    }
+
+    // Kiosk mode: asked before Paramètres open; the account that signed in,
+    // or null (cancelled, refused). Null: no gate (signed-in shell).
+    public Func<Window?, Task<ChangeAuthor?>>? SettingsGate { get; set; }
+
+    public async Task<SettingsViewModel> CreateSettingsViewModelAsync(ChangeAuthor? author = null)
     {
         // Edit the shared settings as the other PCs last saved them.
         await _sharedSettings.PullAsync();
@@ -100,7 +124,8 @@ public partial class DashboardView : UserControl
         // get here, see AllowSettings), never the dashboard's limited view, or
         // saving would lose the settings of the machines it does not list.
         return new SettingsViewModel(
-            _settingsService, _settings, _activeFactory, new ProductionRepository(_activeFactory, _settings), _sharedSettings,
+            _settingsService, _settings, _activeFactory, _appData, new ProductionRepository(_activeFactory, _appData, _settings), _sharedSettings,
+            author ?? Author,
             onApplied: () =>
             {
                 _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
@@ -112,7 +137,7 @@ public partial class DashboardView : UserControl
     // scope of the account's right for that page).
     public StopsViewModel CreateStopsViewModel(MachineAccess access, string? team, bool canExport)
     {
-        var stops = new StopsViewModel(new ProductionRepository(_activeFactory, _settings, access), new TeamScheduleService(_settings),
+        var stops = new StopsViewModel(new ProductionRepository(_activeFactory, _appData, _settings, access), new TeamScheduleService(_settings),
             _settings, _viewModel.CurrentRange);
         stops.LockTeam(team);
         stops.CanExport = canExport;
@@ -121,7 +146,7 @@ public partial class DashboardView : UserControl
 
     // canValidate: « Valider les interventions » (maintenance done).
     public PlanningViewModel CreatePlanningViewModel(MachineAccess access, bool canValidate)
-        => new(new PlanningContext(new ProductionRepository(_activeFactory, _settings, access), new PlanningRepository(_activeFactory, access),
+        => new(new PlanningContext(new ProductionRepository(_activeFactory, _appData, _settings, access), new PlanningRepository(_appData, _activeFactory, access),
             _settings, _settingsService, new TeamScheduleService(_settings)) { CanValidate = canValidate });
 
     // The machines this dashboard shows (and its Historique, Arrêts).
@@ -146,7 +171,7 @@ public partial class DashboardView : UserControl
         // Its own deck, not this window's: filters set here stay off the TV.
         // The hall screen shows the station's machines, whoever opened it
         // (only accounts covering the whole plant may, see AllowTv).
-        var tvViewModel = new MainViewModel(new ProductionRepository(_activeFactory, _settings), _settings,
+        var tvViewModel = new MainViewModel(new ProductionRepository(_activeFactory, _appData, _settings), _settings,
             new TeamScheduleService(_settings), _sharedSettings);
         _tvWindow = new TvWindow(tvViewModel, _settings, _settingsService) { ShowActivated = activate };
         _tvWindow.Closed += (_, _) => _tvWindow = null;

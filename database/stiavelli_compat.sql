@@ -4,8 +4,11 @@
 
    Adds what the dashboard needs next to the real Stiavelli tables WITHOUT
    touching the Stiavelli data:
-     - Real, writable tables for what the app writes or the Stiavelli DB
-       doesn't store: Machines, Shifts, Employees, Products, Notes
+     - Reference tables the Stiavelli DB doesn't store, read by the
+       dashboard's queries: Machines, Shifts, Employees, Products
+       (+ Notes, used by versions up to 2.0 only: from 2.1 the application
+       writes nothing here -- note, machine names, planning and shared
+       settings are in the application database, see spiga_suivi.sql)
        (+ MachineStatusLog, kept for older installs / the optional collector)
      - An index on dbo.produzione for the dashboard's time-range reads
      - An index on dbo.lotto (if present) for the weight reads
@@ -151,7 +154,9 @@ CREATE TABLE dbo.MachineStatusLog (
 );
 GO
 
-/* ---------- Notes (real table; dashboard-only) --------------------------- */
+/* ---------- Notes (versions up to 2.0 only) -----------------------------
+   From 2.1 the note is in the application database; this table is kept for
+   PCs not updated yet, and copied once by the first 2.1 PC to start. */
 IF OBJECT_ID('dbo.Notes','U') IS NULL
 CREATE TABLE dbo.Notes (
     NoteId              INT IDENTITY(1,1) PRIMARY KEY,
@@ -207,8 +212,10 @@ GO
 
 /* ---------- Optional: dedicated SQL login for the dashboard ----------------
    Uncomment and run once (as an admin) to create the login entered in
-   Parametres > Login SQL. Reads everything, writes only the Notes and
-   Machines tables (sticky note + machine display names).
+   Parametres > Login SQL. From version 2.1 it only reads this database
+   (once every PC runs 2.1, the two GRANT lines can be removed; the old
+   Plan* / AppSharedSettings / Notes tables, already copied to spiga_suivi,
+   can then be dropped).
 
 USE master;
 CREATE LOGIN spiga_dashboard WITH PASSWORD = 'ChangeMe!2026', CHECK_POLICY = OFF;

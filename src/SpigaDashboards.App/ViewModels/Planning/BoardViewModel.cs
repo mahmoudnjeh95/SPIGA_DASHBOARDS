@@ -1011,7 +1011,7 @@ public partial class BoardViewModel : ObservableObject
         FormTitle = "Nouvel ordre de fabrication";
         try
         {
-            OrderNo = $"OF-{DateTime.Now:yyyy}-{await _ctx.Planning.CountOrdersAsync() + 1:0000}";
+            OrderNo = await _ctx.Planning.NextOrderNoAsync();
         }
         catch (Exception ex)
         {
@@ -1213,7 +1213,8 @@ public partial class BoardViewModel : ObservableObject
             return;
         }
         var o = _editingOrder ?? new ProductionOrder();
-        o.OrderNo = OrderNo.Trim();
+        var proposed = OrderNo.Trim();
+        o.OrderNo = proposed;
         o.MachineId = machine.MachineId;
         o.Product = OrderProduct.Trim();
         o.TargetWeightGrams = ParseNumber(OrderWeight);
@@ -1226,6 +1227,8 @@ public partial class BoardViewModel : ObservableObject
             AppLogger.Log($"OF enregistré : {o.OrderNo} {o.MachineId} {o.PlannedStart:g}");
             Editor = EditorMode.None;
             await GoToAsync(o.PlannedStart, "O" + o.Id);
+            if (o.OrderNo != proposed)
+                StatusMessage = $"Le numéro {proposed} a été pris entre-temps par un autre poste : l'ordre a reçu le numéro {o.OrderNo}.";
         }
         catch (Exception ex)
         {

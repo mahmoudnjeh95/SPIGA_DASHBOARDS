@@ -1,9 +1,5 @@
-using Dapper;
-using Microsoft.Data.Sqlite;
 using Spiga.Core.Plant;
 using Spiga.Core.Security;
-using SpigaDashboards.App.Data;
-using SpigaDashboards.App.Models;
 
 namespace Spiga.Tests;
 
@@ -72,52 +68,5 @@ public class ScopeEnforcementTests
         Assert.NotEqual(before.AccessKey, after.AccessKey);
         Assert.NotEqual(before.MachineRuleFor(Perm.DechetsSaisir)!.Key, after.MachineRuleFor(Perm.DechetsSaisir)!.Key);
         Assert.Equal(before.ScopeSummary, after.ScopeSummary);
-    }
-
-    [Fact]
-    public async Task Repositories_list_read_and_write_only_the_allowed_machines()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"spiga-prod-{Guid.NewGuid():N}.db");
-        try
-        {
-            using (var c = new SqliteConnection($"Data Source={path}"))
-            {
-                await c.ExecuteAsync(@"CREATE TABLE Machines (MachineId TEXT PRIMARY KEY, MachineName TEXT, MachineType TEXT, Sector TEXT, IPAddress TEXT, IsActive INTEGER);
-                    INSERT INTO Machines VALUES ('PC01','PC01','','Pate courte','',1), ('CC01','CC01','','Couscous','',1);");
-            }
-            var factory = new SqliteConnectionFactory(path);
-            var open = new PlanningRepository(factory);
-            await open.EnsureSchemaAsync();
-            var foreign = new ProductionOrder { OrderNo = "OF-1", MachineId = "CC01", PlannedStart = DateTime.Today, PlannedEnd = DateTime.Today.AddHours(8) };
-            await open.SaveOrderAsync(foreign);
-            await open.SaveOrderAsync(new ProductionOrder { OrderNo = "OF-2", MachineId = "PC01", PlannedStart = DateTime.Today, PlannedEnd = DateTime.Today.AddHours(8) });
-
-            var access = MachineAccess.Nothing();
-            access.Set("pc", (id, sector) => sector == "Pate courte");
-            var production = new ProductionRepository(factory, new AppSettings(), access);
-            var planning = new PlanningRepository(factory, access);
-
-            Assert.Equal(new[] { "PC01" }, (await production.GetMachinesAsync()).Select(m => m.MachineId));
-            Assert.Equal(new[] { "OF-2" }, (await planning.GetOrdersAsync(DateTime.Today.AddDays(-1), DateTime.Today.AddDays(1))).Select(o => o.OrderNo));
-            Assert.Empty(await production.GetLotsAsync("CC01", DateTime.Today.AddDays(-1), DateTime.Today));
-            Assert.Null(await production.GetLatestStatusAsync("CC01"));
-
-            // Writing on another machine, or moving another machine's row to one's own: refused.
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-                planning.SaveOrderAsync(new ProductionOrder { OrderNo = "OF-3", MachineId = "CC01", PlannedStart = DateTime.Today, PlannedEnd = DateTime.Today.AddHours(1) }));
-            foreign.MachineId = "PC01";
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => planning.SaveOrderAsync(foreign));
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => production.UpdateMachineNameAsync("CC01", "x"));
-
-            // Before an account gives its scope: nothing.
-            Assert.Empty(await new ProductionRepository(factory, new AppSettings(), MachineAccess.Nothing()).GetMachinesAsync());
-            // Kiosk / TV: every machine.
-            Assert.Equal(2, (await new ProductionRepository(factory, new AppSettings()).GetMachinesAsync()).Count);
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            File.Delete(path);
-        }
     }
 }

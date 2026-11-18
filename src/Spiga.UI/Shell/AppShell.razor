@@ -79,8 +79,16 @@
     // The last Razor screen, where "Fermer" on a WPF page comes back to.
     private string _lastWebRoute = "";
 
+    // Rights are read again this often even when the user stays on one
+    // screen (a dashboard left open on a PC): a role, platform or account
+    // changed by an administrator applies within this time.
+    private static readonly TimeSpan RightsRecheck = TimeSpan.FromSeconds(60);
+    private Timer? _rightsTimer;
+    private bool _recheckingRights;
+
     protected override void OnInitialized()
     {
+        _rightsTimer = new Timer(_ => _ = InvokeAsync(RecheckRightsAsync), null, RightsRecheck, RightsRecheck);
         Nav.LocationChanged += OnLocationChanged;
         Session.Changed += OnSessionChanged;
         Desktop.UserActivity += Session.Touch;
@@ -177,8 +185,30 @@
 
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
 
+    private async Task RecheckRightsAsync()
+    {
+        if (_recheckingRights)
+            return;
+        _recheckingRights = true;
+        try
+        {
+            // Changed rights re-render the shell, which hands them to the
+            // Windows pages (ShowNative); a disabled account is signed out.
+            await Session.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Relecture périodique des droits impossible : " + ex.Message);
+        }
+        finally
+        {
+            _recheckingRights = false;
+        }
+    }
+
     public void Dispose()
     {
+        _rightsTimer?.Dispose();
         Nav.LocationChanged -= OnLocationChanged;
         Session.Changed -= OnSessionChanged;
         Desktop.UserActivity -= Session.Touch;

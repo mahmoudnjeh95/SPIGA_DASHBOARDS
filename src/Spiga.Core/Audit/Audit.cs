@@ -43,6 +43,9 @@ public static class AuditActions
     public const string PlatformCreated = "Plateforme créée";
     public const string PlatformUpdated = "Plateforme modifiée";
     public const string PlatformDeleted = "Plateforme supprimée";
+    // Written by the dashboard (SpigaDashboards.Production, AuditRows).
+    public const string NoteUpdated = "Note du tableau de bord modifiée";
+    public const string MachineRenamed = "Machine renommée";
     public const string PolicyUpdated = "Règles de sécurité modifiées";
     public const string SetupDone = "Installation : premier administrateur";
     public const string EntryCreated = "Saisie créée";

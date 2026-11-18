@@ -1,6 +1,6 @@
 @page "/admin/audit"
 @inherits SpigaPage
-@inject IAuditLog Audit
+@inject AuditTrailService Audit
 
 @* The trail has no machine or team to filter on (accounts, rights,
    entries of every line): plant-wide accounts only. *@
@@ -30,6 +30,8 @@
                 <option value="">Tous</option>
                 <option value="@Modules.Utilisateurs">Comptes et droits</option>
                 <option value="@Modules.SaisieDechets">Saisie des déchets</option>
+                <option value="@Modules.Conditionnement">Note du tableau de bord</option>
+                <option value="@Modules.Parametres">Paramètres du poste (noms des machines)</option>
             </select>
         </div>
     </div>
@@ -87,10 +89,10 @@
 
     private async Task LoadAsync()
     {
-        if (Session.Actor?.CanUnrestricted(Perm.View(Modules.Audit)) != true)
+        if (!AuditTrailService.CanRead(Session.Actor))
             return;
         var (from, to) = _period.Range(Now);
-        _entries = await Audit.QueryAsync(new AuditQuery(from, to, NullIfEmpty(_user), NullIfEmpty(_module), Limit));
+        _entries = await Audit.QueryAsync(Actor, new AuditQuery(from, to, NullIfEmpty(_user), NullIfEmpty(_module), Limit));
         _knownUsers = _knownUsers.Union(_entries.Select(e => e.UserLogin)).Distinct().OrderBy(u => u).ToList();
     }
 

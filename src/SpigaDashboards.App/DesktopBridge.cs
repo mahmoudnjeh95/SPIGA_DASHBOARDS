@@ -92,7 +92,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
     public void OpenTvScreen() => OnUi(() => Dashboard().OpenTvScreen());
 
     private static string KeyOf(NativeAccess a)
-        => $"{a.MachinesKey}|{a.Team}|{a.CanExport}|{a.CanValidate}|{a.CanSettings}|{a.CanTv}";
+        => $"{a.UserLogin}|{a.MachinesKey}|{a.Team}|{a.CanExport}|{a.CanValidate}|{a.CanSettings}|{a.CanTv}";
 
     private static void Apply(DashboardView dashboard, NativeAccess a)
     {
@@ -100,6 +100,7 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
         dashboard.AllowSettings(a.CanSettings);
         dashboard.AllowTv(a.CanTv);
         dashboard.AllowExport(a.CanExport);
+        dashboard.Author = a.UserLogin.Length > 0 ? ChangeAuthor.Account(a.UserLogin, a.UserName) : ChangeAuthor.Kiosk;
         dashboard.LockTeam(a.Team);
     }
 
@@ -180,7 +181,8 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
                     // covering the whole plant (NativePages.IsAllowed).
                     if (!_access.CanSettings)
                         return null;
-                    var settings = new SettingsView(await Dashboard().CreateSettingsViewModelAsync());
+                    var settings = new SettingsView(await Dashboard().CreateSettingsViewModelAsync(
+                        ChangeAuthor.Account(_access.UserLogin, _access.UserName)));
                     settings.CloseRequested += () => Close(page);
                     view = settings;
                     break;

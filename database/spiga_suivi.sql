@@ -1,8 +1,13 @@
--- SPIGA Suivi Production: application database (accounts, roles, waste
--- entries, audit trail, settings). Run once on the site's SQL Server by IT.
+-- SPIGA Suivi Production: application database (accounts, roles,
+-- platforms, waste entries, audit trail, settings, and from version 2.1 the
+-- planning of the stops, the dashboard's note and machine names, and the
+-- settings shared by the PCs). Run once on the site's SQL Server by IT.
 --
 -- The production database "stats" (Stiavelli) is never written to: the
--- application only reads it (cahier des charges §16).
+-- application only reads it (cahier des charges §16). What versions up to
+-- 2.0 wrote in stats is copied here once, by the first PC started on 2.1;
+-- update every PC together (a PC left on 2.0 keeps writing in stats, unseen
+-- by the others). Every PC, kiosk / TV ones included, needs this database.
 --
 -- The tables themselves are created by the application at its first start
 -- (src/Spiga.Data/Migrations), and upgraded the same way by later versions,

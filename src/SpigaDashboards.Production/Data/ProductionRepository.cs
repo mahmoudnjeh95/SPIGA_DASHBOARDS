@@ -76,7 +76,10 @@ public class ProductionRepository
     // production's previous snapshot past duplicates and stray rows.
     private const int StatusRows = 60;
 
+    // The production database ("stats"): only read.
     private readonly IDbConnectionFactory _connectionFactory;
+    // The application database (spiga_suivi): planning, note, machine names.
+    private readonly IDbConnectionFactory _appData;
     private readonly AppSettings _settings;
 
     // Planned stops (maintenance slots, "Planifié" stops) left out of the TRS.
@@ -86,16 +89,19 @@ public class ProductionRepository
     // The SQLite dev DB has none: weights then come from media_totale.
     private bool? _hasLotTable;
 
-    // access: the machines the signed-in account may see (SPIGA Suivi
-    // Production); every machine when not given (kiosk, TV screen, services
-    // that filter themselves).
-    public ProductionRepository(IDbConnectionFactory connectionFactory, AppSettings settings, MachineAccess? access = null)
+    // live: the production database ("stats"), never written. appData: the
+    // application database (spiga_suivi), where everything the dashboard
+    // writes goes. access: the machines the signed-in account may see (SPIGA
+    // Suivi Production); every machine when not given (kiosk, TV screen,
+    // services that filter themselves).
+    public ProductionRepository(IDbConnectionFactory live, IDbConnectionFactory appData, AppSettings settings, MachineAccess? access = null)
     {
-        _connectionFactory = connectionFactory;
+        _connectionFactory = live;
+        _appData = appData;
         _settings = settings;
         // Planned stops count in every machine's TRS: read unrestricted, then
         // filtered on the way out.
-        _planning = new PlanningRepository(connectionFactory);
+        _planning = new PlanningRepository(appData, live);
         Access = access ?? MachineAccess.Everything();
     }
 
@@ -118,6 +124,7 @@ public class ProductionRepository
         var machines = (await connection.QueryAsync<Machine>(
             "SELECT MachineId, MachineName, MachineType, Sector, IPAddress, IsActive FROM Machines ORDER BY MachineId")).ToList();
         Access.Remember(machines);
+        await ApplyDisplayNamesAsync(machines);
         return machines.Where(m => Access.Allows(m.MachineId, m.Sector)).ToList();
     }
 
@@ -1025,38 +1032,94 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
             => provider == DatabaseProvider.SqlServer ? SqlServer : Sqlite;
     }
 
+    // ---- Application data: sticky note, machine names (spiga_suivi) ----
+
+    // Throws when the application database cannot be read: the caller keeps
+    // what it shows.
     public async Task<NoteEntry?> GetActiveNoteAsync()
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = _appData.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<NoteEntry>(
-            @"SELECT NoteId, Content, CreatedByEmployeeId, CreatedAt, IsActive FROM Notes
-              WHERE IsActive = 1 AND CreatedAt = (SELECT MAX(CreatedAt) FROM Notes WHERE IsActive = 1)");
+            @"SELECT NoteId, Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive FROM Notes
+              WHERE IsActive = 1 ORDER BY CreatedAt DESC, NoteId DESC");
     }
 
-    public async Task SetActiveNoteAsync(string content)
+    // The new note replaces the previous one; who wrote it, and the change,
+    // go to the audit trail in the same transaction.
+    public async Task SetActiveNoteAsync(string content, ChangeAuthor author)
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = _appData.CreateConnection();
         connection.Open();
         using var transaction = connection.BeginTransaction();
 
-        var employeeId = await connection.ExecuteScalarAsync<int?>(
-            "SELECT MIN(EmployeeId) FROM Employees", transaction: transaction) ?? 1;
-
+        var previous = await connection.QueryFirstOrDefaultAsync<string?>(
+            "SELECT Content FROM Notes WHERE IsActive = 1 ORDER BY CreatedAt DESC, NoteId DESC", transaction: transaction);
+        if (previous == content)
+            return;
         await connection.ExecuteAsync("UPDATE Notes SET IsActive = 0 WHERE IsActive = 1", transaction: transaction);
         await connection.ExecuteAsync(
-            @"INSERT INTO Notes (Content, CreatedByEmployeeId, CreatedAt, IsActive)
-              VALUES (@content, @employeeId, @createdAt, 1)",
-            new { content, employeeId, createdAt = DateTime.Now }, transaction: transaction);
-
+            @"INSERT INTO Notes (Content, CreatedBy, CreatedByName, Workstation, CreatedAt, IsActive)
+              VALUES (@content, @login, @name, @workstation, @createdAt, 1)",
+            new { content, login = author.Login, name = author.Name, workstation = author.Workstation, createdAt = DateTime.Now },
+            transaction);
+        await AuditRows.WriteAsync(connection, transaction, author, AuditRows.ModuleConditionnement, AuditRows.NoteUpdated,
+            "Note du tableau de bord", previous, content);
         transaction.Commit();
     }
 
-    public async Task UpdateMachineNameAsync(string machineId, string machineName)
+    // The name shown for a machine (Paramètres): kept in the application
+    // database over stats.Machines, which is never written. Audited.
+    public async Task UpdateMachineNameAsync(string machineId, string machineName, ChangeAuthor author)
     {
         await Access.DemandAsync(_connectionFactory, machineId);
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
-            "UPDATE Machines SET MachineName = @machineName WHERE MachineId = @machineId",
-            new { machineId, machineName });
+        machineName = (machineName ?? "").Trim();
+        if (machineName.Length == 0)
+            throw new ArgumentException("Le nom de la machine ne peut pas être vide.", nameof(machineName));
+
+        string? statsName;
+        using (var live = _connectionFactory.CreateConnection())
+            statsName = await live.ExecuteScalarAsync<string?>("SELECT MachineName FROM Machines WHERE MachineId = @machineId", new { machineId });
+
+        using var connection = _appData.CreateConnection();
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        var previous = await connection.ExecuteScalarAsync<string?>(
+            "SELECT Name FROM MachineDisplayNames WHERE MachineId = @machineId", new { machineId }, transaction) ?? statsName;
+        if (previous == machineName)
+            return;
+        var args = new { machineId, machineName, now = DateTime.Now, login = author.Login };
+        var updated = await connection.ExecuteAsync(
+            "UPDATE MachineDisplayNames SET Name = @machineName, UpdatedAt = @now, UpdatedBy = @login WHERE MachineId = @machineId",
+            args, transaction);
+        if (updated == 0)
+            await connection.ExecuteAsync(
+                "INSERT INTO MachineDisplayNames (MachineId, Name, UpdatedAt, UpdatedBy) VALUES (@machineId, @machineName, @now, @login)",
+                args, transaction);
+        await AuditRows.WriteAsync(connection, transaction, author, AuditRows.ModuleParametres, AuditRows.MachineRenamed,
+            machineId, previous, machineName);
+        transaction.Commit();
+    }
+
+    private static int _displayNameFailures;
+
+    // The application database unreachable: the names of stats.Machines
+    // (logged once, the dashboard carries on).
+    private async Task ApplyDisplayNamesAsync(List<Machine> machines)
+    {
+        try
+        {
+            using var connection = _appData.CreateConnection();
+            var names = (await connection.QueryAsync<(string MachineId, string Name)>("SELECT MachineId, Name FROM MachineDisplayNames"))
+                .ToDictionary(n => n.MachineId, n => n.Name, StringComparer.OrdinalIgnoreCase);
+            foreach (var machine in machines)
+                if (names.TryGetValue(machine.MachineId, out var name))
+                    machine.MachineName = name;
+            _displayNameFailures = 0;
+        }
+        catch (Exception ex)
+        {
+            if (Interlocked.Increment(ref _displayNameFailures) == 1)
+                AppLogger.Log("Noms des machines (base applicative) illisibles, noms de la base de production affichés : " + ex.Message);
+        }
     }
 }

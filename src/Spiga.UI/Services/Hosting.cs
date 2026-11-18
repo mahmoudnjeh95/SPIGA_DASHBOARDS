@@ -71,6 +71,8 @@ public static class NativePages
         var export = ExportPermission(page);
         var validate = PermissionCatalog.Key(Modules.Maintenance, AppAction.Valider);
         return new NativeAccess(
+            actor.Login,
+            actor.DisplayName,
             actor.Team,
             actor.MachineRuleFor(permission),
             CanExport: export != null && actor.Covers(export, permission),
@@ -82,10 +84,11 @@ public static class NativePages
 
 // The rights of the signed-in account in one WPF page. Team: its one team
 // (null = several or all). Machines: those it may see there (null = all).
-public sealed record NativeAccess(string? Team, MachineRule? Machines, bool CanExport, bool CanValidate, bool CanSettings, bool CanTv)
+public sealed record NativeAccess(
+    string UserLogin, string UserName, string? Team, MachineRule? Machines, bool CanExport, bool CanValidate, bool CanSettings, bool CanTv)
 {
     // No account (signed out, locked): nothing.
-    public static NativeAccess None { get; } = new(null, new MachineRule("-", (_, _) => false), false, false, false, false);
+    public static NativeAccess None { get; } = new("", "", null, new MachineRule("-", (_, _) => false), false, false, false, false);
 
     // Changes whenever the machines may have changed.
     public string MachinesKey => Machines?.Key ?? "*";
@@ -152,6 +155,30 @@ public sealed class NoDesktop : IDesktopBridge
     public event Action<NativePage>? NavigateRequested { add { } remove { } }
 }
 
+// The application database (spiga_suivi) as a connection factory for the
+// production-side repositories (planning, shared settings, note, machine
+// names), which moved there from "stats" in version 4.
+public static class AppData
+{
+    public static ConnectionStringFactory ConnectionFor(AppDbOptions options)
+        => new(options.Provider == AppDbProvider.SqlServer ? DatabaseProvider.SqlServer : DatabaseProvider.Sqlite, options.ConnectionString);
+
+    // At start-up, after the migrations: copies once what older versions
+    // wrote in stats (LegacyDataImporter). Never stops the start-up.
+    public static async Task ImportLegacyAsync(IDbConnectionFactory production, AppDbOptions options)
+    {
+        try
+        {
+            foreach (var line in await new LegacyDataImporter(production, ConnectionFor(options)).ImportAsync())
+                AppLogger.Log("Reprise des données de la base de production : " + line);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Reprise des données de la base de production impossible pour l'instant (nouvel essai au prochain démarrage) : " + ex.Message);
+        }
+    }
+}
+
 public static class SpigaServices
 {
     // Everything the screens need. The host gives the application database,
@@ -173,7 +200,8 @@ public static class SpigaServices
 
         services.AddSingleton(productionSettings);
         services.AddSingleton(production);
-        services.AddSingleton(sp => new ProductionRepository(production, productionSettings));
+        // stats is only read; what the screens write goes to the application database.
+        services.AddSingleton(sp => new ProductionRepository(production, AppData.ConnectionFor(appDb), productionSettings));
         services.AddSingleton(sp => new TeamScheduleService(productionSettings));
         services.AddSingleton<PlantData>();
         services.AddSingleton<IPlantReferential>(sp => sp.GetRequiredService<PlantData>());
@@ -181,6 +209,7 @@ public static class SpigaServices
         services.AddScoped<ClientInfo>();
         services.AddScoped<AuthService>();
         services.AddScoped<AccessAdminService>();
+        services.AddScoped<AuditTrailService>();
         services.AddScoped<WasteService>();
         services.AddScoped<UserSession>();
         services.AddScoped<DashboardQueries>();

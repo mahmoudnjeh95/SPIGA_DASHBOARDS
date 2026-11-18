@@ -206,10 +206,19 @@ public sealed partial class AccessAdminService(
 
     // ---------- users ----------
 
+    // Every account for a manager of roles or a right over the whole plant;
+    // a delegated manager sees its own account and those having a role inside
+    // its scope (where it holds « Consulter comptes et rôles »), not the
+    // others' accounts, roles and scopes.
     public async Task<IReadOnlyList<AppUser>> ListUsersAsync(Actor actor)
     {
-        actor.Demand(Perm.View(Modules.Utilisateurs));
-        return await users.ListAsync();
+        var view = Perm.View(Modules.Utilisateurs);
+        actor.Demand(view);
+        var all = await users.ListAsync();
+        if (actor.Can(Perm.RolesGerer) || actor.CanUnrestricted(view))
+            return all;
+        var mine = actor.Grants.Where(g => g.Role.EffectivePermissions.Has(view)).Select(g => g.Scope).ToList();
+        return all.Where(u => u.Id == actor.User.Id || u.Assignments.Any(a => mine.Any(a.Scope.IsWithin))).ToList();
     }
 
     // The roles this actor may give.
