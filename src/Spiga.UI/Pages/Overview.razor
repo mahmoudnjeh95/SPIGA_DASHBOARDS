@@ -141,6 +141,9 @@
         _period = DateTime.TryParse(DateParam, CultureInfo.InvariantCulture, out var d)
             ? new Period(PeriodKind.Custom, d, d)
             : Ui.OverviewPeriod ?? Period.Today(Now);
+        // Show the page and its loader first: the production queries can
+        // take seconds and would otherwise keep the login screen frozen.
+        await Task.Yield();
         await LoadAsync();
     }
 
@@ -236,7 +239,7 @@
 
         var pending = await Waste.PendingValidationCountAsync(Actor, from, to.AddDays(-1));
         if (pending > 0)
-            alerts.Add(new("warn", $"{pending} saisie(s) de déchets à valider", "Saisie · brouillons de la période dans votre périmètre",
+            alerts.Add(new("warn", $"{pending} saisie(s) de déchets à valider", "Saisies non validées de la période, dans votre périmètre",
                 "saisie/a-valider", "Valider"));
 
         if (Session.Can(Modules.SaisieDechets, AppAction.Saisir))

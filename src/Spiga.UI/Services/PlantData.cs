@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Spiga.Core.Plant;
 using Spiga.Core.Security;
 using SpigaDashboards.App.Data;
@@ -23,6 +24,12 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
 {
     private IReadOnlyList<PlantMachine>? _machines;
     private DateTime _machinesLoadedAt;
+
+    // Lots read from stats, kept a few seconds: the overview, Mon poste and
+    // Conditionnement ask for the same machines and period one after the
+    // other (and several sessions at once); the query is the slow part.
+    private static readonly TimeSpan LotsLifetime = TimeSpan.FromSeconds(20);
+    private readonly ConcurrentDictionary<string, (DateTime At, Task<List<ProductionBucket>> Lots)> _lots = new();
 
     public AppSettings Settings => settings;
 
@@ -100,11 +107,36 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
         Actor actor, string permission, IReadOnlyCollection<PlantMachine> machines, DateTime from, DateTime to, int? shiftId)
     {
         var sectorOf = machines.ToDictionary(m => m.Id, m => m.Sector);
-        var lots = await repository.GetLotsForMachinesAsync(machines.Select(m => m.Id).ToList(), from, to);
+        var lots = await SharedLotsAsync(machines.Select(m => m.Id).OrderBy(id => id, StringComparer.Ordinal).ToList(), from, to);
         return lots
             .Where(l => shiftId == null || l.ShiftId == shiftId)
             .Where(l => sectorOf.TryGetValue(l.MachineId, out var sector) && actor.Allows(permission, sector, l.MachineId, teams.TeamOf(l)))
             .ToList();
+    }
+
+    private async Task<List<ProductionBucket>> SharedLotsAsync(List<string> machineIds, DateTime from, DateTime to)
+    {
+        var now = Now;
+        var key = $"{string.Join(",", machineIds)}|{from:O}|{to:O}";
+        if (_lots.Count > 64)
+            foreach (var old in _lots.Where(e => now - e.Value.At >= LotsLifetime).ToList())
+                _lots.TryRemove(old);
+        // Started on the thread pool, not on the asking session's Blazor
+        // context: other sessions await the same task and must not wait
+        // behind that session's work (or for a session that has closed).
+        Task<List<ProductionBucket>> Query() => Task.Run(() => repository.GetLotsForMachinesAsync(machineIds, from, to));
+        var entry = _lots.AddOrUpdate(key,
+            _ => (now, Query()),
+            (_, cached) => now - cached.At < LotsLifetime && !cached.Lots.IsFaulted ? cached : (now, Query()));
+        try
+        {
+            return await entry.Lots;
+        }
+        catch
+        {
+            _lots.TryRemove(new KeyValuePair<string, (DateTime, Task<List<ProductionBucket>>)>(key, entry));
+            throw;
+        }
     }
 
     public MachineFigures Figures(PlantMachine machine, IReadOnlyCollection<ProductionBucket> lots)

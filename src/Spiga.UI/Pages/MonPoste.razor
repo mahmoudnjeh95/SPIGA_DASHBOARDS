@@ -65,6 +65,9 @@
                         </div>
                         <span class="lc-state"><span class="lc-dot"></span>@StateText(m)</span>
                     </div>
+                    @* Always one slot for the stop, empty while running: the cards of a
+                       row share their rows (CSS subgrid), so a stop banner in one card
+                       keeps the pictures and figures of its neighbours aligned. *@
                     @if (m.Stop is { } stop)
                     {
                         <div class="lc-stop">
@@ -72,12 +75,16 @@
                             <small>@stop.CauseText</small>
                         </div>
                     }
+                    else
+                    {
+                        <div class="lc-stop is-empty" aria-hidden="true"></div>
+                    }
                     <div class="lc-visual">
                         <RunStateArt State="@StateCss(m)" Label="@StateText(m)" />
                         <div class="lc-product">
                             @if (Artwork.Product(m.Machine.Sector) is { } productArt)
                             {
-                                <span class="lc-product-art has-file"><img src="@productArt" alt="" width="56" height="56" draggable="false" onerror="this.parentNode.classList.remove('has-file');this.remove()" /><PastaTrio Class="lc-pasta" /></span>
+                                <span class="lc-product-art has-file"><img src="@productArt" alt="" width="72" height="72" draggable="false" onerror="this.parentNode.classList.remove('has-file');this.remove()" /><PastaTrio Class="lc-pasta" /></span>
                             }
                             else
                             {
@@ -111,7 +118,9 @@
                             }
                         </span>
                     </div>
-                    <button type="button" class="bar acc lc-go" @onclick="() => OpenQuick(m.Machine)" disabled="@(!CanEnterNow)">
+                    @* A validator (chef, responsable) mostly checks the others' entries:
+                       a quieter button there, the big one for the operators. *@
+                    <button type="button" class="bar lc-go @(Session.Can(Perm.DechetsValider) ? "compact" : "acc")" @onclick="() => OpenQuick(m.Machine)" disabled="@(!CanEnterNow)">
                         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>Déclarer un déchet
                     </button>
                 </section>

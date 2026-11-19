@@ -779,7 +779,7 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .poste-progress .pp-label { position: relative; font-size: 12px; font-weight: 700; color: var(--fg2); }
 
 .live-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
-.live-card { display: flex; flex-direction: column; gap: 12px; border-top: 4px solid var(--off, #94A3B8); --st: #94A3B8; transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+.live-card { display: grid; grid-template-rows: subgrid; grid-row: span 6; row-gap: 0; align-content: start; border-top: 4px solid var(--off, #94A3B8); --st: #94A3B8; transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
 .live-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 .live-card.is-run { --st: var(--ok); border-top-color: var(--ok); }
 .live-card.is-stop { --st: var(--warn); border-top-color: var(--warn); }
@@ -793,6 +793,13 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .lc-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--st); position: relative; }
 .is-run .lc-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--st); animation: sp-ping 1.4s ease-out infinite; }
 .is-panne .lc-dot, .is-stop .lc-dot { animation: sp-blink 1s steps(2) infinite; }
+/* Cards of a grid row share their 6 rows (subgrid): head, stop, visual,
+   stats, waste, button. Spacing by margins, so an
+   empty stop slot adds no gap. */
+.live-card > * { margin-top: 12px; }
+.live-card > :first-child, .live-card > .lc-stop.is-empty { margin-top: 0; }
+.live-card > .lc-go { align-self: end; }
+.lc-stop.is-empty { padding: 0; border: 0; background: none; }
 .lc-stop { background: color-mix(in srgb, var(--st) 10%, transparent); border-left: 4px solid var(--st); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
 .lc-stop b { color: var(--st); }
 .lc-stop small { display: block; color: var(--fg2); }
@@ -804,7 +811,7 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .lc-visual { display: flex; align-items: center; gap: 14px; }
 .lc-visual .lc-product { flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 .lc-product-art { display: inline-flex; flex: none; }
-.lc-product-art img { width: 56px; height: 56px; display: block; object-fit: contain; }
+.lc-product-art img { width: 72px; height: 72px; display: block; object-fit: contain; }
 .lc-product-art.has-file .lc-pasta { display: none; }
 .is-off .lc-product-art img, .is-done .lc-product-art img, .is-panne .lc-product-art img, .is-stop .lc-product-art img { filter: grayscale(1); opacity: .55; }
 
@@ -857,6 +864,7 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .lc-bin { width: 30px; height: 30px; border-radius: 9px; display: inline-grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
 .lc-bin svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .lc-go { min-height: 52px; font-size: 17px; justify-content: center; width: 100%; }
+.lc-go.compact { min-height: 40px; font-size: 14px; }
 
 /* Quick entry sheet */
 .sheet-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, .5); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: sp-fade .25s ease both; }
