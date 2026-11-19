@@ -32,3 +32,6 @@ tools/*capture*.log
 tools/ricciarelli_info_*.log
 tools/data_collector_console.log
 tools/data/
+
+# Python bytecode (database/*.py)
+__pycache__/
