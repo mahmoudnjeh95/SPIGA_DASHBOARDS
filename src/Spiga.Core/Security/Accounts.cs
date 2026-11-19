@@ -122,6 +122,14 @@ public sealed class Actor
                            && (machineId == null || g.Scope.AllowsMachine(machineId, sector))
                            && (team == null || g.Scope.AllowsTeam(team)));
 
+    // The permission over the whole sector: a grant on that sector that is not
+    // narrowed to some machines (data entered per sector, not per machine).
+    public bool AllowsSectorWide(string permission, string sector, string? team = null)
+        => Grants.Any(g => g.Role.EffectivePermissions.Has(permission)
+                           && g.Scope.AllowsSector(sector)
+                           && g.Scope.Machines.Count == 0
+                           && (team == null || g.Scope.AllowsTeam(team)));
+
     public bool AllowsAny(IEnumerable<string> permissions, string sector, string? machineId = null, string? team = null)
         => permissions.Any(p => Allows(p, sector, machineId, team));
 

@@ -34,17 +34,18 @@ public static class RoleTemplates
             .Concat(new[]
             {
                 Perm.EquipesMultiples, "vue-ensemble:exporter", "conditionnement:exporter", Perm.TableauDetaille, Perm.EcranTv, Perm.NoteEcran, "rendement:exporter", "dechets:exporter",
-                Perm.DechetsSaisir, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsAutrui, Perm.DechetsTardif,
+                Perm.DechetsSaisir, Perm.DechetsProduit, Perm.DechetsAutresPostes, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsAutrui, Perm.DechetsTardif,
                 "saisie-quantites:saisir", "saisie-quantites:valider", "objectifs:saisir", Perm.ComptesGerer, Perm.ComptesDebloquer,
             }).ToArray(),
             new[] { "chef-equipe", "operateur" }),
-        new("chef-equipe", "Chef d'équipe", "Suivi de son équipe, saisie et validation des déchets.",
+        new("chef-equipe", "Chef d'équipe", "Suivi de son équipe, saisie, validation et renvoi des déchets.",
             Views(Modules.VueEnsemble, Modules.Conditionnement, Modules.Rendement, Modules.Silos, Modules.Dechets)
-            .Concat(new[] { Perm.TableauDetaille, "conditionnement:exporter", Perm.DechetsSaisir, Perm.DechetsValider, Perm.DechetsAutrui, "saisie-quantites:saisir" })
+            .Concat(new[] { Perm.TableauDetaille, "conditionnement:exporter", Perm.DechetsSaisir, Perm.DechetsProduit, Perm.DechetsAutresPostes,
+                Perm.DechetsValider, Perm.DechetsAutrui, "saisie-quantites:saisir" })
             .ToArray(),
             Array.Empty<string>()),
-        new("operateur", "Opérateur de saisie", "Saisie des déchets sur son poste et ses machines.",
-            new[] { Perm.View(Modules.Conditionnement), Perm.DechetsSaisir },
+        new("operateur", "Opérateur de saisie", "Saisie du déchet emballage de ses machines, sur le poste en cours de son équipe ; ses statistiques.",
+            new[] { Perm.View(Modules.Conditionnement), Perm.View(Modules.Dechets), Perm.DechetsSaisir },
             Array.Empty<string>()),
         new("resp-qualite", "Responsable qualité", "Qualité, conformité des silos.",
             Views(Modules.VueEnsemble, Modules.Qualite, Modules.Silos, Modules.Dechets, Modules.Rendement)

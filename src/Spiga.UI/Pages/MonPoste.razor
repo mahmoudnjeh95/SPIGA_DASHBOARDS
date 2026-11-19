@@ -1,0 +1,396 @@
+@page "/poste"
+@inherits SpigaPage
+@implements IDisposable
+@inject PosteBoard Board
+@inject WasteService Waste
+
+@* The operator's home. His team's poste, each of his machines live (state,
+   stop and its cause, product, bags, speed, TRS, waste of the poste), and a
+   quick waste entry made for a touch screen at the line: tap the motif's
+   picture, type the quantity on the keypad, confirm. Refreshed every 15 s. *@
+<RequireAccess Module="@Modules.SaisieDechets" Action="AppAction.Saisir">
+    @if (_view is { } v)
+    {
+        <div class="head">
+            <div>
+                <span class="pre">Saisie</span><h1>Mon poste</h1>
+                <p>@Shifts.Label(v.ShiftId) du @v.Date.ToString("dd/MM/yyyy") · @Shifts.Hours(v.ShiftId) · @v.Team</p>
+            </div>
+            <span class="live-pill" title="Actualisé toutes les @RefreshSeconds secondes">
+                <span class="live-dot"></span>En direct · @v.LoadedAt.ToString("HH:mm:ss")
+            </span>
+        </div>
+
+        <div class="poste-progress" title="Avancement du poste">
+            <span class="pp-fill" style="width:@((v.Elapsed * 100).ToString("0.#", CultureInfo.InvariantCulture))%"></span>
+            <span class="pp-label">@Shifts.Start(v.Date, v.ShiftId).ToString("HH\\hmm")</span>
+            <span class="pp-label pp-mid">@PosteLeft(v)</span>
+            <span class="pp-label">@v.End.ToString("HH\\hmm")</span>
+        </div>
+    }
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_returned.Count > 0)
+    {
+        <div class="notice warn" role="status">
+            <span>@_returned.Count de vos saisies renvoyée(s) par un validateur : « @_returned[0].ReturnComment »</span>
+            <a class="link" style="margin-left:auto" href="saisie/dechets-emballage">Corriger</a>
+        </div>
+    }
+
+    @if (_view == null)
+    {
+        <Loader Text="Connexion à vos machines…" />
+    }
+    else
+    {
+        @if (_view.ProductionError != null)
+        {
+            <div class="notice warn">@_view.ProductionError</div>
+        }
+        @if (_view.Machines.Count == 0)
+        {
+            <div class="card"><p class="empty">Aucune machine dans votre périmètre de saisie : demandez à un administrateur de vous rattacher à vos machines.</p></div>
+        }
+        <div class="live-grid">
+            @foreach (var m in _view.Machines)
+            {
+                var k = m.Figures?.Kpi;
+                <section class="card live-card @StateCss(m)">
+                    <div class="lc-head">
+                        <div>
+                            <span class="lc-id">@m.Machine.Id</span>
+                            <small>@Sectors.Label(m.Machine.Sector)</small>
+                        </div>
+                        <span class="lc-state"><span class="lc-dot"></span>@StateText(m)</span>
+                    </div>
+                    @if (m.Stop is { } stop)
+                    {
+                        <div class="lc-stop">
+                            <b>@stop.Title</b> @stop.SinceText · @stop.DurationText
+                            <small>@stop.CauseText</small>
+                        </div>
+                    }
+                    <div class="lc-product">
+                        <PastaTrio Class="lc-pasta" />
+                        <span>@(m.State?.Product ?? "Produit inconnu")</span>
+                    </div>
+                    <div class="lc-stats">
+                        <div><span class="l">Sacs du poste</span><span class="v">@Fmt.Num(k?.TotalBags)</span></div>
+                        <div><span class="l">Vitesse</span><span class="v">@Fmt.Num(k?.SpeedBagsPerMinute, 1)<small> sacs/min</small></span></div>
+                        <div>
+                            <span class="l">TRS</span>
+                            <span class="v @(m.Figures == null ? "nd" : Fmt.Css(m.Figures.TrsSeverity))">@Fmt.Pct(k?.TrsPercent, 0)</span>
+                            <span class="lc-bar"><span style="width:@Math.Clamp(k?.TrsPercent ?? 0, 0, 100).ToString("0", CultureInfo.InvariantCulture)%"></span>
+                                @if (m.Figures != null)
+                                {
+                                    <i style="left:@m.Figures.TrsTarget.ToString("0", CultureInfo.InvariantCulture)%" title="Cible @Fmt.Num(m.Figures.TrsTarget) %"></i>
+                                }
+                            </span>
+                        </div>
+                        <div><span class="l">Production</span><span class="v">@(k == null ? Fmt.Missing : Fmt.Mass(k.ProductionKg))</span></div>
+                    </div>
+                    <div class="lc-waste">
+                        <span class="lc-bin">@Icons.Svg("dechets")</span>
+                        <span>
+                            Déchet du poste : <b>@(m.WasteEntries == 0 ? "aucun" : Fmt.Kg(m.WasteKg))</b>
+                            @if (m.WasteEntries > 0)
+                            {
+                                <small>@m.WasteEntries saisie(s)@(m.WasteShare is { } p ? " · " + Fmt.Pct(p, p < 0.1 ? 3 : 2) + " de la production" : "")</small>
+                            }
+                        </span>
+                    </div>
+                    <button type="button" class="bar acc lc-go" @onclick="() => OpenQuick(m.Machine)" disabled="@(!CanEnterNow)">
+                        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>Déclarer un déchet
+                    </button>
+                </section>
+            }
+        </div>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>Mes saisies du poste <small>@_mine.Count saisie(s) · total @Fmt.Kg(_mine.Where(e => e.Counts).Sum(e => e.QuantityKg))</small></h2>
+                <a class="link" href="saisie/dechets-emballage">Saisie détaillée</a>
+            </div>
+            <WasteEntryTable Entries="_mine" OnEdit="EditDetailed" OnChanged="LoadAsync" Empty="Aucune saisie pour ce poste : utilisez « Déclarer un déchet » sur une machine." />
+        </section>
+    }
+
+    @if (_quick != null)
+    {
+        <div class="sheet-backdrop" @onclick="CloseQuick">
+            <div class="sheet" role="dialog" aria-modal="true" aria-label="Déclarer un déchet" @onclick:stopPropagation="true">
+                <div class="sheet-head">
+                    <div>
+                        <span class="pre">Déclarer un déchet emballage</span>
+                        <h2>@_quick.Id <small>@Sectors.Label(_quick.Sector) · @Shifts.Label(_view!.ShiftId) du @_view.Date.ToString("dd/MM")</small></h2>
+                    </div>
+                    <ol class="steps">
+                        <li class="@(_step >= 1 ? "on" : "")">Motif</li>
+                        <li class="@(_step >= 2 ? "on" : "")">Quantité</li>
+                        <li class="@(_step >= 3 ? "on" : "")">Confirmation</li>
+                    </ol>
+                    <button type="button" class="bar small" @onclick="CloseQuick" aria-label="Fermer">Fermer</button>
+                </div>
+
+                @if (_saved)
+                {
+                    <div class="sheet-done">
+                        <svg viewBox="0 0 52 52" class="done-check"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg>
+                        <h2>Déchet enregistré</h2>
+                        <p>@Fmt.Kg(_savedKg) sur @_quick.Id · en attente de validation</p>
+                    </div>
+                }
+                else if (_step == 1)
+                {
+                    <p class="sheet-hint">Touchez l'image du motif.</p>
+                    <div class="motif-grid">
+                        @foreach (var r in _reasons)
+                        {
+                            <button type="button" class="motif-tile" @onclick="() => PickReason(r.Label)">
+                                <MotifArt Reason="@r.Label" Size="72" />
+                                <span>@r.Label</span>
+                            </button>
+                        }
+                    </div>
+                }
+                else if (_step == 2)
+                {
+                    var check = Check;
+                    <div class="qty-layout">
+                        <div class="qty-side">
+                            <button type="button" class="motif-chosen" @onclick="() => _step = 1" title="Changer de motif">
+                                <MotifArt Reason="@_reason" Size="88" />
+                                <span>@_reason</span>
+                                <small>changer</small>
+                            </button>
+                            <div class="f grow" style="width:100%">
+                                <label for="q-comment">Commentaire@(WasteReasons.NeedsComment(_reason) ? " (obligatoire)" : " (facultatif)")</label>
+                                <input id="q-comment" maxlength="500" class="@(check.Missing.Count > 0 && WasteReasons.NeedsComment(_reason) && string.IsNullOrWhiteSpace(_comment) ? "missing" : "")"
+                                       @bind="_comment" @bind:event="oninput" />
+                            </div>
+                        </div>
+                        <div class="qty-main">
+                            <div class="qty-display @(check.QuantityError != null ? "invalid" : "")">
+                                <input id="q-qty" inputmode="decimal" autocomplete="off" maxlength="9" placeholder="0" aria-label="Quantité en kg"
+                                       @bind="_qty" @bind:event="oninput" />
+                                <span>kg</span>
+                            </div>
+                            <div class="qty-adds">
+                                @foreach (var add in new[] { 0.5, 1, 5, 10 })
+                                {
+                                    <button type="button" class="seg" @onclick="() => Add(add)">+@add.ToString("0.#", Fmt.French)</button>
+                                }
+                                <button type="button" class="seg" @onclick="() => _qty = string.Empty">Effacer</button>
+                            </div>
+                            <div class="keypad">
+                                @foreach (var key in new[] { "7", "8", "9", "4", "5", "6", "1", "2", "3", ",", "0", "⌫" })
+                                {
+                                    <button type="button" class="key @(key == "⌫" ? "back" : "")" @onclick="() => Press(key)">@key</button>
+                                }
+                            </div>
+                            <div class="form-check" aria-live="polite">
+                                @if (check.QuantityError != null)
+                                {
+                                    <span class="bad">@check.QuantityError</span>
+                                }
+                                else if (check.Missing.Count > 0 && _qty.Length > 0)
+                                {
+                                    <span>À compléter : @string.Join(", ", check.Missing).</span>
+                                }
+                            </div>
+                            <button type="button" class="bar acc big" disabled="@(!check.Complete)" @onclick="() => _step = 3">Valider →</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    var check = Check;
+                    <div class="confirm-card @(check.Unusual ? "unusual" : "")">
+                        <MotifArt Reason="@_reason" Size="110" />
+                        <div>
+                            <span class="confirm-qty">@Fmt.Kg(check.QuantityKg ?? 0)</span>
+                            <span class="confirm-what">@_quick.Id · @_reason</span>
+                            <span class="confirm-when">@Shifts.Label(_view!.ShiftId) du @_view.Date.ToString("dd/MM/yyyy") · @_view.Team</span>
+                            @if (!string.IsNullOrWhiteSpace(_comment))
+                            {
+                                <span class="confirm-comment">« @_comment »</span>
+                            }
+                            @if (check.Unusual)
+                            {
+                                <span class="confirm-warn">Quantité inhabituelle (au-delà de @Fmt.Kg(WasteFormCheck.UnusualKg(WasteKind.Emballage))) : vérifiez la virgule avant de confirmer.</span>
+                            }
+                        </div>
+                    </div>
+                    <p class="sheet-hint">Vérifiez : une fois confirmée, la saisie part en validation.</p>
+                    <div class="confirm-actions">
+                        <button type="button" class="bar big" @onclick="() => _step = 2">← Modifier</button>
+                        <button type="button" class="bar ok big" disabled="@(_busy || !check.Complete)" @onclick="ConfirmAsync">✔ Confirmer</button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</RequireAccess>
+
+@code {
+    private const int RefreshSeconds = 15;
+
+    private PosteView? _view;
+    private IReadOnlyList<WasteEntry> _mine = Array.Empty<WasteEntry>();
+    private IReadOnlyList<WasteEntry> _returned = Array.Empty<WasteEntry>();
+    private IReadOnlyList<WasteReason> _reasons = Array.Empty<WasteReason>();
+    private readonly CancellationTokenSource _stop = new();
+    private int _loads;
+
+    // Quick entry.
+    private PlantMachine? _quick;
+    private int _step;
+    private string _reason = "";
+    private string _qty = "";
+    private string _comment = "";
+    private bool _busy;
+    private bool _saved;
+    private double _savedKg;
+
+    // Entries go to the operator's poste; after its end they are refused (a
+    // later poste of his team will be offered).
+    private bool CanEnterNow => _view != null && Waste.CurrentPoste(Actor) is { } p && p == (_view.Date, _view.ShiftId);
+
+    private WasteFormCheck Check => WasteFormCheck.Of(new WasteFormInput(WasteKind.Emballage, _quick?.Id, _qty, WasteUnits.Kg, _reason, _comment));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.Can(Perm.DechetsSaisir))
+            return;
+        await Run(async () => _reasons = await Waste.ReasonsAsync(WasteKind.Emballage));
+        await LoadAsync();
+        _ = RefreshLoopAsync();
+    }
+
+    private async Task RefreshLoopAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(RefreshSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+                await InvokeAsync(async () =>
+                {
+                    await LoadAsync();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var load = ++_loads;
+        var actor = Actor;
+        await Run(async () =>
+        {
+            // Off the UI thread: the production reads are synchronous.
+            var view = await Task.Run(() => Board.LoadAsync(actor));
+            var mine = await Waste.ListAsync(actor, WasteKind.Emballage, view.Date, view.ShiftId);
+            var returned = await Waste.ReturnedToAsync(actor);
+            if (load != _loads)
+                return;
+            _view = view;
+            _mine = mine;
+            _returned = returned;
+        });
+    }
+
+    private static string StateCss(MachineLive m)
+        => m.Stop is { } s ? (s.Kind == OngoingStopKind.Panne ? "is-panne" : s.TakesWholeView ? "is-planned" : "is-stop")
+            : m.Running ? "is-run" : m.State == null ? "is-done" : !m.Connected ? "is-off" : "is-stop";
+
+    private static string StateText(MachineLive m)
+        => m.Stop is { } s ? s.Title switch { "EN PANNE" => "En panne", "ARRÊT PLANIFIÉ" => "Arrêt planifié", "MAINTENANCE" => "Maintenance", _ => "À l'arrêt" }
+            : m.Running ? "En marche" : m.State == null ? "Poste terminé" : !m.Connected ? "Déconnectée" : "À l'arrêt";
+
+    private string PosteLeft(PosteView v)
+    {
+        var left = v.End - v.LoadedAt;
+        return left <= TimeSpan.Zero ? "poste terminé"
+            : left.TotalMinutes < 60 ? $"reste {(int)left.TotalMinutes} min"
+            : $"reste {(int)left.TotalHours} h {left.Minutes:00}";
+    }
+
+    // ---------- quick entry ----------
+
+    private void OpenQuick(PlantMachine m)
+    {
+        _quick = m;
+        _step = 1;
+        _reason = _qty = _comment = "";
+        _saved = false;
+        Error = Info = null;
+    }
+
+    private void CloseQuick() => _quick = null;
+
+    private void PickReason(string label)
+    {
+        _reason = label;
+        _step = 2;
+    }
+
+    private void Press(string key)
+    {
+        if (key == "⌫")
+            _qty = _qty.Length > 0 ? _qty[..^1] : "";
+        else if (_qty.Length < 9)
+            _qty += key;
+    }
+
+    private void Add(double kg)
+    {
+        var (current, error) = WasteFormCheck.ParseQuantity(_qty);
+        if (error != null && _qty.Length > 0)
+            return;
+        _qty = ((current ?? 0) + kg).ToString("0.###", Fmt.French);
+    }
+
+    private async Task ConfirmAsync()
+    {
+        var check = Check;
+        if (_quick == null || _view == null || !check.Complete || _busy)
+            return;
+        _busy = true;
+        try
+        {
+            var draft = new WasteDraft(WasteKind.Emballage, _view.Date, _view.ShiftId, _quick.Id, null,
+                check.Quantity!.Value, WasteUnits.Kg, _reason, _comment);
+            if (await Run(() => Waste.AddAsync(Actor, draft)))
+            {
+                _saved = true;
+                _savedKg = check.QuantityKg ?? 0;
+                await LoadAsync();
+                StateHasChanged();
+                await Task.Delay(1800);
+                if (_saved)
+                    _quick = null;
+            }
+            else
+            {
+                _quick = null; // the refusal shows on the page
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void EditDetailed(WasteEntry e) => Nav.NavigateTo(WasteQuery.EntryLink(e));
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

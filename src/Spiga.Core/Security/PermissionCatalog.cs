@@ -16,6 +16,8 @@ public static class Perm
     public const string DechetsCorriger = "saisie-dechets:corriger";
     public const string DechetsTardif = "saisie-dechets:tardive";
     public const string DechetsAutrui = "saisie-dechets:autrui";
+    public const string DechetsProduit = "saisie-dechets:produit";
+    public const string DechetsAutresPostes = "saisie-dechets:autres-postes";
 
     public const string ComptesGerer = "utilisateurs:comptes";
     public const string ComptesDebloquer = "utilisateurs:deblocage";
@@ -102,9 +104,12 @@ public static class PermissionCatalog
         View(Modules.RhNominatif, "Taux d'absence par ouvrier"); Export(Modules.RhNominatif);
 
         View(Modules.SaisieDechets, "Consulter les saisies");
-        Add(Modules.SaisieDechets, "saisir", "Saisir", "Créer et modifier ses brouillons");
-        Add(Modules.SaisieDechets, "valider", "Valider les saisies d'autrui");
-        Add(Modules.SaisieDechets, "corriger", "Corriger une saisie validée", "Avec un motif, tracé au journal");
+        Add(Modules.SaisieDechets, "saisir", "Saisir les déchets emballage", "Par machine ; créer, modifier et soumettre à nouveau ses brouillons");
+        Add(Modules.SaisieDechets, "produit", "Saisir les déchets produit", "Par secteur ; le périmètre doit couvrir tout le secteur (pas limité à des machines)");
+        Add(Modules.SaisieDechets, "autres-postes", "Saisir pour un autre poste",
+            "Sans ce droit : uniquement le poste en cours de son équipe (ou son dernier poste)");
+        Add(Modules.SaisieDechets, "valider", "Valider ou renvoyer les saisies d'autrui", "Renvoyer = retourner à l'auteur avec un commentaire");
+        Add(Modules.SaisieDechets, "corriger", "Corriger ou annuler une saisie validée", "Avec un motif, gardé dans l'historique de la saisie");
         Add(Modules.SaisieDechets, "autrui", "Modifier ou supprimer le brouillon d'un autre");
         Add(Modules.SaisieDechets, "tardive", "Saisir au-delà de 7 jours");
 

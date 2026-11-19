@@ -123,7 +123,7 @@ public sealed class DashboardQueries(PlantData plant, WasteService waste, TimePr
             ProductWasteKg = entries.Where(e => e.Kind == WasteKind.Produit).Sum(e => e.QuantityKg),
             PackagingEntries = entries.Count(e => e.Kind == WasteKind.Emballage),
             ProductEntries = entries.Count(e => e.Kind == WasteKind.Produit),
-            DraftEntries = entries.Count(e => e.Status == WasteStatus.Brouillon),
+            DraftEntries = entries.Count(e => e.Status != WasteStatus.Validee),
         };
     }
 }

@@ -67,6 +67,8 @@ public static class ModuleCatalog
     public static readonly IReadOnlyList<NavItem> Navigation = new[]
     {
         new NavItem("vue-ensemble", "Vue d'ensemble", null, Modules.VueEnsemble, "", true),
+        // The operator's home: his machines live, and quick waste entry.
+        new NavItem("poste", "Mon poste", null, Modules.SaisieDechets, "poste", true, Permission: Perm.DechetsSaisir),
 
         new NavItem("conditionnement", "Conditionnement", "Production", Modules.Conditionnement, "production/conditionnement", true),
         new NavItem("tableau", "Tableau de bord", "Production", Modules.Conditionnement, "production/tableau-de-bord", true,
@@ -77,9 +79,7 @@ public static class ModuleCatalog
         new NavItem("silos", "Silos", "Production", Modules.Silos, "module/silos", false,
             "Trois écrans silos : niveau, produit, conformité, dernière actualisation, mise à jour manuelle.",
             "Aucun (état instantané) ; l'historique a ses dates", "Nouveau (cahier des charges 4.3)"),
-        new NavItem("dechets", "Déchets", "Production", Modules.Dechets, "module/dechets", false,
-            "Déchet emballage par machine, équipe et poste ; déchet produit par secteur ; en kg et en % de la production.",
-            "Période, secteur, machine, équipe, poste", "Nouveau, alimenté par les saisies"),
+        new NavItem("dechets", "Déchets", "Production", Modules.Dechets, "production/dechets", true),
 
         new NavItem("humidite", "Humidité", "Qualité", Modules.Qualite, "module/humidite", false,
             "Humidité moyenne par produit et par ligne, tendance et seuils.",
@@ -108,7 +108,10 @@ public static class ModuleCatalog
             "Période, équipe", "Nouveau (cahier des charges 4.5), base RH"),
 
         new NavItem("saisie-emballage", "Déchets emballage", "Saisie", Modules.SaisieDechets, "saisie/dechets-emballage", true),
-        new NavItem("saisie-produit", "Déchets produit", "Saisie", Modules.SaisieDechets, "saisie/dechets-produit", true),
+        new NavItem("saisie-produit", "Déchets produit", "Saisie", Modules.SaisieDechets, "saisie/dechets-produit", true,
+            Permission: Perm.DechetsProduit),
+        new NavItem("a-valider", "Saisies à valider", "Saisie", Modules.SaisieDechets, "saisie/a-valider", true,
+            Permission: Perm.DechetsValider),
         new NavItem("saisie-rendement", "Quantités rendement", "Saisie", Modules.SaisieQuantites, "module/saisie-rendement", false,
             "Quantités du jour par secteur pour le calcul du rendement.",
             "Contexte de saisie : date, secteur", "Nouveau (cahier des charges 4.9)"),

@@ -1,0 +1,342 @@
+@page "/production/dechets"
+@inherits SpigaPage
+@inject WasteDashboard Dashboard
+@inject UiState Ui
+@inject PlantData Plant
+
+@* Tableau de bord des déchets: emballage par machine, équipe et poste ;
+   produit par secteur ; en kg et en % de la production conditionnée.
+   Fed by the entries of Saisie > Déchets emballage / produit. *@
+<RequireAccess Module="@Modules.Dechets">
+    <div class="head">
+        <div>
+            <span class="pre">Production</span><h1>Déchets</h1>
+            <p>@_period.Label(Now)@Subtitle()</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            @if (Session.Can(Perm.DechetsSaisir))
+            {
+                <a class="bar" href="saisie/dechets-emballage">Saisir déchet emballage</a>
+            }
+            @if (Session.Can(Perm.DechetsProduit))
+            {
+                <a class="bar" href="saisie/dechets-produit">Saisir déchet produit</a>
+            }
+            @if (Session.Can(Perm.DechetsValider))
+            {
+                <a class="bar" href="saisie/a-valider">Saisies à valider</a>
+            }
+        </div>
+    </div>
+
+    <div class="filters">
+        <PeriodPicker Value="_period" ValueChanged="OnPeriodAsync" Id="w-period" />
+        <div class="f">
+            <span>Secteur</span>
+            <div class="segs" role="group" aria-label="Secteur">
+                <button type="button" class="seg @(_f.Sector == null ? "on" : "")" @onclick="() => SetAsync(_f with { Sector = null, MachineId = null })">Tous</button>
+                @foreach (var s in Sectors.All.Where(s => Actor.Allows(WasteDashboard.View, s)))
+                {
+                    <button type="button" class="seg @(_f.Sector == s ? "on" : "")" @onclick="() => SetAsync(_f with { Sector = s, MachineId = null })">@Sectors.Label(s)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <label for="w-machine">Machine</label>
+            <select id="w-machine" value="@(_f.MachineId ?? "")" @onchange="OnMachineAsync">
+                <option value="">Toutes</option>
+                @foreach (var m in _machines.Where(m => _f.Sector == null || m.Sector == _f.Sector))
+                {
+                    <option value="@m.Id">@m.Id</option>
+                }
+            </select>
+        </div>
+        @if (Actor.Team is { } myTeam)
+        {
+            <div class="f">
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les postes de votre équipe">@myTeam</span>
+            </div>
+        }
+        else
+        {
+            <div class="f">
+                <span>Équipe</span>
+                <div class="segs" role="group" aria-label="Équipe">
+                    <button type="button" class="seg @(_f.Team == null ? "on" : "")" @onclick="() => SetAsync(_f with { Team = null })">Toutes</button>
+                    @foreach (var t in Plant.Teams)
+                    {
+                        <button type="button" class="seg @(_f.Team == t ? "on" : "")" @onclick="() => SetAsync(_f with { Team = t })">@t</button>
+                    }
+                </div>
+            </div>
+        }
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_f.ShiftId == null ? "on" : "")" @onclick="() => SetAsync(_f with { ShiftId = null })">Tous</button>
+                @foreach (var s in Shifts.All)
+                {
+                    <button type="button" class="seg @(_f.ShiftId == s ? "on" : "")" title="@Shifts.Hours(s)" @onclick="() => SetAsync(_f with { ShiftId = s })">@Shifts.Label(s)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Saisies</span>
+            <div class="segs" role="group" aria-label="Statut des saisies">
+                <button type="button" class="seg @(!_f.ValidatedOnly ? "on" : "")" @onclick="() => SetAsync(_f with { ValidatedOnly = false })">Toutes</button>
+                <button type="button" class="seg @(_f.ValidatedOnly ? "on" : "")" title="Ne compter que les saisies validées"
+                        @onclick="() => SetAsync(_f with { ValidatedOnly = true })">Validées</button>
+            </div>
+        </div>
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_r == null)
+    {
+        <Loader Text="Chargement des déchets…" />
+    }
+    else
+    {
+        @if (_r.ProductionError != null)
+        {
+            <div class="notice warn">@_r.ProductionError</div>
+        }
+        @if (_f.MachineId != null)
+        {
+            <div class="notice" role="status">Une machine est choisie : seul le déchet emballage est compté (le déchet produit est saisi par secteur).</div>
+        }
+        var t = _r.Total;
+        var topMachine = _r.Machines.Where(m => m.PackagingKg > 0).MaxBy(m => m.PackagingKg);
+        var topReason = _r.Reasons.FirstOrDefault();
+        <div class="row">
+            <KpiTile Label="Déchet emballage" Value="@(_r.PackagingEntries == 0 ? "—" : Fmt.Kg(t.PackagingKg))" Css="@(_r.PackagingEntries == 0 ? "nd" : "")"
+                     Sub="@(_r.PackagingEntries == 0 ? "aucune saisie sur la période" : $"{PctOfProduction(t.PackagingPercent)} · {_r.PackagingEntries} saisie(s)")" />
+            <KpiTile Label="Déchet produit" Value="@(_r.ProductEntries == 0 ? "—" : Fmt.Kg(t.ProductKg))" Css="@(_r.ProductEntries == 0 ? "nd" : "")"
+                     Sub="@(_r.ProductEntries == 0 ? "aucune saisie sur la période" : $"{PctOfProduction(t.ProductPercent)} · {_r.ProductEntries} saisie(s)")" />
+            <KpiTile Label="Total déchets" Value="@(t.Entries == 0 ? "—" : Fmt.Mass(t.TotalKg))" Css="@(t.Entries == 0 ? "nd" : "")"
+                     Sub="@($"production conditionnée {(t.ProductionKg > 0 ? Fmt.Mass(t.ProductionKg) : Fmt.Missing)}")" />
+            <KpiTile Label="Saisies" Value="@t.Entries.ToString()" Css="@(t.Drafts > 0 ? "warn" : t.Entries == 0 ? "nd" : "ok")"
+                     Sub="@(t.Drafts == 0 ? (t.Entries == 0 ? "rien à valider" : "toutes validées") : $"{t.Drafts} non validée(s)")" />
+            <KpiTile Label="Machine la plus touchée" Value="@(topMachine?.Label ?? "—")" Css="@(topMachine == null ? "nd" : "txt")"
+                     Sub="@(topMachine == null ? "aucun déchet emballage" : $"{Fmt.Kg(topMachine.PackagingKg)} · {PctOfProduction(topMachine.PackagingPercent)}")" />
+            <KpiTile Label="Motif principal" Value="@(topReason?.Label ?? "—")" Css="@(topReason == null ? "nd" : "txt")"
+                     Sub="@(topReason == null ? "" : $"{Fmt.Kg(topReason.TotalKg)} · {Fmt.Pct(Share(topReason.TotalKg), 0)} des déchets")" />
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:6 1 560px">
+                <SpigaChart Title="Évolution par jour (kg)" Key="dechets-jour"
+                            Labels="@_r.Days.Select(d => d.Label).ToList()" Format="@(v => Fmt.Kg(v))"
+                            Series="@KgSeries(_r.Days)" />
+            </section>
+            <section class="card" style="flex:4 1 380px">
+                <SpigaChart Title="Déchet emballage par machine (% de la production)" Key="dechets-machine-pct" YMin="0"
+                            Labels="@_r.Machines.Select(m => m.Label).ToList()" Format="@(v => Pc(v))"
+                            Series="@(new[] { new ChartSeries("% emballage", _r.Machines.Select(m => m.Entries == 0 ? null : m.PackagingPercent).ToList(), "var(--bar)") })" />
+            </section>
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:1 1 320px">
+                <SpigaChart Title="Par équipe (kg)" Key="dechets-equipe" Labels="@_r.Teams.Select(g => g.Label).ToList()"
+                            Format="@(v => Fmt.Kg(v))" Series="@KgSeries(_r.Teams)" />
+            </section>
+            <section class="card" style="flex:1 1 320px">
+                <SpigaChart Title="Par poste (kg)" Key="dechets-poste" Labels="@_r.Shifts.Select(g => g.Label).ToList()"
+                            Format="@(v => Fmt.Kg(v))" Series="@KgSeries(_r.Shifts)" />
+            </section>
+            <section class="card" style="flex:1 1 320px">
+                <SpigaChart Title="Par motif (kg)" Key="dechets-motif" Labels="@_r.Reasons.Select(g => g.Label).ToList()"
+                            Format="@(v => Fmt.Kg(v))" Series="@KgSeries(_r.Reasons)" />
+            </section>
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:6 1 560px">
+                <div class="card-head"><h2>Par machine <small>déchet emballage</small></h2></div>
+                <div class="scroll">
+                    <table class="t">
+                        <thead><tr><th>Machine</th><th class="r">Production</th><th class="r">Déchet emb.</th><th class="r">% production</th><th class="r">Saisies</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in _r.Machines)
+                            {
+                                <tr>
+                                    <td><span class="machine-id">@m.Label</span><small>@m.Sub</small></td>
+                                    <td class="r">@(m.ProductionKg > 0 ? Fmt.Mass(m.ProductionKg) : "—")</td>
+                                    <td class="r">@(m.Entries == 0 ? "—" : Fmt.Kg(m.PackagingKg))</td>
+                                    <td class="r">@(m.Entries == 0 ? "—" : Pc(m.PackagingPercent))</td>
+                                    <td class="r">@Entries(m)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="card" style="flex:4 1 420px">
+                <div class="card-head"><h2>Par secteur</h2></div>
+                <div class="scroll">
+                    <table class="t">
+                        <thead><tr><th>Secteur</th><th class="r">Production</th><th class="r">Emballage</th><th class="r">Produit</th><th class="r">Saisies</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in _r.Sectors)
+                            {
+                                <tr>
+                                    <td><b>@s.Label</b></td>
+                                    <td class="r">@(s.ProductionKg > 0 ? Fmt.Mass(s.ProductionKg) : "—")</td>
+                                    <td class="r">@(s.PackagingKg > 0 ? Fmt.Kg(s.PackagingKg) : "—")<small>@(s.PackagingKg > 0 ? Pc(s.PackagingPercent) : "")</small></td>
+                                    <td class="r">@(s.ProductKg > 0 ? Fmt.Kg(s.ProductKg) : "—")<small>@(s.ProductKg > 0 ? Pc(s.ProductPercent) : "")</small></td>
+                                    <td class="r">@Entries(s)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <section class="card">
+            <div class="card-head"><h2>Dernières saisies <small>@(_r.Latest.Count == 0 ? "aucune" : $"les {_r.Latest.Count} plus récentes de la période")</small></h2></div>
+            @if (_r.Latest.Count == 0)
+            {
+                <p class="empty">Aucune saisie de déchet sur la période et les filtres choisis.</p>
+            }
+            else
+            {
+                <div class="scroll">
+                    <table class="t">
+                        <thead><tr><th>Date</th><th>Poste</th><th>Équipe</th><th>Type</th><th>Lieu</th><th class="r">Quantité</th><th>Motif</th><th>Statut</th></tr></thead>
+                        <tbody>
+                            @foreach (var e in _r.Latest)
+                            {
+                                <tr>
+                                    <td>@e.ProductionDate.ToString("dd/MM/yyyy")</td>
+                                    <td>@Shifts.Label(e.ShiftId)</td>
+                                    <td>@e.Team</td>
+                                    <td>@(e.Kind == WasteKind.Emballage ? "Emballage" : "Produit")</td>
+                                    <td>@(e.MachineId ?? Sectors.Label(e.Sector))</td>
+                                    <td class="r">@Fmt.Kg(e.QuantityKg)</td>
+                                    <td>
+                                        @e.Reason
+                                        @if (!string.IsNullOrWhiteSpace(e.Comment))
+                                        {
+                                            <small>@e.Comment</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="chip @WasteStatuses.Css(e.Status)" title="@("Saisie par " + e.CreatedBy + (e.ValidatedBy == null ? "" : ", validée par " + e.ValidatedBy))">@WasteStatuses.Label(e.Status)</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</RequireAccess>
+
+@code {
+    [SupplyParameterFromQuery(Name = "secteur")] public string? SectorParam { get; set; }
+    [SupplyParameterFromQuery(Name = "du")] public string? FromParam { get; set; }
+    [SupplyParameterFromQuery(Name = "au")] public string? ToParam { get; set; }
+
+    private Period _period = default!;
+    private WasteFilter _f = new(DateTime.Today, DateTime.Today.AddDays(1));
+    private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+    private WasteReport? _r;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.Can(Modules.Dechets, AppAction.Voir))
+            return;
+        _period = Ui.WastePeriod ?? Period.Today(Now) with { Kind = PeriodKind.Last7Days };
+        if (DateTime.TryParse(FromParam, CultureInfo.InvariantCulture, out var from))
+        {
+            var to = DateTime.TryParse(ToParam, CultureInfo.InvariantCulture, out var t) ? t : from;
+            _period = new Period(PeriodKind.Custom, from, to);
+        }
+        _f = Ui.WasteFilter ?? _f;
+        if (SectorParam != null && Sectors.All.Contains(SectorParam))
+            _f = _f with { Sector = SectorParam, MachineId = null };
+        if (_f.Sector != null && !Actor.Allows(WasteDashboard.View, _f.Sector))
+            _f = _f with { Sector = null, MachineId = null };
+        try
+        {
+            _machines = await Plant.MachinesFor(Actor, WasteDashboard.View, null);
+        }
+        catch (Exception)
+        {
+            _machines = Array.Empty<PlantMachine>(); // the report says the production database is down
+        }
+        await LoadAsync();
+    }
+
+    private async Task OnPeriodAsync(Period p)
+    {
+        _period = Ui.WastePeriod = p;
+        await LoadAsync();
+    }
+
+    private Task OnMachineAsync(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString();
+        return SetAsync(_f with { MachineId = string.IsNullOrEmpty(id) ? null : id });
+    }
+
+    private async Task SetAsync(WasteFilter f)
+    {
+        _f = f;
+        await LoadAsync();
+    }
+
+    // A filter clicked while a slow load runs starts another one: only the
+    // latest is shown (an older one finishing last must not overwrite it).
+    private int _loads;
+
+    private async Task LoadAsync()
+    {
+        var (from, to) = _period.Range(Now);
+        _f = _f with { From = from, To = to };
+        Ui.WasteFilter = _f;
+        _r = null;
+        var load = ++_loads;
+        var filter = _f;
+        await Run(async () =>
+        {
+            // Off the UI thread: the SQLite reads are synchronous, the page
+            // must stay responsive (loader shown, filters clickable).
+            var actor = Actor;
+            var report = await Task.Run(() => Dashboard.LoadAsync(actor, filter));
+            if (load == _loads)
+                _r = report;
+        });
+    }
+
+    private string Subtitle()
+        => (_f.Sector == null ? "" : " · " + Sectors.Label(_f.Sector))
+           + (_f.MachineId == null ? "" : " · " + _f.MachineId)
+           + (_f.Team == null ? "" : " · " + _f.Team)
+           + (_f.ShiftId == null ? "" : " · poste " + Shifts.Label(_f.ShiftId.Value))
+           + (_f.ValidatedOnly ? " · saisies validées" : "");
+
+    // Waste is a small share of the production: 3 decimals under 0,1 %.
+    private static string Pc(double? pct) => Fmt.Pct(pct, pct is < 0.1 ? 3 : 2);
+
+    private static string PctOfProduction(double? pct) => pct is { } p ? Pc(p) + " de la production" : "production inconnue";
+
+    private double? Share(double kg) => _r is { Total.TotalKg: > 0 } r ? kg / r.Total.TotalKg * 100 : null;
+
+    private static string Entries(WasteGroup g) => g.Entries == 0 ? "—" : g.Drafts == 0 ? g.Entries.ToString() : $"{g.Entries} ({g.Drafts} brouillon)";
+
+    // Packaging and product waste side by side; with a machine chosen only
+    // packaging counts (product waste is entered per sector).
+    private IReadOnlyList<ChartSeries> KgSeries(IReadOnlyList<WasteGroup> groups)
+    {
+        var series = new List<ChartSeries> { new("Emballage", groups.Select(g => (double?)g.PackagingKg).ToList(), "var(--bar)") };
+        if (_f.MachineId == null)
+            series.Add(new ChartSeries("Produit", groups.Select(g => (double?)g.ProductKg).ToList(), "var(--bar2)"));
+        return series;
+    }
+}

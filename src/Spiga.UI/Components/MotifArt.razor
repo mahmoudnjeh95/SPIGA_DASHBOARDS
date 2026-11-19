@@ -1,0 +1,121 @@
+@* The picture of a waste motif, for the quick entry tiles: a small flat
+   illustration per motif, drawn in SVG (sharp at any size, no download: the
+   plant PCs may be offline). A motif added later in the référentiel gets the
+   generic tag until it has its own picture. To use artwork made elsewhere
+   (Canva...), replace the motif's SVG below, or render an <img> from
+   wwwroot/img/motifs/ for that key. *@
+<span class="motif-art @Class" style="width:@(Size)px;height:@(Size)px">@((MarkupString)Svg(Reason))</span>
+
+@code {
+    [Parameter, EditorRequired] public string Reason { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 64;
+    [Parameter] public string? Class { get; set; }
+
+    // Key of a motif: its label in lower case, without accents.
+    public static string Key(string reason)
+    {
+        var d = (reason ?? "").Normalize(System.Text.NormalizationForm.FormD);
+        return new string(d.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray())
+            .ToLowerInvariant();
+    }
+
+    private static string Svg(string reason)
+    {
+        var k = Key(reason);
+        var art = k switch
+        {
+            _ when k.Contains("reglage") => Reglage,
+            _ when k.Contains("format") => Format,
+            _ when k.Contains("bobine") => Bobine,
+            _ when k.Contains("soudure") => Soudure,
+            _ when k.Contains("film") => Film,
+            _ when k.Contains("impression") || k.Contains("marquage") => Impression,
+            _ when k.Contains("demarrage") => Demarrage,
+            _ when k.Contains("arret") => Arret,
+            _ when k.Contains("specification") => HorsSpec,
+            _ when k.Contains("casse") || k.Contains("brisure") => Casse,
+            _ when k.Contains("vidange") || k.Contains("nettoyage") => Nettoyage,
+            _ when k.Contains("autre") => Autre,
+            _ => Generic,
+        };
+        return $"<svg viewBox='0 0 64 64' aria-hidden='true' focusable='false'>{art}</svg>";
+    }
+
+    // Each: a soft disc, then the drawing.
+    private const string Reglage =
+        "<circle cx='32' cy='32' r='30' fill='#DBEAFE'/>" +
+        "<g class='ma-spin' style='transform-origin:27px 30px'><circle cx='27' cy='30' r='15' fill='none' stroke='#64748B' stroke-width='6' stroke-dasharray='4.7 3.15'/>" +
+        "<circle cx='27' cy='30' r='12.5' fill='#64748B'/><circle cx='27' cy='30' r='5.5' fill='#DBEAFE'/></g>" +
+        "<path fill='#F59E0B' stroke='#B45309' stroke-width='1.2' d='M50.5 40.5a7 7 0 0 1-9.2 6.9l-8.6 8.6a3 3 0 0 1-4.2-4.2l8.6-8.6a7 7 0 0 1 8.7-9.1l-4.3 4.3 1.5 3.7 3.7 1.5z'/>";
+
+    private const string Format =
+        "<circle cx='32' cy='32' r='30' fill='#FEF3C7'/>" +
+        "<path fill='#D97706' d='M8 30l10-5 10 5v14l-10 5-10-5z'/><path fill='#F59E0B' d='M8 30l10 5 10-5-10-5z'/><path fill='#B45309' d='M18 35v14l10-5V30z'/>" +
+        "<path fill='#2563EB' d='M34 22l12-6 12 6v18l-12 6-12-6z'/><path fill='#60A5FA' d='M34 22l12 6 12-6-12-6z'/><path fill='#1D4ED8' d='M46 28v18l12-6V22z'/>" +
+        "<path fill='none' stroke='#0F172A' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='M22 16c4-5 10-6 15-3m0 0-1-4m1 4-4 1'/>";
+
+    private const string Bobine =
+        "<circle cx='32' cy='32' r='30' fill='#EDE9FE'/>" +
+        "<path fill='#C4B5FD' d='M30 40h24v12H30z' opacity='.9'/><path fill='none' stroke='#8B5CF6' stroke-width='1.5' stroke-dasharray='3 3' d='M30 46h24'/>" +
+        "<g class='ma-spin-slow' style='transform-origin:26px 30px'><circle cx='26' cy='30' r='16' fill='#7C3AED'/><circle cx='26' cy='30' r='11' fill='#A78BFA'/><circle cx='26' cy='30' r='5' fill='#EDE9FE'/>" +
+        "<path stroke='#EDE9FE' stroke-width='2' d='M26 19v6M26 35v6M15 30h6M31 30h6'/></g>" +
+        "<path fill='#7C3AED' d='M26 46h4v6h-4z'/>";
+
+    private const string Soudure =
+        "<circle cx='32' cy='32' r='30' fill='#FEE2E2'/>" +
+        "<path fill='#E2E8F0' stroke='#94A3B8' stroke-width='1.5' d='M18 20h28v30a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4z'/>" +
+        "<path fill='none' stroke='#64748B' stroke-width='2' d='M18 24l3.5-4 3.5 4 3.5-4 3.5 4 3.5-4 3.5 4 3.5-4 3.5 4'/>" +
+        "<path fill='#EF4444' d='M37 8l-9 13h7l-5 12 13-16h-7l5-9z' class='ma-blink'/>" +
+        "<path fill='#F2BE4E' d='M24 38h16v8H24z' opacity='.7'/>";
+
+    private const string Film =
+        "<circle cx='32' cy='32' r='30' fill='#E0F2FE'/>" +
+        "<path fill='#7DD3FC' fill-opacity='.75' stroke='#0284C7' stroke-width='1.5' d='M14 14h20l-3 9 5 6-4 8 4 13H14z'/>" +
+        "<path fill='#BAE6FD' fill-opacity='.85' stroke='#0284C7' stroke-width='1.5' d='M38 14h12v36H40l-4-13 4-8-5-6z'/>" +
+        "<path stroke='#fff' stroke-width='2' stroke-linecap='round' d='M18 20l6 0M18 26l4 0'/>";
+
+    private const string Impression =
+        "<circle cx='32' cy='32' r='30' fill='#DCFCE7'/>" +
+        "<rect x='12' y='24' width='40' height='18' rx='4' fill='#334155'/><rect x='20' y='12' width='24' height='13' rx='2' fill='#F8FAFC' stroke='#94A3B8'/>" +
+        "<rect x='19' y='36' width='26' height='18' rx='2' fill='#fff' stroke='#94A3B8'/>" +
+        "<path stroke='#0F172A' stroke-width='1.6' d='M23 41v9M26 41v9M28 41v9M31 41v9M34 41v9M36 41v9M39 41v9M41 41v9'/>" +
+        "<path stroke='#EF4444' stroke-width='3' stroke-linecap='round' d='M21 48l22-6'/><circle cx='46' cy='30' r='2' fill='#22C55E' class='ma-blink'/>";
+
+    private const string Demarrage =
+        "<circle cx='32' cy='32' r='30' fill='#DCFCE7'/>" +
+        "<rect x='8' y='40' width='48' height='8' rx='4' fill='#475569'/><circle cx='14' cy='44' r='2' fill='#CBD5E1'/><circle cx='32' cy='44' r='2' fill='#CBD5E1'/><circle cx='50' cy='44' r='2' fill='#CBD5E1'/>" +
+        "<circle cx='32' cy='22' r='13' fill='#16A34A'/><path fill='#fff' d='M28 15l11 7-11 7z'/>";
+
+    private const string Arret =
+        "<circle cx='32' cy='32' r='30' fill='#FEE2E2'/>" +
+        "<path fill='#DC2626' stroke='#fff' stroke-width='2' d='M24 10h16l11 11v16L40 48H24L13 37V21z'/>" +
+        "<path fill='#fff' d='M23 25h18v8H23z'/><rect x='8' y='50' width='48' height='6' rx='3' fill='#475569'/>";
+
+    private const string HorsSpec =
+        "<circle cx='32' cy='32' r='30' fill='#FFEDD5'/>" +
+        "<path fill='none' stroke='#94A3B8' stroke-width='5' stroke-linecap='round' d='M14 40a18 18 0 0 1 36 0'/>" +
+        "<path fill='none' stroke='#22C55E' stroke-width='5' stroke-linecap='round' d='M24 25a18 18 0 0 1 16 0'/>" +
+        "<path stroke='#0F172A' stroke-width='3' stroke-linecap='round' d='M32 40l12-12' class='ma-needle' style='transform-origin:32px 40px'/><circle cx='32' cy='40' r='3.5' fill='#0F172A'/>" +
+        "<circle cx='47' cy='47' r='8' fill='#EA580C'/><path stroke='#fff' stroke-width='2.5' stroke-linecap='round' d='M44 44l6 6M50 44l-6 6'/>";
+
+    private const string Casse =
+        "<circle cx='32' cy='32' r='30' fill='#FEF9C3'/>" +
+        "<g stroke='#C58A1C' stroke-width='1'><path fill='#F2BE4E' d='M10 30l14-8 5 9-3 2 2 3-12 7z'/><path fill='#FFDC80' d='M32 24l12-7 9 15-12 7-2-4 3-3z'/>" +
+        "<path fill='#F2BE4E' d='M22 44l7-4 3 5-7 4z'/><path fill='#D6982A' d='M40 44l6-2 2 5-6 2z'/></g>" +
+        "<path fill='#C58A1C' d='M30 48l2-2 1 3zM36 50l2-1 0 3z'/>";
+
+    private const string Nettoyage =
+        "<circle cx='32' cy='32' r='30' fill='#CFFAFE'/>" +
+        "<path fill='#0891B2' d='M18 28h28l-4 24H22z'/><rect x='16' y='24' width='32' height='5' rx='2.5' fill='#0E7490'/>" +
+        "<path fill='none' stroke='#0E7490' stroke-width='2' d='M22 24c0-10 20-10 20 0'/>" +
+        "<path fill='#38BDF8' d='M46 8c4 6 6 9 6 12a6 6 0 0 1-12 0c0-3 2-6 6-12z' class='ma-drop'/><circle cx='26' cy='38' r='2' fill='#fff' opacity='.7'/><circle cx='34' cy='42' r='3' fill='#fff' opacity='.6'/>";
+
+    private const string Autre =
+        "<circle cx='32' cy='32' r='30' fill='#F1F5F9'/>" +
+        "<path fill='#64748B' d='M14 18a6 6 0 0 1 6-6h24a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H28l-9 8v-8a6 6 0 0 1-5-6z'/>" +
+        "<circle cx='24' cy='26' r='3' fill='#fff' class='ma-dot'/><circle cx='32' cy='26' r='3' fill='#fff' class='ma-dot' style='animation-delay:.2s'/><circle cx='40' cy='26' r='3' fill='#fff' class='ma-dot' style='animation-delay:.4s'/>";
+
+    private const string Generic =
+        "<circle cx='32' cy='32' r='30' fill='#E2E8F0'/>" +
+        "<path fill='#475569' d='M14 30V16a2 2 0 0 1 2-2h14l20 20-16 16z'/><circle cx='22' cy='22' r='3' fill='#E2E8F0'/>";
+}

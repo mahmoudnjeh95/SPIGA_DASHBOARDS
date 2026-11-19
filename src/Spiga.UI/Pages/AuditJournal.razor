@@ -92,7 +92,7 @@
     {
         if (!AuditTrailService.CanRead(Session.Actor))
             return;
-        var (from, to) = _period.Range(Now);
+        var (from, to) = _period.CalendarRange(Now);
         _entries = await Audit.QueryAsync(Actor, new AuditQuery(from, to, NullIfEmpty(_user), NullIfEmpty(_module), Limit));
         _knownUsers = _knownUsers.Union(_entries.Select(e => e.UserLogin)).Distinct().OrderBy(u => u).ToList();
     }

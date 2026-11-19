@@ -1,227 +1,249 @@
-@* A1 (emballage) and A2 (produit) entry screen; one page per kind wraps it. *@
+@* A1 (emballage) and A2 (produit) entry screen; one page per kind wraps it.
+   Context = date + poste. Without "Saisir pour un autre poste" it is fixed:
+   the poste of the user's team in progress (or just ended). A team-bound
+   account sees its team's postes only. *@
 @inherits SpigaPage
 @inject WasteService Waste
 @inject PlantData Plant
 
 <RequireAccess Module="@Modules.SaisieDechets">
-    <div class="head">
-        <div>
-            <span class="pre">Saisie</span><h1>@Title</h1>
-            <p>
-                @(Kind == WasteKind.Emballage ? "Interface A1 : par machine, équipe et poste." : "Interface A2 : par secteur.")
-                Une saisie reste en brouillon jusqu'à sa validation par une autre personne ; validée, elle est verrouillée.
-            </p>
-        </div>
-    </div>
-
-    @* Context of the entry, not a filter: what is entered is attached to it. *@
-    <div class="filters">
-        <div class="f">
-            <label for="w-date">Date de production</label>
-            <input id="w-date" type="date" value="@_date.ToString("yyyy-MM-dd")" max="@Shifts.ProductionDate(Now).ToString("yyyy-MM-dd")" @onchange="OnDateAsync" />
-        </div>
-        <div class="f">
-            <span>Poste</span>
-            <div class="segs" role="group" aria-label="Poste">
-                @foreach (var s in Shifts.All)
-                {
-                    @* A poste of another team stays visible, greyed out: a click says why. *@
-                    var own = Plant.IsOwnShift(Actor, _date, s);
-                    <button type="button" class="seg @(_shift == s ? "on" : "") @(own ? "" : "off-team")" aria-disabled="@(!own)"
-                            title="@(own ? null : "Poste de " + Plant.TeamOnShift(_date, s) + " : ne concerne pas votre équipe")"
-                            @onclick="() => OnShiftAsync(s)">@Shifts.Label(s) <span style="font-weight:400">@Shifts.Hours(s)</span></button>
-                }
-            </div>
-        </div>
-        <div class="f">
-            <span>Équipe du poste</span>
-            <span class="chip acc" style="align-self:flex-start;margin-top:5px">@_team</span>
-        </div>
-        @if (Actor.Team is { } myTeam)
-        {
-            <div class="f">
-                <span>Votre équipe</span>
-                <span class="chip" style="align-self:flex-start;margin-top:5px" title="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent">@myTeam</span>
-            </div>
-        }
-        <span class="sp"></span>
-        <span class="chip" title="La date et le poste sont attachés à chaque saisie">Contexte de saisie</span>
-    </div>
-
-    @if (_teamNote != null)
+    @if (Kind == WasteKind.Produit && !Waste.CanEnter(Actor, Kind) && !Session.Can(Perm.DechetsValider))
     {
-        <div class="notice warn" role="status">@_teamNote</div>
+        <div class="card" style="max-width:640px">
+            <h2>Accès refusé</h2>
+            <p>Le déchet produit se saisit par secteur : vos rôles (@Actor.RoleNames) ne donnent pas le droit « Saisir les déchets produit ».</p>
+        </div>
     }
-    <Flash Error="@Error" Info="@Info" />
-
-    @if (Session.Can(Modules.SaisieDechets, AppAction.Saisir))
+    else
     {
+        <div class="head">
+            <div>
+                <span class="pre">Saisie</span><h1>@Title</h1>
+                <p>
+                    @(Kind == WasteKind.Emballage ? "Interface A1 : par machine, équipe et poste." : "Interface A2 : par secteur.")
+                    Une saisie reste « à valider » jusqu'à sa validation par une autre personne, qui peut aussi vous la renvoyer
+                    avec un commentaire ; validée, elle est verrouillée. Chaque changement est gardé dans son historique.
+                </p>
+            </div>
+        </div>
+
+        @* Context of the entry, not a filter: what is entered is attached to it. *@
+        <div class="filters">
+            @if (_choosePoste)
+            {
+                <div class="f">
+                    <label for="w-date">Date de production</label>
+                    <input id="w-date" type="date" value="@_date.ToString("yyyy-MM-dd")" max="@Shifts.ProductionDate(Now).ToString("yyyy-MM-dd")" @onchange="OnDateAsync" />
+                </div>
+                <div class="f">
+                    <span>Poste</span>
+                    <div class="segs" role="group" aria-label="Poste">
+                        @* A team-bound account sees the postes of its team only. *@
+                        @foreach (var s in Shifts.All.Where(s => Plant.IsOwnShift(Actor, _date, s)))
+                        {
+                            <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => OnShiftAsync(s)">
+                                @Shifts.Label(s) <span style="font-weight:400">@Shifts.Hours(s)</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_poste is { } p)
+            {
+                <div class="f">
+                    <span>Votre poste</span>
+                    <span class="chip acc" style="align-self:flex-start;margin-top:5px"
+                          title="Vous saisissez pour le poste de votre équipe en cours (ou qui vient de finir)">
+                        @Shifts.Label(p.ShiftId) du @p.Date.ToString("dd/MM/yyyy") · @Shifts.Hours(p.ShiftId)
+                    </span>
+                </div>
+            }
+            <div class="f">
+                <span>Équipe du poste</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px">@_team</span>
+            </div>
+            <span class="sp"></span>
+            <span class="chip" title="La date et le poste sont attachés à chaque saisie">Contexte de saisie</span>
+        </div>
+
+        @if (!_choosePoste && _poste == null)
+        {
+            <div class="notice warn" role="status">Votre équipe (@Actor.Team) n'a pas de poste en cours ou récent : la saisie se fait pendant ou juste après son poste.</div>
+        }
+        @if (_choosePoste && !Shifts.All.Any(s => Plant.IsOwnShift(Actor, _date, s)))
+        {
+            <div class="notice warn" role="status">Votre équipe (@Actor.Team) n'a pas travaillé le @_date.ToString("dd/MM/yyyy").</div>
+        }
+        <Flash Error="@Error" Info="@Info" />
+
+        @if (_returned.Count > 0)
+        {
+            <section class="card" style="border-color:var(--bad)">
+                <div class="card-head">
+                    <h2>Renvoyées à corriger <small>@_returned.Count saisie(s) : un validateur vous demande une correction</small></h2>
+                </div>
+                <WasteEntryTable Entries="_returned" ShowPoste="true" EditingId="_editing?.Id" OnEdit="Edit" OnChanged="LoadAsync" />
+            </section>
+        }
+
+        @if (Waste.CanEnter(Actor, Kind) && (_choosePoste || _poste != null) || _editing != null)
+        {
+            <section class="card">
+                <div class="card-head">
+                    <h2>
+                        @(_editing == null ? "Nouvelle saisie" : _editing.Status == WasteStatus.Validee ? $"Corriger la saisie n°{_editing.Id}" : $"Modifier la saisie n°{_editing.Id}")
+                        <small>@Shifts.Label(EditShift) du @EditDate.ToString("dd/MM/yyyy") · @Plant.TeamOnShift(EditDate, EditShift)</small>
+                    </h2>
+                </div>
+                @if (_editing?.Status == WasteStatus.Renvoyee)
+                {
+                    <div class="notice warn" style="margin-bottom:10px">Renvoyée par @_editing.ReturnedBy : « @_editing.ReturnComment ». Enregistrer la soumet à nouveau à la validation.</div>
+                }
+                @{ var check = Check; }
+                <form class="form" @onsubmit="SaveAsync" novalidate>
+                    @if (Kind == WasteKind.Emballage)
+                    {
+                        <div class="f">
+                            <label for="w-machine">Machine</label>
+                            <select id="w-machine" @bind="_machine" class="@Missing(check, "la machine")">
+                                @if (_machines.Count != 1)
+                                {
+                                    <option value="">Choisir…</option>
+                                }
+                                @foreach (var m in _machines)
+                                {
+                                    <option value="@m.Id">@m.Id · @Sectors.Label(m.Sector)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="f">
+                            <label for="w-sector">Secteur</label>
+                            <select id="w-sector" @bind="_sector" class="@Missing(check, "le secteur")">
+                                <option value="">Choisir…</option>
+                                @foreach (var s in Waste.SectorsFor(Actor))
+                                {
+                                    <option value="@s">@Sectors.Label(s)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="f">
+                        <label for="w-qty">Quantité</label>
+                        <input id="w-qty" inputmode="decimal" size="8" placeholder="0,0" autocomplete="off" maxlength="12"
+                               class="@(check.QuantityError != null ? "invalid" : Missing(check, "la quantité"))" aria-invalid="@(check.QuantityError != null)"
+                               aria-describedby="w-form-check" @bind="_quantity" @bind:event="oninput" />
+                    </div>
+                    <div class="f">
+                        <label for="w-unit">Unité</label>
+                        <select id="w-unit" @bind="_unit">
+                            @foreach (var u in WasteUnits.All)
+                            {
+                                <option value="@u">@u</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f">
+                        <label for="w-reason">Motif</label>
+                        <select id="w-reason" @bind="_reason" class="@Missing(check, "le motif")">
+                            <option value="">Choisir…</option>
+                            @foreach (var r in _reasons)
+                            {
+                                <option value="@r.Label">@r.Label</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f grow">
+                        <label for="w-comment">Commentaire@(WasteReasons.NeedsComment(_reason) ? " (obligatoire pour « Autre »)" : "")</label>
+                        <input id="w-comment" maxlength="500" class="@Missing(check, "un commentaire (motif « Autre »)")" @bind="_comment" @bind:event="oninput" />
+                    </div>
+                    @if (_editing?.Status == WasteStatus.Validee)
+                    {
+                        <div class="f grow">
+                            <label for="w-fix">Motif de la correction (obligatoire)</label>
+                            <input id="w-fix" maxlength="300" class="@Missing(check, "le motif de la correction")" @bind="_correction" @bind:event="oninput" />
+                        </div>
+                    }
+                    <button class="bar acc" type="submit" disabled="@(!check.Complete || _busy)"
+                            title="@(check.Complete ? null : "À compléter : " + string.Join(", ", check.Missing))">
+                        @(NeedsConfirmation(check) ? $"Confirmer {Fmt.Kg(check.QuantityKg!.Value)}"
+                            : _editing == null ? "Ajouter" : _editing.Status == WasteStatus.Renvoyee ? "Enregistrer et soumettre à nouveau" : "Enregistrer")
+                    </button>
+                    @if (_editing != null)
+                    {
+                        <button class="bar" type="button" @onclick="CancelEdit">Annuler</button>
+                    }
+                </form>
+                @* Checked while typing: what is wrong at once, what is missing once the user has started. *@
+                <div id="w-form-check" class="form-check" aria-live="polite">
+                    @if (check.QuantityError != null)
+                    {
+                        <span class="bad">Quantité : @check.QuantityError</span>
+                    }
+                    else if (NeedsConfirmation(check))
+                    {
+                        <span class="warn">
+                            Quantité inhabituelle : @Fmt.Kg(check.QuantityKg!.Value) (au-delà de @Fmt.Kg(WasteFormCheck.UnusualKg(Kind))).
+                            Vérifiez la virgule et l'unité, puis cliquez sur « Confirmer ».
+                        </span>
+                    }
+                    else if (check.Missing.Count > 0 && Started)
+                    {
+                        <span>À compléter : @string.Join(", ", check.Missing).</span>
+                    }
+                    else if (check.Complete && _unit == WasteUnits.Tonne && check.QuantityKg is { } t)
+                    {
+                        <span>= @Fmt.Kg(t)</span>
+                    }
+                </div>
+            </section>
+        }
+
         <section class="card">
             <div class="card-head">
-                <h2>@(_editing == null ? "Nouvelle saisie" : $"Modifier la saisie n°{_editing.Id}") <small>@Shifts.Label(_shift) du @_date.ToString("dd/MM/yyyy") · @_team</small></h2>
+                <h2>
+                    Saisies du poste
+                    <small>
+                        @_entries.Count saisie(s) · total @Fmt.Kg(_entries.Where(e => e.Counts).Sum(e => e.QuantityKg))
+                        @if (_returned.Any(r => r.ProductionDate == _date && r.ShiftId == _shift))
+                        {
+                            @($" · + {_returned.Count(r => r.ProductionDate == _date && r.ShiftId == _shift)} renvoyée(s) à corriger, ci-dessus")
+                        }
+                    </small>
+                </h2>
             </div>
-            <form class="form" @onsubmit="SaveAsync">
-                @if (Kind == WasteKind.Emballage)
-                {
-                    <div class="f">
-                        <label for="w-machine">Machine</label>
-                        <select id="w-machine" @bind="_machine">
-                            <option value="">Choisir…</option>
-                            @foreach (var m in _machines)
-                            {
-                                <option value="@m.Id">@m.Id · @Sectors.Label(m.Sector)</option>
-                            }
-                        </select>
-                    </div>
-                }
-                else
-                {
-                    <div class="f">
-                        <label for="w-sector">Secteur</label>
-                        <select id="w-sector" @bind="_sector">
-                            <option value="">Choisir…</option>
-                            @foreach (var s in Waste.SectorsFor(Actor))
-                            {
-                                <option value="@s">@Sectors.Label(s)</option>
-                            }
-                        </select>
-                    </div>
-                }
-                <div class="f">
-                    <label for="w-qty">Quantité</label>
-                    <input id="w-qty" inputmode="decimal" size="8" placeholder="0,0" @bind="_quantity" @bind:event="oninput" />
-                </div>
-                <div class="f">
-                    <label for="w-unit">Unité</label>
-                    <select id="w-unit" @bind="_unit">
-                        @foreach (var u in WasteUnits.All)
-                        {
-                            <option value="@u">@u</option>
-                        }
-                    </select>
-                </div>
-                <div class="f">
-                    <label for="w-reason">Motif</label>
-                    <select id="w-reason" @bind="_reason">
-                        <option value="">Choisir…</option>
-                        @foreach (var r in _reasons)
-                        {
-                            <option value="@r.Label">@r.Label</option>
-                        }
-                    </select>
-                </div>
-                <div class="f grow">
-                    <label for="w-comment">Commentaire</label>
-                    <input id="w-comment" maxlength="500" @bind="_comment" @bind:event="oninput" />
-                </div>
-                @if (_editing?.Status == WasteStatus.Validee)
-                {
-                    <div class="f grow">
-                        <label for="w-fix">Motif de la correction (obligatoire)</label>
-                        <input id="w-fix" maxlength="200" @bind="_correction" @bind:event="oninput" />
-                    </div>
-                }
-                <button class="bar acc" type="submit">@(_editing == null ? "Ajouter" : "Enregistrer")</button>
-                @if (_editing != null)
-                {
-                    <button class="bar" type="button" @onclick="CancelEdit">Annuler</button>
-                }
-            </form>
+            <WasteEntryTable Entries="_entries" EditingId="_editing?.Id" OnEdit="Edit" OnChanged="LoadAsync" Empty="Aucune saisie pour ce poste." />
+            @if (Session.Policy.RequireSecondValidator && Session.Can(Perm.DechetsValider))
+            {
+                <p class="nd" style="font-size:12px">Vos propres saisies, et celles que vous avez modifiées, doivent être validées par une autre personne.</p>
+            }
         </section>
     }
-
-    <section class="card">
-        <div class="card-head">
-            <h2>Saisies du poste <small>@_entries.Count saisie(s) · total @Fmt.Kg(_entries.Sum(e => e.QuantityKg))</small></h2>
-            @if (_validatable.Count > 1)
-            {
-                <button type="button" class="bar acc small" @onclick="ValidateAllAsync">Valider les @_validatable.Count saisies</button>
-            }
-        </div>
-        @if (_entries.Count == 0)
-        {
-            <p class="empty">Aucune saisie pour ce poste.</p>
-        }
-        else
-        {
-            <div class="scroll">
-                <table class="t">
-                    <thead>
-                        <tr>
-                            <th>N°</th><th>@(Kind == WasteKind.Emballage ? "Machine" : "Secteur")</th><th class="r">Quantité</th><th>Motif</th><th>Commentaire</th>
-                            <th>Saisi par</th><th>État</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var e in _entries)
-                        {
-                            <tr class="@(_editing?.Id == e.Id ? "sel" : "")">
-                                <td class="n">@e.Id</td>
-                                <td>@(e.MachineId ?? Sectors.Label(e.Sector))<small>@(e.MachineId == null ? "" : Sectors.Label(e.Sector))</small></td>
-                                <td class="r">@Fmt.Num(e.Quantity, e.Quantity % 1 == 0 ? 0 : 2) @e.Unit</td>
-                                <td class="n">@e.Reason</td>
-                                <td class="n">@e.Comment</td>
-                                <td class="n">@e.CreatedBy<small>@e.CreatedAt.ToString("dd/MM HH:mm")</small></td>
-                                <td>
-                                    @if (e.Status == WasteStatus.Validee)
-                                    {
-                                        <span class="chip ok" title="Validée le @Fmt.Date(e.ValidatedAt)">Validée · @e.ValidatedBy</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="chip warn">Brouillon</span>
-                                    }
-                                </td>
-                                <td>
-                                    <div class="actions">
-                                        @if (Waste.CanValidate(Actor, e, Session.Policy))
-                                        {
-                                            <button type="button" class="link" @onclick="() => ValidateAsync(e)">Valider</button>
-                                        }
-                                        @if (Waste.CanEdit(Actor, e))
-                                        {
-                                            <button type="button" class="link" @onclick="() => Edit(e)">@(e.Status == WasteStatus.Validee ? "Corriger" : "Modifier")</button>
-                                        }
-                                        @if (Waste.CanDelete(Actor, e))
-                                        {
-                                            @if (_confirmDelete == e.Id)
-                                            {
-                                                <button type="button" class="link danger" @onclick="() => DeleteAsync(e)">Confirmer la suppression</button>
-                                            }
-                                            else
-                                            {
-                                                <button type="button" class="link danger" @onclick="() => _confirmDelete = e.Id">Supprimer</button>
-                                            }
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        @if (Session.Policy.RequireSecondValidator && Session.Can(Perm.DechetsValider))
-        {
-            <p class="nd" style="font-size:12px">Vos propres saisies doivent être validées par une autre personne.</p>
-        }
-    </section>
 </RequireAccess>
 
 @code {
     [Parameter, EditorRequired] public WasteKind Kind { get; set; }
 
+    // From the "À valider" page: open this poste, and this entry in the form.
+    [Parameter] public DateTime? Date { get; set; }
+    [Parameter] public int? Shift { get; set; }
+    [Parameter] public long? EditId { get; set; }
+
     private string Title => Kind == WasteKind.Emballage ? "Déchets emballage" : "Déchets produit";
 
+    private bool _choosePoste;
+    private (DateTime Date, int ShiftId)? _poste;
     private DateTime _date;
     private int _shift;
     private string _team = "";
-    private string? _teamNote;
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
     private IReadOnlyList<WasteReason> _reasons = Array.Empty<WasteReason>();
     private IReadOnlyList<WasteEntry> _entries = Array.Empty<WasteEntry>();
-    private List<WasteEntry> _validatable = new();
+    private IReadOnlyList<WasteEntry> _returned = Array.Empty<WasteEntry>();
     private WasteKind _loadedKind;
+    private long? _openedEditId;
 
     private string _machine = "";
     private string _sector = "";
@@ -231,17 +253,42 @@
     private string _comment = "";
     private string _correction = "";
     private WasteEntry? _editing;
-    private long? _confirmDelete;
+    private bool _busy;
+    private double? _confirmedKg;
+
+    private WasteFormCheck Check => WasteFormCheck.Of(new WasteFormInput(
+        Kind, Kind == WasteKind.Emballage ? _machine : _sector, _quantity, _unit, _reason, _comment,
+        _editing?.Status == WasteStatus.Validee, _correction));
+
+    // The user has started filling the form (missing fields are then named).
+    private bool Started => _quantity.Length > 0 || _comment.Length > 0 || _editing != null;
+
+    private string Missing(WasteFormCheck check, string what) => Started && check.Missing.Contains(what) ? "missing" : "";
+
+    private bool NeedsConfirmation(WasteFormCheck check) => check.Complete && check.Unusual && _confirmedKg != check.QuantityKg;
+
+    // An entry keeps its own date and poste when it is changed.
+    private DateTime EditDate => _editing?.ProductionDate ?? _date;
+    private int EditShift => _editing?.ShiftId ?? _shift;
 
     protected override async Task OnParametersSetAsync()
     {
         if (!Session.Can(Modules.SaisieDechets, AppAction.Voir))
             return;
-        if (_date == default)
+        _choosePoste = Waste.CanChoosePoste(Actor);
+        _poste = Waste.CurrentPoste(Actor);
+        if (_date == default || Date != null)
         {
-            _date = Shifts.ProductionDate(Now);
-            _shift = Shifts.At(Now);
-            KeepOwnShift();
+            if (_choosePoste)
+            {
+                _date = Date?.Date ?? Shifts.ProductionDate(Now);
+                _shift = Shift is { } s && Shifts.All.Contains(s) ? s : Shifts.At(Now);
+                KeepOwnShift();
+            }
+            else
+            {
+                (_date, _shift) = _poste ?? (Shifts.ProductionDate(Now), Shifts.At(Now));
+            }
         }
         if (_loadedKind != Kind || _reasons.Count == 0)
         {
@@ -255,6 +302,13 @@
             });
         }
         await LoadAsync();
+        if (EditId is { } id && _openedEditId != id)
+        {
+            _openedEditId = id;
+            if (_entries.Concat(_returned).FirstOrDefault(e => e.Id == id) is { } target && Waste.CanEdit(Actor, target))
+                Edit(target);
+        }
+        ResetForm();
     }
 
     private async Task OnDateAsync(ChangeEventArgs e)
@@ -262,7 +316,6 @@
         if (DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d))
         {
             _date = d.Date;
-            _teamNote = null;
             KeepOwnShift();
             CancelEdit();
             await LoadAsync();
@@ -271,12 +324,6 @@
 
     private async Task OnShiftAsync(int shift)
     {
-        if (!Plant.IsOwnShift(Actor, _date, shift))
-        {
-            _teamNote = Plant.ForeignShiftMessage(Actor, _date, shift);
-            return;
-        }
-        _teamNote = null;
         _shift = shift;
         CancelEdit();
         await LoadAsync();
@@ -292,34 +339,71 @@
     private async Task LoadAsync()
     {
         _team = Plant.TeamOnShift(_date, _shift);
-        _entries = await Waste.ListAsync(Actor, Kind, _date, _shift);
-        _validatable = _entries.Where(e => Waste.CanValidate(Actor, e, Session.Policy)).ToList();
-        _confirmDelete = null;
+        var own = Plant.IsOwnShift(Actor, _date, _shift);
+        _returned = (await Waste.ReturnedToAsync(Actor)).Where(e => e.Kind == Kind).ToList();
+        // The actor's own returned entries are in the "Renvoyées à corriger" box above, not twice.
+        _entries = own
+            ? (await Waste.ListAsync(Actor, Kind, _date, _shift)).Where(e => !_returned.Any(r => r.Id == e.Id)).ToList()
+            : Array.Empty<WasteEntry>();
+
+        // The entry being edited changed meanwhile (validated, sent back...):
+        // the form closes, the list shows its new state.
+        if (_editing != null)
+        {
+            var fresh = _entries.Concat(_returned).FirstOrDefault(e => e.Id == _editing.Id);
+            if (fresh == null || fresh.Version != _editing.Version)
+                CancelEdit();
+        }
+    }
+
+    // A single machine in scope is preselected.
+    private void ResetForm()
+    {
+        if (_editing == null && Kind == WasteKind.Emballage && _machines.Count == 1)
+            _machine = _machines[0].Id;
+        if (_editing == null && Kind == WasteKind.Produit && string.IsNullOrEmpty(_sector) && Waste.SectorsFor(Actor) is { Count: 1 } only)
+            _sector = only[0];
     }
 
     private async Task SaveAsync()
     {
-        if (!double.TryParse(_quantity.Replace(',', '.').Replace(" ", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out var qty))
+        var check = Check;
+        if (!check.Complete || _busy)
+            return;
+        // A quantity far above the usual is sent on the second click only.
+        if (NeedsConfirmation(check))
         {
-            Error = "Indiquez la quantité (nombre, par exemple 12,5).";
-            Info = null;
+            _confirmedKg = check.QuantityKg;
             return;
         }
-        var draft = new WasteDraft(Kind, _date, _shift,
+        var qty = check.Quantity!.Value;
+        var draft = new WasteDraft(Kind, EditDate, EditShift,
             Kind == WasteKind.Emballage ? _machine : null,
             Kind == WasteKind.Produit ? _sector : null,
             qty, _unit, _reason, _comment);
         var editing = _editing;
-        var ok = editing == null
-            ? await Run(() => Waste.AddAsync(Actor, draft), "Saisie enregistrée en brouillon.")
-            : await Run(() => Waste.UpdateAsync(Actor, editing.Id, draft, _correction),
-                editing.Status == WasteStatus.Validee ? "Correction enregistrée et tracée dans le journal d'audit." : "Saisie modifiée.");
-        if (ok)
+        _busy = true;
+        bool ok;
+        try
         {
-            _quantity = _comment = _correction = "";
-            _editing = null;
-            await LoadAsync();
+            ok = editing == null
+                ? await Run(() => Waste.AddAsync(Actor, draft), "Saisie enregistrée : elle attend sa validation.")
+                : await Run(() => Waste.UpdateAsync(Actor, editing.Id, editing.Version, draft, _correction),
+                    editing.Status switch
+                    {
+                        WasteStatus.Validee => "Correction enregistrée et gardée dans l'historique de la saisie.",
+                        WasteStatus.Renvoyee => "Saisie corrigée et soumise à nouveau à la validation.",
+                        _ => "Saisie modifiée.",
+                    });
         }
+        finally
+        {
+            _busy = false;
+        }
+        if (ok)
+            CancelEdit();
+        await LoadAsync();
+        ResetForm();
     }
 
     private void Edit(WasteEntry e)
@@ -339,32 +423,6 @@
     {
         _editing = null;
         _quantity = _comment = _correction = "";
-    }
-
-    private async Task ValidateAsync(WasteEntry e)
-    {
-        if (await Run(() => Waste.ValidateAsync(Actor, e.Id), $"Saisie n°{e.Id} validée."))
-            await LoadAsync();
-    }
-
-    private async Task ValidateAllAsync()
-    {
-        var count = _validatable.Count;
-        if (await Run(async () =>
-            {
-                foreach (var e in _validatable)
-                    await Waste.ValidateAsync(Actor, e.Id);
-            }, $"{count} saisies validées."))
-            await LoadAsync();
-    }
-
-    private async Task DeleteAsync(WasteEntry e)
-    {
-        if (await Run(() => Waste.DeleteAsync(Actor, e.Id), $"Saisie n°{e.Id} supprimée."))
-        {
-            if (_editing?.Id == e.Id)
-                CancelEdit();
-            await LoadAsync();
-        }
+        _confirmedKg = null;
     }
 }

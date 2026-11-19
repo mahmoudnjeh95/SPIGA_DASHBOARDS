@@ -45,6 +45,8 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
 
     public string TeamOnShift(DateTime productionDate, int shiftId) => teams.GetTeamForShift(productionDate, shiftId);
 
+    public string TeamOf(ProductionBucket lot) => teams.TeamOf(lot);
+
     public (string Team, int ShiftId) CurrentShift()
     {
         var now = Now;
@@ -62,13 +64,16 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
         return string.IsNullOrEmpty(team) || actor.IsOwnTeam(team);
     }
 
-    // Whether the actor's team works this poste on at least one day of
-    // [from, to) (the rotation moves the teams from one poste to another).
+    // Whether the actor's team works this poste on at least one production
+    // day of [from, to) (the rotation moves the teams from one poste to
+    // another). The last day is the one before `to` (a period ends at 06:00
+    // the morning after its last day, or at midnight for calendar days).
     public bool WorksShift(Actor actor, DateTime from, DateTime to, int shiftId)
     {
         if (actor.Team == null)
             return true;
-        for (var d = from.Date; d < to && d < from.Date.AddDays(28); d = d.AddDays(1))
+        var last = to.AddDays(-1).Date;
+        for (var d = from.Date; d <= last && d < from.Date.AddDays(28); d = d.AddDays(1))
             if (IsOwnShift(actor, d, shiftId))
                 return true;
         return false;

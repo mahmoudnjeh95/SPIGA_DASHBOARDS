@@ -173,6 +173,27 @@ Utilisateurs et rôles, without a developer.
 * Passwords: PBKDF2-SHA256; temporary passwords must be changed at first
   sign-in; lockout after repeated failures; screen lock after inactivity
   (Utilisateurs et rôles › Règles de sécurité).
-* Waste entries (interfaces A1 / A2): draft, then validated by another
-  person, then locked; a correction needs its own permission and a reason.
-  Everything goes to the audit trail (who, when, which PC, old and new value).
+* Waste entries (interfaces A1 / A2): entered (à valider), then validated
+  by another person (not the author, nor whoever last changed it) or sent
+  back to the author with a comment; the author corrects and submits it
+  again. Validated = locked: corrected or cancelled only with "Corriger ou
+  annuler" and a reason; a cancelled entry stays listed and counts nowhere.
+  Every action carries the version the user saw (an entry changed in the
+  meantime is refused) and writes a revision, shown as the entry's history
+  on the screens; the audit trail also keeps who, when, which PC, old and
+  new value. Packaging waste is entered per machine; product waste per
+  sector (needs a scope over the whole sector). Without "Saisir pour un
+  autre poste", a user enters for their team's current (or just ended)
+  poste only. Saisie › Saisies à valider lists every open entry. The entry
+  form is checked while typing (number format, at most 3 decimals, > 0 and
+  ≤ 100 t, missing fields, "Autre" needs a comment); it cannot be sent
+  incomplete, and a quantity far above the usual must be confirmed.
+* Mon poste (the operator's home, right "Saisir les déchets emballage"):
+  his team's poste with each of his machines live (state, ongoing stop and
+  its cause, product, bags, speed, TRS, waste of the poste), refreshed every
+  15 s, and a quick waste entry for touch screens: motif picture, keypad,
+  confirmation.
+* Periods of the web screens are production days, 06:00 to 06:00 (the
+  night poste belongs to the day it started, like the waste entries), so
+  production, postes and waste of a period always match. The classic TV
+  dashboard keeps calendar days. The Journal d'audit uses calendar days.

@@ -1,0 +1,89 @@
+@page "/saisie/a-valider"
+@inherits SpigaPage
+@inject WasteService Waste
+
+@* Every open waste entry in the validator's scope, whatever its date, poste
+   or kind: to validate, waiting for someone else, sent back to its author. *@
+<RequireAccess Module="@Modules.SaisieDechets" Action="AppAction.Valider">
+    <div class="head">
+        <div>
+            <span class="pre">Saisie</span><h1>Saisies à valider</h1>
+            <p>Déchets emballage et produit non validés de votre périmètre, tous postes confondus. Valider, renvoyer à l'auteur avec un commentaire, ou ouvrir la saisie pour la modifier.</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Période</span>
+            <div class="segs" role="group" aria-label="Période">
+                @foreach (var d in new[] { 7, WasteService.OpenLookbackDays })
+                {
+                    <button type="button" class="seg @(_days == d ? "on" : "")" @onclick="() => SetDaysAsync(d)">@d jours</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Type</span>
+            <div class="segs" role="group" aria-label="Type">
+                <button type="button" class="seg @(_kind == null ? "on" : "")" @onclick="() => _kind = null">Tous</button>
+                <button type="button" class="seg @(_kind == WasteKind.Emballage ? "on" : "")" @onclick="() => _kind = WasteKind.Emballage">Emballage</button>
+                <button type="button" class="seg @(_kind == WasteKind.Produit ? "on" : "")" @onclick="() => _kind = WasteKind.Produit">Produit</button>
+            </div>
+        </div>
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_open == null)
+    {
+        <Loader Text="Chargement des saisies…" />
+    }
+    else
+    {
+        var shown = _open.Where(e => _kind == null || e.Kind == _kind).ToList();
+        var mine = shown.Where(e => Waste.CanValidate(Actor, e, Session.Policy)).ToList();
+        var others = shown.Where(e => e.Status == WasteStatus.Brouillon && !mine.Contains(e)).ToList();
+        var returned = shown.Where(e => e.Status == WasteStatus.Renvoyee).ToList();
+
+        <section class="card">
+            <div class="card-head"><h2>À valider par vous <small>@mine.Count saisie(s), les plus anciennes d'abord</small></h2></div>
+            <WasteEntryTable Entries="mine" ShowPoste="true" OnEdit="Open" OnChanged="LoadAsync" Empty="Rien à valider : tout est à jour." />
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2>À valider par une autre personne <small>vos saisies, ou celles que vous avez modifiées</small></h2>
+            </div>
+            <WasteEntryTable Entries="others" ShowPoste="true" OnEdit="Open" OnChanged="LoadAsync" Empty="Aucune." />
+        </section>
+
+        <section class="card">
+            <div class="card-head"><h2>Renvoyées, en attente de l'auteur <small>@returned.Count saisie(s)</small></h2></div>
+            <WasteEntryTable Entries="returned" ShowPoste="true" OnEdit="Open" OnChanged="LoadAsync" Empty="Aucune saisie renvoyée en attente." />
+        </section>
+    }
+</RequireAccess>
+
+@code {
+    private int _days = 7;
+    private WasteKind? _kind;
+    private IReadOnlyList<WasteEntry>? _open;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task SetDaysAsync(int days)
+    {
+        _days = days;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.DechetsValider))
+            return;
+        var today = Shifts.ProductionDate(Now);
+        await Run(async () => _open = await Waste.OpenAsync(Actor, today.AddDays(-_days + 1), today));
+    }
+
+    private void Open(WasteEntry e) => Nav.NavigateTo(WasteQuery.EntryLink(e));
+}

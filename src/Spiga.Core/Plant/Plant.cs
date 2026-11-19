@@ -45,6 +45,10 @@ public static class Shifts
         _ => 3,
     };
 
+    // When a poste of a production day starts (it lasts 8 hours).
+    public static DateTime Start(DateTime productionDate, int shiftId)
+        => productionDate.Date.AddHours(shiftId switch { 1 => 6, 2 => 14, _ => 22 });
+
     // The night poste 22h-06h belongs to the day it started.
     public static DateTime ProductionDate(DateTime time) => time.Hour < 6 ? time.Date.AddDays(-1) : time.Date;
 }

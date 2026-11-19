@@ -215,7 +215,8 @@
                     <g class="chart-bar" style="--d:@(i * 40)ms">
                         <title>@Labels[from + i] · @s.Name : @Format(v)</title>
                         <rect x="@N(x + 1)" y="@N(Math.Min(y, y0))" width="@N(Math.Max(1, barW - 2))" height="@N(Math.Max(1, Math.Abs(y0 - y)))" rx="@N(Math.Min(6, barW / 4))" fill="@s.Color" />
-                        @if (showLabels)
+                        @* Side-by-side bars: a 0 label would run into its neighbour's (the tooltip keeps it). *@
+                        @if (showLabels && (bars.Count == 1 || v != 0))
                         {
                             @Txt("chart-value", x + barW / 2, Math.Min(y, y0) - 5, "middle", Format(v))
                         }

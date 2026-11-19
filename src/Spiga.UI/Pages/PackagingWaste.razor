@@ -1,3 +1,9 @@
 @page "/saisie/dechets-emballage"
 
-<WasteEntryView Kind="WasteKind.Emballage" />
+<WasteEntryView Kind="WasteKind.Emballage" Date="WasteQuery.Date(DateParam)" Shift="ShiftParam" EditId="EditParam" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "date")] public string? DateParam { get; set; }
+    [SupplyParameterFromQuery(Name = "poste")] public int? ShiftParam { get; set; }
+    [SupplyParameterFromQuery(Name = "saisie")] public long? EditParam { get; set; }
+}

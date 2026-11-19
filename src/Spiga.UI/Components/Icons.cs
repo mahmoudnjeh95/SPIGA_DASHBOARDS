@@ -27,6 +27,8 @@ public static class Icons
         ["absences"] = "<path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8'/>",
         ["saisie-emballage"] = "<rect x='8' y='2' width='8' height='4' rx='1'/><path d='M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'/><path d='m9 14 2 2 4-4'/>",
         ["saisie-produit"] = "<path d='M12 3v18M7 21h10M3 7h18'/><path d='m6 7-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z'/>",
+        ["poste"] = "<path d='M2 20h20'/><rect x='4' y='9' width='7' height='11' rx='1'/><path d='M11 13h9v7h-9z'/><path d='M7 9V5h3l1 4'/><circle cx='15.5' cy='16.5' r='1.5'/>",
+        ["a-valider"] = "<path d='M9 11l3 3L22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/>",
         ["saisie-rendement"] = "<path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'/>",
         ["saisie-energie"] = "<path d='m12 14 4-4'/><path d='M3.3 19a10 10 0 1 1 17.4 0'/>",
         ["acces"] = "<path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><circle cx='12' cy='10' r='2.5'/><path d='M8.5 16a4 4 0 0 1 7 0'/>",

@@ -229,6 +229,8 @@ public static class SpigaServices
         services.AddScoped<WasteService>();
         services.AddScoped<UserSession>();
         services.AddScoped<DashboardQueries>();
+        services.AddScoped<WasteDashboard>();
+        services.AddScoped<PosteBoard>();
         services.AddScoped<SourceStatusService>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();
@@ -244,6 +246,8 @@ public sealed class UiState
     public Period? PackagingPeriod { get; set; }
     public string? PackagingSector { get; set; }
     public int? PackagingShift { get; set; }
+    public Period? WastePeriod { get; set; }
+    public WasteFilter? WasteFilter { get; set; }
 
     // Menu: the screens planned for a later version ("à venir") are folded
     // away unless the user opens them.

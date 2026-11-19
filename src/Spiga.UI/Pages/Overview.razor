@@ -129,10 +129,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // A role without the overview lands on its first screen instead.
+        // A role without the overview lands on its first screen instead
+        // (an operator: Mon poste).
         if (!Session.Can(Modules.VueEnsemble, AppAction.Voir))
         {
-            var first = ModuleCatalog.Navigation.FirstOrDefault(n => Session.Can(n.Module, AppAction.Voir) && n.Ready);
+            var first = ModuleCatalog.Navigation.FirstOrDefault(n => n.Ready && Session.Can(n.RequiredPermission)
+                                                                     && (!n.DesktopOnly || Desktop.IsAvailable));
             Nav.NavigateTo(first?.Route ?? "compte", replace: true);
             return;
         }
@@ -235,9 +237,17 @@
         var pending = await Waste.PendingValidationCountAsync(Actor, from, to.AddDays(-1));
         if (pending > 0)
             alerts.Add(new("warn", $"{pending} saisie(s) de déchets à valider", "Saisie · brouillons de la période dans votre périmètre",
-                "saisie/dechets-emballage", "Valider"));
+                "saisie/a-valider", "Valider"));
 
-        if (Session.Can(Modules.SaisieDechets, AppAction.Saisir) && to <= Now.Date)
+        if (Session.Can(Modules.SaisieDechets, AppAction.Saisir))
+        {
+            var returned = await Waste.ReturnedToAsync(Actor);
+            if (returned.Count > 0)
+                alerts.Add(new("bad", $"{returned.Count} de vos saisies renvoyée(s) à corriger", "Saisie · un validateur vous demande une correction",
+                    returned[0].Kind == WasteKind.Emballage ? "saisie/dechets-emballage" : "saisie/dechets-produit", "Corriger"));
+        }
+
+        if (Session.Can(Perm.DechetsProduit) && to <= Now)
         {
             foreach (var s in snap.Sectors.Where(s => s.ProductWasteKg == 0 && s.Machines > 0))
                 alerts.Add(new("warn", $"Déchet produit non saisi : {Sectors.Label(s.Sector)}", "Saisie · aucune saisie sur la période",

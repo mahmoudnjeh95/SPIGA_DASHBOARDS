@@ -229,6 +229,15 @@
             return;
         _snap = null;
         var (from, to) = _period.Range(Now);
-        await Run(async () => _snap = await Queries.LoadAsync(Actor, View, from, to, _sector, _shift));
+        var load = ++_loads;
+        await Run(async () =>
+        {
+            var (actor, sector, shift) = (Actor, _sector, _shift);
+            var snap = await Task.Run(() => Queries.LoadAsync(actor, View, from, to, sector, shift)); // off the UI thread
+            if (load == _loads)
+                _snap = snap; // only the latest load (a filter clicked meanwhile)
+        });
     }
+
+    private int _loads;
 }

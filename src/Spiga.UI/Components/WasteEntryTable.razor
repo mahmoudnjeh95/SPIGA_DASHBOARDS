@@ -1,0 +1,277 @@
+@* The waste entries of a list with everything that can be done to them,
+   inside the actor's rights: valider, renvoyer (with a comment), modifier /
+   corriger (the parent fills its form), annuler (validated, with a reason),
+   supprimer, historique. Each action sends the version shown: if the entry
+   changed in between, it is refused and the list reloads (OnChanged). *@
+@inherits SpigaPage
+@inject WasteService Waste
+
+<Flash Error="@Error" Info="@Info" />
+
+@if (_validatable.Count > 1)
+{
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+        <button type="button" class="bar acc small" @onclick="ValidateAllAsync"
+                title="Valide les saisies telles qu'affichées ; une saisie modifiée entre-temps n'est pas validée">
+            Valider les @_validatable.Count saisies affichées
+        </button>
+    </div>
+}
+
+@if (Entries.Count == 0)
+{
+    <p class="empty">@Empty</p>
+}
+else
+{
+    <div class="scroll">
+        <table class="t">
+            <thead>
+                <tr>
+                    <th>N°</th>
+                    @if (ShowPoste)
+                    {
+                        <th>Date · poste</th>
+                    }
+                    <th>@(ShowPoste ? "Lieu · type" : "Machine / secteur")</th><th class="r">Quantité</th><th>Motif · commentaire</th><th>Saisi par</th><th>État</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Entries)
+                {
+                    <tr class="@(EditingId == e.Id ? "sel" : "") @(e.Status == WasteStatus.Annulee ? "cancelled" : "")">
+                        <td class="n">@e.Id<small>v@(e.Version)</small></td>
+                        @if (ShowPoste)
+                        {
+                            <td class="nowrap">@e.ProductionDate.ToString("dd/MM/yyyy")<small>@Shifts.Label(e.ShiftId) · @e.Team</small></td>
+                        }
+                        <td class="q">
+                            @(e.MachineId ?? Sectors.Label(e.Sector))
+                            <small>@(ShowPoste ? (e.Kind == WasteKind.Emballage ? "Emballage · " : "Produit · ") : "")@(e.MachineId == null ? (ShowPoste ? "secteur" : "") : Sectors.Label(e.Sector))</small>
+                        </td>
+                        <td class="r q nowrap">@Fmt.Num(e.Quantity, e.Quantity % 1 == 0 ? 0 : 2) @e.Unit</td>
+                        <td class="n q">
+                            @e.Reason
+                            @if (!string.IsNullOrWhiteSpace(e.Comment))
+                            {
+                                <small>@e.Comment</small>
+                            }
+                        </td>
+                        <td class="n">@e.CreatedBy<small>@e.CreatedAt.ToString("dd/MM HH:mm")</small></td>
+                        <td>
+                            <span class="chip @WasteStatuses.Css(e.Status)">@WasteStatuses.Label(e.Status)</span>
+                            @switch (e.Status)
+                            {
+                                case WasteStatus.Validee:
+                                    <small>par @e.ValidatedBy, @Fmt.Date(e.ValidatedAt)</small>
+                                    break;
+                                case WasteStatus.Renvoyee:
+                                    <small title="@Fmt.Date(e.ReturnedAt)"><b>@e.ReturnedBy :</b> « @e.ReturnComment »</small>
+                                    break;
+                                case WasteStatus.Annulee:
+                                    <small title="@Fmt.Date(e.CancelledAt)"><b>@e.CancelledBy :</b> « @e.CancelReason »</small>
+                                    break;
+                                default:
+                                    if (e.ReturnedBy != null)
+                                    {
+                                        <small>soumise à nouveau après renvoi</small>
+                                    }
+                                    else if (e.WasModified)
+                                    {
+                                        <small>modifiée par @e.UpdatedBy, @Fmt.Date(e.UpdatedAt)</small>
+                                    }
+                                    break;
+                            }
+                            @if (e.Status == WasteStatus.Validee && e.UpdatedAt > e.ValidatedAt)
+                            {
+                                <small>corrigée par @e.UpdatedBy, @Fmt.Date(e.UpdatedAt)</small>
+                            }
+                        </td>
+                        <td>
+                            <div class="actions">
+                                @if (Waste.CanValidate(Actor, e, Session.Policy))
+                                {
+                                    <button type="button" class="link" @onclick="() => ValidateAsync(e)">Valider</button>
+                                }
+                                @if (Waste.CanReturn(Actor, e))
+                                {
+                                    <button type="button" class="link" @onclick="() => Open(Panel.Return, e)">Renvoyer</button>
+                                }
+                                @if (OnEdit.HasDelegate && Waste.CanEdit(Actor, e))
+                                {
+                                    <button type="button" class="link" @onclick="() => OnEdit.InvokeAsync(e)">
+                                        @(e.Status == WasteStatus.Validee ? "Corriger" : e.Status == WasteStatus.Renvoyee && e.CreatedBy == Actor.Login ? "Corriger et renvoyer" : "Modifier")
+                                    </button>
+                                }
+                                @if (Waste.CanCancel(Actor, e))
+                                {
+                                    <button type="button" class="link danger" @onclick="() => Open(Panel.Cancel, e)">Annuler</button>
+                                }
+                                @if (Waste.CanDelete(Actor, e))
+                                {
+                                    @if (_panel == Panel.Delete && _panelId == e.Id)
+                                    {
+                                        <button type="button" class="link danger" @onclick="() => DeleteAsync(e)">Confirmer la suppression</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="link danger" @onclick="() => Open(Panel.Delete, e)">Supprimer</button>
+                                    }
+                                }
+                                <button type="button" class="link" @onclick="() => ToggleHistoryAsync(e)">@(_panel == Panel.History && _panelId == e.Id ? "Masquer" : "Historique")</button>
+                            </div>
+                        </td>
+                    </tr>
+                    @if (_panelId == e.Id && _panel is Panel.Return or Panel.Cancel)
+                    {
+                        <tr class="sel">
+                            <td colspan="@Columns">
+                                <div class="form">
+                                    <div class="f grow">
+                                        <label for="w-note-@e.Id">@(_panel == Panel.Return ? "Ce que l'auteur doit corriger (obligatoire)" : "Motif de l'annulation (obligatoire)")</label>
+                                        <input id="w-note-@e.Id" maxlength="300" @bind="_note" @bind:event="oninput"
+                                               placeholder="@(_panel == Panel.Return ? "ex. quantité à repeser, mauvaise machine" : "ex. saisie en double")" />
+                                    </div>
+                                    @if (_panel == Panel.Return)
+                                    {
+                                        <button type="button" class="bar acc small" disabled="@string.IsNullOrWhiteSpace(_note)" @onclick="() => ReturnAsync(e)">Renvoyer à @e.CreatedBy</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="bar danger small" disabled="@string.IsNullOrWhiteSpace(_note)" @onclick="() => CancelAsync(e)">Annuler la saisie n°@e.Id</button>
+                                    }
+                                    <button type="button" class="bar small" @onclick="Close">Fermer</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (_panelId == e.Id && _panel == Panel.History)
+                    {
+                        <tr>
+                            <td colspan="@Columns">
+                                @if (_history == null)
+                                {
+                                    <span class="nd">Chargement…</span>
+                                }
+                                else
+                                {
+                                    <ol class="history">
+                                        @foreach (var r in _history)
+                                        {
+                                            <li>
+                                                <span class="chip @WasteStatuses.Css(r.Status)">v@(r.Version) · @WasteStatuses.Label(r.Status)</span>
+                                                <b>@r.Action</b> par @r.UserLogin, @Fmt.Date(r.At)
+                                                <small>@r.Snapshot</small>
+                                                @if (!string.IsNullOrEmpty(r.Note))
+                                                {
+                                                    <small><b>Motif / commentaire :</b> « @r.Note »</small>
+                                                }
+                                            </li>
+                                        }
+                                    </ol>
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<WasteEntry> Entries { get; set; } = Array.Empty<WasteEntry>();
+    [Parameter] public bool ShowPoste { get; set; }
+    [Parameter] public long? EditingId { get; set; }
+    [Parameter] public string Empty { get; set; } = "Aucune saisie.";
+    [Parameter] public EventCallback<WasteEntry> OnEdit { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private enum Panel { None, Return, Cancel, Delete, History }
+
+    private Panel _panel;
+    private long? _panelId;
+    private string _note = "";
+    private IReadOnlyList<WasteRevision>? _history;
+    private List<WasteEntry> _validatable = new();
+
+    private int Columns => ShowPoste ? 8 : 7;
+
+    protected override void OnParametersSet()
+    {
+        _validatable = Entries.Where(e => Waste.CanValidate(Actor, e, Session.Policy)).ToList();
+        if (_panelId is { } id && Entries.All(e => e.Id != id))
+            Close();
+    }
+
+    private void Open(Panel panel, WasteEntry e)
+    {
+        _panel = panel;
+        _panelId = e.Id;
+        _note = "";
+        Error = Info = null;
+    }
+
+    private void Close()
+    {
+        _panel = Panel.None;
+        _panelId = null;
+        _note = "";
+        _history = null;
+    }
+
+    private async Task ToggleHistoryAsync(WasteEntry e)
+    {
+        if (_panel == Panel.History && _panelId == e.Id)
+        {
+            Close();
+            return;
+        }
+        Open(Panel.History, e);
+        _history = null;
+        await Run(async () => _history = await Waste.HistoryAsync(Actor, e.Id));
+    }
+
+    // Any action: on success or refusal, the parent reloads the list (a
+    // refusal is often "changed in between": the new version shows).
+    private async Task Act(Func<Task> action, string success)
+    {
+        var ok = await Run(action, success);
+        if (ok)
+            Close();
+        await OnChanged.InvokeAsync();
+    }
+
+    private Task ValidateAsync(WasteEntry e) => Act(() => Waste.ValidateAsync(Actor, e.Id, e.Version), $"Saisie n°{e.Id} validée.");
+
+    private Task ReturnAsync(WasteEntry e)
+        => Act(() => Waste.ReturnAsync(Actor, e.Id, e.Version, _note), $"Saisie n°{e.Id} renvoyée à {e.CreatedBy}.");
+
+    private Task CancelAsync(WasteEntry e)
+        => Act(() => Waste.CancelAsync(Actor, e.Id, e.Version, _note), $"Saisie n°{e.Id} annulée : elle ne compte plus, l'historique la garde.");
+
+    private Task DeleteAsync(WasteEntry e) => Act(() => Waste.DeleteAsync(Actor, e.Id, e.Version), $"Saisie n°{e.Id} supprimée.");
+
+    // Each entry as shown; one refused does not stop the others.
+    private async Task ValidateAllAsync()
+    {
+        var done = 0;
+        var refused = new List<string>();
+        foreach (var e in _validatable.ToList())
+        {
+            try
+            {
+                await Waste.ValidateAsync(Actor, e.Id, e.Version);
+                done++;
+            }
+            catch (Exception ex) when (ex is RuleViolationException or AccessDeniedException)
+            {
+                refused.Add($"n°{e.Id} : {ex.Message}");
+            }
+        }
+        Info = done > 0 ? $"{done} saisie(s) validée(s)." : null;
+        Error = refused.Count > 0 ? $"{refused.Count} non validée(s) — " + string.Join(" ; ", refused) : null;
+        Close();
+        await OnChanged.InvokeAsync();
+    }
+}

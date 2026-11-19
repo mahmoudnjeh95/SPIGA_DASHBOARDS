@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\Spiga.Core\Spiga.Core.csproj" />
     <ProjectReference Include="..\..\src\Spiga.Data\Spiga.Data.csproj" />
     <ProjectReference Include="..\..\src\SpigaDashboards.Production\SpigaDashboards.Production.csproj" />
+    <ProjectReference Include="..\..\src\Spiga.UI\Spiga.UI.csproj" />
   </ItemGroup>
 
 </Project>

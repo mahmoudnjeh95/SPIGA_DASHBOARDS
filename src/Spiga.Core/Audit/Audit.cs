@@ -53,4 +53,7 @@ public static class AuditActions
     public const string EntryValidated = "Saisie validée";
     public const string EntryCorrected = "Saisie validée corrigée";
     public const string EntryDeleted = "Saisie supprimée";
+    public const string EntryReturned = "Saisie renvoyée à l'auteur";
+    public const string EntryResubmitted = "Saisie soumise à nouveau";
+    public const string EntryCancelled = "Saisie validée annulée";
 }
