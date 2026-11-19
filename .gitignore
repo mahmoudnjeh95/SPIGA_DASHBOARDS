@@ -35,3 +35,8 @@ tools/data/
 
 # Python bytecode (database/*.py)
 __pycache__/
+
+# Licence dongles: the private key and issued licences never go into git
+*.pem
+spiga.lic
+dongles.csv
