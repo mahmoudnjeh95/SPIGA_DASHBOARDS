@@ -72,9 +72,19 @@
                             <small>@stop.CauseText</small>
                         </div>
                     }
-                    <div class="lc-product">
-                        <PastaTrio Class="lc-pasta" />
-                        <span>@(m.State?.Product ?? "Produit inconnu")</span>
+                    <div class="lc-visual">
+                        <RunStateArt State="@StateCss(m)" Label="@StateText(m)" />
+                        <div class="lc-product">
+                            @if (Artwork.Product(m.Machine.Sector) is { } productArt)
+                            {
+                                <span class="lc-product-art has-file"><img src="@productArt" alt="" width="56" height="56" draggable="false" onerror="this.parentNode.classList.remove('has-file');this.remove()" /><PastaTrio Class="lc-pasta" /></span>
+                            }
+                            else
+                            {
+                                <PastaTrio Class="lc-pasta" />
+                            }
+                            <span>@(m.State?.Product ?? "Produit inconnu")</span>
+                        </div>
                     </div>
                     <div class="lc-stats">
                         <div><span class="l">Sacs du poste</span><span class="v">@Fmt.Num(k?.TotalBags)</span></div>

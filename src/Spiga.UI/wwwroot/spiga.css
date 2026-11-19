@@ -800,6 +800,50 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .lc-pasta { width: 78px; height: 40px; flex: none; }
 .is-off .lc-pasta, .is-done .lc-pasta, .is-panne .lc-pasta, .is-stop .lc-pasta { filter: grayscale(1); opacity: .55; }
 .is-off .lc-pasta *, .is-done .lc-pasta *, .is-panne .lc-pasta *, .is-stop .lc-pasta * { animation-play-state: paused !important; }
+/* Product picture by sector (Artwork.cs), PastaTrio when there is none. */
+.lc-visual { display: flex; align-items: center; gap: 14px; }
+.lc-visual .lc-product { flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.lc-product-art { display: inline-flex; flex: none; }
+.lc-product-art img { width: 56px; height: 56px; display: block; object-fit: contain; }
+.lc-product-art.has-file .lc-pasta { display: none; }
+.is-off .lc-product-art img, .is-done .lc-product-art img, .is-panne .lc-product-art img, .is-stop .lc-product-art img { filter: grayscale(1); opacity: .55; }
+
+/* Machine run state, as the SPIGA Dashboards draw it (RunStateArt.razor,
+   WPF RunStateImage): photo in a frame of the state colour, halo, conveyor
+   track whose dots flow while running. */
+.run-state { --rs: var(--bad); display: inline-flex; flex-direction: column; gap: 5px; width: 132px; flex: none; }
+.run-state.rs-run { --rs: var(--ok); }
+.run-state.rs-maint { --rs: #FAB219; }
+.run-state.rs-planned, .run-state.rs-off { --rs: #8E979F; }
+.rs-frame { position: relative; display: block; border: 4px solid var(--rs); border-radius: 14px; background: #FFFFFF;
+    box-shadow: 0 0 14px 2px color-mix(in srgb, var(--rs) 45%, transparent); }
+.rs-frame img { display: block; width: 100%; height: auto; border-radius: 10px; }
+.rs-planned .rs-frame img, .rs-off .rs-frame img { filter: grayscale(1); }
+.rs-run .rs-frame { animation: rs-halo 2.4s ease-in-out infinite; }
+@keyframes rs-halo {
+    0%, 100% { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--rs) 30%, transparent); }
+    50% { box-shadow: 0 0 18px 4px color-mix(in srgb, var(--rs) 85%, transparent); }
+}
+.rs-banner { position: absolute; left: -6px; right: -6px; top: 50%; translate: 0 -50%; padding: 4px; border-radius: 6px;
+    background: var(--rs); color: #1A1406; font-size: 12px; font-weight: 800; text-align: center; box-shadow: 0 1px 8px rgba(0,0,0,.35); }
+.rs-planned .rs-banner, .rs-off .rs-banner { background: #5F6B6D; color: #FFFFFF; }
+.rs-track { position: relative; display: block; height: 12px; border-radius: 6px; overflow: hidden;
+    background: color-mix(in srgb, var(--rs) 22%, transparent); }
+.rs-track i { position: absolute; top: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--rs); }
+.rs-track i:nth-child(1) { left: 8%; } .rs-track i:nth-child(2) { left: 35%; }
+.rs-track i:nth-child(3) { left: 62%; } .rs-track i:nth-child(4) { left: 88%; }
+.rs-run .rs-track i { left: 0; animation: rs-flow 1.6s linear infinite; }
+.rs-run .rs-track i:nth-child(2) { animation-delay: .4s; }
+.rs-run .rs-track i:nth-child(3) { animation-delay: .8s; }
+.rs-run .rs-track i:nth-child(4) { animation-delay: 1.2s; }
+@keyframes rs-flow { from { translate: -10px 0; } to { translate: 132px 0; } }
+/* Reduced motion: no pulse, the dots stand still where a stopped machine has them. */
+@media (prefers-reduced-motion: reduce) {
+    .rs-run .rs-frame { animation: none !important; }
+    .rs-run .rs-track i { animation: none !important; }
+    .rs-run .rs-track i:nth-child(1) { left: 8%; } .rs-run .rs-track i:nth-child(2) { left: 35%; }
+    .rs-run .rs-track i:nth-child(3) { left: 62%; } .rs-run .rs-track i:nth-child(4) { left: 88%; }
+}
 .lc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 .lc-stats .l { display: block; font-size: 12px; color: var(--fg3); font-weight: 600; }
 .lc-stats .v { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -836,6 +880,9 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .motif-tile:active { transform: scale(.97); }
 .motif-art { display: inline-block; flex: none; }
 .motif-art svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.motif-art img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.motif-art.has-file > svg { display: none; }
+.motif-tile:hover .motif-art img { animation: sp-pop .5s var(--spring); }
 .motif-tile:hover .motif-art svg { animation: sp-pop .5s var(--spring); }
 .ma-spin { animation: sp-spin 6s linear infinite; }
 .ma-spin-slow { animation: sp-spin 10s linear infinite; }

@@ -1,0 +1,43 @@
+@* Run state of one machine, as the SPIGA Dashboards draw it (WPF
+   Views/RunStateImage.xaml): the packing machine photo in a bold frame of
+   the state colour - green running, red stopped / en panne, yellow
+   maintenance, grey planned stop or no data - over a "conveyor" track whose
+   dots flow while the machine runs and stand still otherwise. A running
+   machine's halo pulses; maintenance and planned stops get a banner across
+   the photo. Same photos as the dashboard (wwwroot/img/states/, local: the
+   plant PCs may be offline). Motion is CSS only and stops with reduced
+   motion (spiga.css, "rs-"). *@
+<span class="run-state rs-@Tone @Class" role="img" aria-label="@Label" title="@Label">
+    <span class="rs-frame">
+        <img src="_content/Spiga.UI/img/states/@(Tone == "run" ? "machine-running.png" : "machine-stopped.png")" alt="" draggable="false" />
+        @if (Banner != null)
+        {
+            <span class="rs-banner">@Banner</span>
+        }
+    </span>
+    <span class="rs-track"><i></i><i></i><i></i><i></i></span>
+</span>
+
+@code {
+    // The card's state class (MonPoste StateCss): is-run, is-stop, is-panne, is-planned, is-off, is-done.
+    [Parameter, EditorRequired] public string State { get; set; } = "";
+    // The state in words (MonPoste StateText), for the tooltip and the planned banner.
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Class { get; set; }
+
+    // run (green), stop (red), maint (yellow), planned (grey), off (grey, no data).
+    private string Tone => State switch
+    {
+        "is-run" => "run",
+        "is-stop" or "is-panne" => "stop",
+        "is-planned" => Label == "Maintenance" ? "maint" : "planned",
+        _ => "off",
+    };
+
+    private string? Banner => Tone switch
+    {
+        "maint" or "planned" => Label,
+        _ when State == "is-off" => Label,
+        _ => null,
+    };
+}

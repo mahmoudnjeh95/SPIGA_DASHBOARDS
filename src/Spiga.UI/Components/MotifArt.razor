@@ -1,10 +1,17 @@
-@* The picture of a waste motif, for the quick entry tiles: a small flat
-   illustration per motif, drawn in SVG (sharp at any size, no download: the
-   plant PCs may be offline). A motif added later in the référentiel gets the
-   generic tag until it has its own picture. To use artwork made elsewhere
-   (Canva...), replace the motif's SVG below, or render an <img> from
-   wwwroot/img/motifs/ for that key. *@
-<span class="motif-art @Class" style="width:@(Size)px;height:@(Size)px">@((MarkupString)Svg(Reason))</span>
+@* The picture of a waste motif, for the quick entry tiles. A motif with a
+   picture file in wwwroot/img/motifs/ (listed in Artwork.cs, made in Stewdio)
+   shows that file; the others keep their small flat drawing in inline SVG
+   (sharp at any size, no download: the plant PCs may be offline). If a listed
+   file is missing, the image hides itself and the drawing comes back. A motif
+   added later in the référentiel gets the generic tag until it has a picture. *@
+@if (Artwork.Motif(Reason) is { } src)
+{
+    <span class="motif-art has-file @Class" style="width:@(Size)px;height:@(Size)px"><img src="@src" alt="" width="@Size" height="@Size" draggable="false" onerror="this.parentNode.classList.remove('has-file');this.remove()" />@((MarkupString)Svg(Reason))</span>
+}
+else
+{
+    <span class="motif-art @Class" style="width:@(Size)px;height:@(Size)px">@((MarkupString)Svg(Reason))</span>
+}
 
 @code {
     [Parameter, EditorRequired] public string Reason { get; set; } = "";
