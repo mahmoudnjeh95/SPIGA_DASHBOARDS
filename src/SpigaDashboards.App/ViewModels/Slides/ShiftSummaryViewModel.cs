@@ -76,7 +76,7 @@ public class ShiftSummaryViewModel
             // the poste; otherwise the hourly chart (running average fallback).
             var end = start.AddHours(8);
             weight = lotSpans is { Count: > 0 }
-                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end, live: now < end)
+                ? DashboardCharts.WeightLots(lotSpans, start, now < end ? now : end)
                 : DashboardCharts.Weight(steps);
         }
 

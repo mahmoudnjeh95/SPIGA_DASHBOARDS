@@ -246,10 +246,12 @@ public static class DashboardCharts
     // minute; the others: 1000). Consecutive lots of one production are
     // merged until they reach 1000 bags, so every line shows comparable
     // steps; 1000-bag lots stay as they are. A production change closes the
-    // group early. Group average = bag-weighted average of its lots.
+    // group early. Group average = bag-weighted average of its lots. The last
+    // group is shown even below 1000 bags: during the poste it is a point
+    // that moves as lots close (PC01, PL03), until the group is complete.
     private const long LotGroupBags = 1000;
 
-    private static List<LotSpan> GroupLots(IReadOnlyList<LotSpan> lots, bool live)
+    private static List<LotSpan> GroupLots(IReadOnlyList<LotSpan> lots)
     {
         var groups = new List<LotSpan>();
         LotSpan? open = null;
@@ -279,7 +281,7 @@ public static class DashboardCharts
                 open = null;
             }
         }
-        if (open != null && !live)
+        if (open != null)
             groups.Add(open);
         return groups;
     }
@@ -293,12 +295,10 @@ public static class DashboardCharts
     // each lot's middle while they stay readable. Stops aren't marked: they
     // have their own panel and pop-up (a lot interrupted by a stop still has
     // a real average, of the bags weighed before and after it).
-    // live = poste in progress: the last group still below 1000 bags is
-    // hidden, like a lot in progress on the 1000-bag lines.
-    public static ChartParts WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end, bool live)
+    public static ChartParts WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end)
     {
         var hours = Math.Max(1, (end - start).TotalHours);
-        var spans = GroupLots(lots, live)
+        var spans = GroupLots(lots)
             .Select(l => (Lot: l,
                 From: Math.Max(0, (l.StartTime - start).TotalHours),
                 To: Math.Min(hours, (l.EndTime - start).TotalHours),
