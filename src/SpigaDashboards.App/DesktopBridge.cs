@@ -16,8 +16,20 @@ namespace SpigaDashboards.App;
 // changed. Each page reads through repositories limited to the machines of
 // the account's scope for that page (MachineAccess): nothing else can be
 // listed, read or written from it.
-internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesktopBridge
+internal sealed class DesktopBridge : IDesktopBridge
 {
+    private readonly Func<DashboardView> createDashboard;
+
+    public DesktopBridge(Func<DashboardView> createDashboard, AppSettings settings, SwitchableConnectionFactory production,
+        SwitchableConnectionFactory appData, SharedSettingsSync sharedSettings)
+    {
+        this.createDashboard = createDashboard;
+        Station = new StationHost(settings, production, appData, sharedSettings, () => OnUi(() => _dashboard?.SettingsApplied()));
+    }
+
+    // Paramètres (Razor): this PC's connection, document, stop alert.
+    public IStationHost? Station { get; }
+
     private ShellWindow? _shell;
     private DashboardView? _dashboard;
     private readonly Dictionary<NativePage, FrameworkElement> _views = new();
@@ -90,6 +102,13 @@ internal sealed class DesktopBridge(Func<DashboardView> createDashboard) : IDesk
     });
 
     public void OpenTvScreen() => OnUi(() => Dashboard().OpenTvScreen());
+
+    public void PlanPreventive(NativeAccess access, string machineId, string component) => OnUi(() =>
+    {
+        // The planning model the board will be built with (same rights).
+        Planning(access).QueuePreventive(machineId, component);
+        NavigateRequested?.Invoke(NativePage.StopPlanning);
+    });
 
     private static string KeyOf(NativeAccess a)
         => $"{a.UserLogin}|{a.MachinesKey}|{a.Team}|{a.CanExport}|{a.CanValidate}|{a.CanSettings}|{a.CanTv}|{a.CanEditNote}";

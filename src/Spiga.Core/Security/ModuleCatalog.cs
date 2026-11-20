@@ -93,8 +93,7 @@ public static class ModuleCatalog
         new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true, DesktopOnly: true),
         new NavItem("qualification", "Qualification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/qualification-arrets", true,
             Permission: "maintenance:saisir", DesktopOnly: true),
-        new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true,
-            DesktopOnly: true),
+        new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true),
         new NavItem("planification", "Planification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/planification", true,
             Permission: "maintenance:saisir", DesktopOnly: true),
         new NavItem("couts", "Pièces et consommables", "Maintenance", Modules.Maintenance, "module/couts", false,
@@ -134,7 +133,7 @@ public static class ModuleCatalog
         new NavItem("sources", "Sources de données", "Administration", Modules.Sources, "admin/sources", true),
         new NavItem("audit", "Journal d'audit", "Administration", Modules.Audit, "admin/audit", true),
         new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "admin/parametres", true,
-            Permission: Perm.ParametresPoste, DesktopOnly: true),
+            Permission: Perm.ParametresPoste),
     };
 
     public static NavItem? FindNav(string key) => Navigation.FirstOrDefault(n => n.Key == key);

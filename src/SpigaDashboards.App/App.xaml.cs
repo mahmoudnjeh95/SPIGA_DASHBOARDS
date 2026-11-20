@@ -151,8 +151,11 @@ public partial class App : Application
 #if DEBUG
         services.AddBlazorWebViewDeveloperTools();
 #endif
+        // Paramètres (Razor) saves through the dashboard's own instances.
+        services.AddSingleton(settingsService);
+        services.AddSingleton(sharedSettings);
         services.AddSpigaSuivi(appDb, activeFactory, settings);
-        var bridge = new DesktopBridge(CreateScopedDashboard);
+        var bridge = new DesktopBridge(CreateScopedDashboard, settings, activeFactory, appData, sharedSettings);
         services.AddSingleton<IDesktopBridge>(bridge);
         var shell = new ShellWindow(services.BuildServiceProvider());
         bridge.Attach(shell);

@@ -135,11 +135,15 @@ public partial class DashboardView : UserControl
         return new SettingsViewModel(
             _settingsService, _settings, _activeFactory, _appData, new ProductionRepository(_activeFactory, _appData, _settings), _sharedSettings,
             author ?? Author,
-            onApplied: () =>
-            {
-                _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
-                _ = _tvWindow?.ReconnectAsync();
-            });
+            onApplied: SettingsApplied);
+    }
+
+    // Paramètres saved (WPF window or Razor page): the deck and the TV
+    // screen reload with the new settings and connection.
+    public void SettingsApplied()
+    {
+        _ = _viewModel.ReconnectCommand.ExecuteAsync(null);
+        _ = _tvWindow?.ReconnectAsync();
     }
 
     // access: the machines the page may show (SPIGA Suivi Production: the

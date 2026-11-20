@@ -103,6 +103,10 @@ public partial class PlanningViewModel : ObservableObject
         }
     }
 
+    // From a Razor page (Statistiques des arrêts): the rule form opens the
+    // next time the planning board is shown.
+    public void QueuePreventive(string machineId, string component) => _pendingPlan = (machineId, component);
+
     // The rule form opens on the planning board once it has loaded.
     private void OpenPreventiveForm(string machineId, string component)
     {

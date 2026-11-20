@@ -1,3 +1,540 @@
 @page "/admin/parametres"
+@inherits SpigaPage
+@inject StationSettingsEditor Editor
+@inject ClientInfo Client
 
-<NativePagePlaceholder Page="NativePage.Settings" Group="Administration" Title="Paramètres" />
+@* Paramètres: was the WPF Paramètres page of the desktop application
+   (SettingsView) until the web migration. The shared part works in both
+   hosts; the PC's own part (Station) only in the desktop application. The
+   kiosk PCs (no sign-in) keep the WPF window. *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.Settings))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Les paramètres s'appliquent à toutes les machines : ils sont réservés aux comptes dont le droit
+            « @PermissionCatalog.Label(Perm.ParametresPoste) » couvre toute l'usine.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Administration</span><h1>Paramètres</h1>
+            <p>Cadences, pauses, équipes, TRS cibles, couleurs et diapositives : communs à tous les postes et au site web.
+                @(Station == null ? "Les réglages propres à un poste (connexion, document, alerte) se font dans l'application installée." : "Le reste ne concerne que ce poste.")</p>
+        </div>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+    @if (_sharedMessage != null)
+    {
+        <div class="notice warn" role="alert">@_sharedMessage</div>
+    }
+
+    @if (!_loaded)
+    {
+        <Loader />
+    }
+    else
+    {
+        <div class="tabrow" role="tablist">
+            @foreach (var tab in Tabs)
+            {
+                var problem = Editor.Problems.ContainsKey(tab);
+                <button type="button" role="tab" class="tab @(_tab == tab ? "on" : "")" aria-selected="@(_tab == tab)" @onclick="() => _tab = tab">
+                    @TabLabel(tab)@if (problem) { <span class="badge" title="@Editor.Problems[tab]">!</span> }
+                </button>
+            }
+        </div>
+
+        @if (Editor.Problems.TryGetValue(_tab, out var message))
+        {
+            <div class="notice error" role="alert">@message</div>
+        }
+
+        <section class="card settings">
+            @switch (_tab)
+            {
+                case SettingsTab.Connexion when Station != null:
+                    @Connexion()
+                    break;
+                case SettingsTab.Machines:
+                    @MachinesTab()
+                    break;
+                case SettingsTab.Affichage:
+                    @Affichage()
+                    break;
+                case SettingsTab.Cadences:
+                    @Cadences()
+                    break;
+                case SettingsTab.Pauses:
+                    @Pauses()
+                    break;
+                case SettingsTab.Equipes:
+                    @Equipes()
+                    break;
+                default:
+                    @Couleurs()
+                    break;
+            }
+        </section>
+
+        <div class="savebar">
+            <span class="nd savebar-note">Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs, barre des arrêts et la
+                rotation des diapositives sont communs à tous les postes (enregistrés dans la base de données).</span>
+            <button type="button" class="bar" @onclick="ReloadAsync" disabled="@_saving">Annuler les modifications</button>
+            <button type="button" class="bar acc" @onclick="SaveAsync" disabled="@_saving">@(_saving ? "Enregistrement…" : "Enregistrer")</button>
+        </div>
+    }
+}
+
+@code {
+    private bool _loaded;
+    private bool _saving;
+    private SettingsTab _tab = SettingsTab.Machines;
+    private string? _sharedMessage;
+    private string? _testMessage;
+    private bool? _testOk;
+    private bool _testing;
+
+    private IStationHost? Station => Editor.Station;
+
+    private IEnumerable<SettingsTab> Tabs => Enum.GetValues<SettingsTab>().Where(t => t != SettingsTab.Connexion || Station != null);
+
+    private static string TabLabel(SettingsTab tab) => tab switch
+    {
+        SettingsTab.Connexion => "Connexion",
+        SettingsTab.Machines => "Machines",
+        SettingsTab.Affichage => "Affichage",
+        SettingsTab.Cadences => "Cadences",
+        SettingsTab.Pauses => "Pauses & arrêts",
+        SettingsTab.Equipes => "Équipes",
+        _ => "Couleurs",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (NativePages.IsAllowed(Session.Actor, NativePage.Settings))
+            await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        Error = Info = _sharedMessage = _testMessage = null;
+        try
+        {
+            await Editor.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = "Paramètres non lus : " + ex.Message;
+        }
+        _loaded = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        Error = Info = _sharedMessage = null;
+        if (Editor.Validate() is { } bad)
+        {
+            _tab = bad;
+            return;
+        }
+        _saving = true;
+        try
+        {
+            var message = await Editor.SaveAsync(new SpigaDashboards.App.Data.ChangeAuthor(Actor.Login, Actor.DisplayName, Client.Workstation));
+            if (message.Length > 0)
+                _sharedMessage = message;
+            else
+                Info = "Paramètres enregistrés et appliqués.";
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Paramètres non enregistrés : " + ex);
+            Error = "Paramètres non enregistrés : " + ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task TestAsync()
+    {
+        _testing = true;
+        _testMessage = null;
+        (_testOk, _testMessage) = await Editor.TestConnectionAsync();
+        _testing = false;
+    }
+
+    private async Task BrowsePdfAsync()
+    {
+        if (Station != null && await Station.BrowsePdfAsync() is { } path)
+            Editor.PdfDocumentPath = path;
+    }
+
+    private static string TeamLabel(StationSettingsEditor e, int index) => index < 0 ? "Repos" : e.TeamNames[index] is { Length: > 0 } n ? n : $"Équipe {index + 1}";
+
+    // ---------- tabs ----------
+
+    private RenderFragment Connexion() => __builder =>
+    {
+        <h2>Base de données</h2>
+        <div class="form">
+            <div class="f">
+                <span>Base</span>
+                <div class="segs" role="group" aria-label="Base de données">
+                    <button type="button" class="seg @(Editor.Provider == DatabaseProvider.SqlServer ? "on" : "")" @onclick="() => Editor.Provider = DatabaseProvider.SqlServer">SQL Server (production)</button>
+                    <button type="button" class="seg @(Editor.Provider == DatabaseProvider.Sqlite ? "on" : "")" @onclick="() => Editor.Provider = DatabaseProvider.Sqlite">SQLite (dev)</button>
+                </div>
+            </div>
+        </div>
+        @if (Editor.Provider == DatabaseProvider.SqlServer)
+        {
+            <div class="form">
+                <div class="f grow">
+                    <label for="se-host">Serveur (ex. NOM-DU-PC\SQLEXPRESS, ou adresse IP,port)</label>
+                    <input id="se-host" @bind="Editor.Host" />
+                </div>
+                <div class="f">
+                    <label for="se-db">Nom de la base (Stiavelli : stats)</label>
+                    <input id="se-db" @bind="Editor.Database" />
+                </div>
+            </div>
+            <div class="form">
+                <div class="f">
+                    <span>Authentification</span>
+                    <div class="segs" role="group" aria-label="Authentification">
+                        <button type="button" class="seg @(Editor.AuthMode == SqlAuthMode.Windows ? "on" : "")" @onclick="() => Editor.AuthMode = SqlAuthMode.Windows">Windows</button>
+                        <button type="button" class="seg @(Editor.AuthMode == SqlAuthMode.SqlLogin ? "on" : "")" @onclick="() => Editor.AuthMode = SqlAuthMode.SqlLogin">Login SQL</button>
+                    </div>
+                </div>
+                @if (Editor.AuthMode == SqlAuthMode.SqlLogin)
+                {
+                    <div class="f">
+                        <label for="se-user">Utilisateur</label>
+                        <input id="se-user" autocomplete="off" @bind="Editor.Username" />
+                    </div>
+                    <div class="f">
+                        <label for="se-pwd">Mot de passe (vide = conserver l'actuel)</label>
+                        <input id="se-pwd" type="password" autocomplete="new-password" @bind="Editor.Password" />
+                    </div>
+                }
+            </div>
+        }
+        <div class="form">
+            <button type="button" class="bar" @onclick="TestAsync" disabled="@_testing">@(_testing ? "Test en cours…" : "Tester la connexion")</button>
+            <button type="button" class="bar" title="Journal des tentatives de connexion, dans une fenêtre à part" @onclick="() => Station!.OpenConsole()">Ouvrir la console de diagnostic</button>
+        </div>
+        @if (_testMessage != null)
+        {
+            <div class="notice @(_testOk == true ? "ok" : "error")" role="status">@_testMessage</div>
+        }
+        <p class="nd">Appliquée à l'enregistrement : le tableau de bord et l'écran TV se reconnectent.</p>
+    };
+
+    private RenderFragment MachinesTab() => __builder =>
+    {
+        <div class="card-head">
+            <h2>Machines : nom affiché@(Station != null ? ", visibilité" : ""), TRS cible et écart de poids</h2>
+            <button type="button" class="bar small" @onclick="Editor.LoadMachinesAsync">Actualiser la liste</button>
+        </div>
+        <p class="nd">TRS cible (%) : objectif de chaque machine, le TRS est vert quand il l'atteint. Vide = 85 %. Tolérance (%) : orange entre la cible
+            moins la tolérance et la cible, rouge en dessous (ex. cible 50, tolérance 5 : orange de 45 à 50 %, rouge sous 45 %). Vide = règle de l'onglet Couleurs.</p>
+        <p class="nd">Écart de poids, en % du poids cible. Au-dessus de la cible : vert jusqu'à la 1re limite, orange jusqu'à la 2e, rouge au-delà.
+            En dessous (sous-dosage) : de même, avec des limites plus serrées.</p>
+        <div class="scroll">
+            <table class="t settings-t">
+                <thead>
+                    <tr>
+                        @if (Station != null)
+                        {
+                            <th title="Afficher cette machine sur ce poste">Visible</th>
+                        }
+                        <th>Machine</th><th>Nom affiché</th><th>TRS cible (%)</th><th>Tolérance (%)</th>
+                        <th title="Au-dessus de la cible">+ vert ≤</th><th>+ orange ≤</th><th title="En dessous de la cible">− vert ≤</th><th>− orange ≤</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in Editor.Machines)
+                    {
+                        <tr>
+                            @if (Station != null)
+                            {
+                                <td><label class="check"><input type="checkbox" @bind="m.Visible" aria-label="Afficher @m.MachineId" /></label></td>
+                            }
+                            <td><span class="machine-id">@m.MachineId</span><small>@Machine.SectorLabel(m.Sector)</small></td>
+                            <td><input class="input" @bind="m.Name" aria-label="Nom affiché de @m.MachineId" /></td>
+                            <td><input class="input num-in" inputmode="decimal" placeholder="85" @bind="m.TrsTarget" aria-label="TRS cible de @m.MachineId" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="m.TrsTolerance" aria-label="Tolérance TRS de @m.MachineId" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="m.OverGood" aria-label="Au-dessus, vert jusqu'à" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="m.OverWarning" aria-label="Au-dessus, orange jusqu'à" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="m.UnderWarning" aria-label="En dessous, vert jusqu'à" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="m.UnderBad" aria-label="En dessous, orange jusqu'à" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private RenderFragment Affichage() => __builder =>
+    {
+        <h2>Affichage : rotation des diapositives</h2>
+        <div class="form">
+            <div class="f">
+                <label for="se-slide">Durée par défaut d'une diapositive (s)</label>
+                <input id="se-slide" type="number" min="1" max="3600" @bind="Editor.SlideDurationSeconds" />
+            </div>
+            @if (Station != null)
+            {
+                <div class="f">
+                    <label for="se-refresh">Actualisation des données (min, ce poste)</label>
+                    <input id="se-refresh" type="number" min="1" max="60" @bind="Editor.DataRefreshMinutes" />
+                </div>
+            }
+        </div>
+
+        <h3 class="pe-sub">Diapositives : ordre, affichage et durée</h3>
+        <p class="nd">Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa
+            place. Durée vide = durée par défaut ci-dessus. Une machine masquée n'apparaît nulle part ; une nouvelle machine prend sa place par défaut.</p>
+        <div class="scroll">
+            <table class="t settings-t">
+                <thead><tr><th>#</th><th>Affichée</th><th>Diapositive</th><th>Durée (s)</th><th></th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < Editor.Slides.Count; i++)
+                    {
+                        var row = Editor.Slides[i];
+                        var index = i;
+                        <tr class="@(row.Enabled ? "" : "is-off")">
+                            <td class="n">@(i + 1)</td>
+                            <td><label class="check"><input type="checkbox" @bind="row.Enabled" aria-label="Afficher @row.Label" /></label></td>
+                            <td>@row.Label</td>
+                            <td><input class="input num-in" inputmode="numeric" placeholder="@Editor.SlideDurationSeconds" @bind="row.Duration" aria-label="Durée de @row.Label" /></td>
+                            <td class="r">
+                                <span class="actions">
+                                    <button type="button" class="link" title="Monter (passe plus tôt)" disabled="@(index == 0)" @onclick="() => Editor.MoveSlide(row, -1)">▲</button>
+                                    <button type="button" class="link" title="Descendre (passe plus tard)" disabled="@(index == Editor.Slides.Count - 1)" @onclick="() => Editor.MoveSlide(row, 1)">▼</button>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="form"><button type="button" class="bar small" title="Toutes les diapositives, ordre d'origine, durée par défaut" @onclick="Editor.ResetSlides">Ordre par défaut</button></div>
+
+        @if (Station != null)
+        {
+            <h3 class="pe-sub">Alerte des arrêts (ce poste)</h3>
+            <label class="check"><input type="checkbox" @bind="Editor.ShowStopAlerts" /> Afficher l'alerte des arrêts non qualifiés (fenêtre rouge) sur ce PC</label>
+            <label class="check"><input type="checkbox" @bind="Editor.ResetStopAlertPosition" /> Remettre l'alerte à sa place (en haut à droite)</label>
+
+            <h3 class="pe-sub">Document externe (diapositive PDF, ce poste)</h3>
+            <p class="nd">Consignes, instructions ou document qualité affiché en diapositive (sa place se règle ci-dessus). Vide = pas de diapositive document.</p>
+            <div class="form">
+                <div class="f grow">
+                    <label for="se-pdf">Fichier</label>
+                    <input id="se-pdf" @bind="Editor.PdfDocumentPath" />
+                </div>
+                <button type="button" class="bar" @onclick="BrowsePdfAsync">Parcourir…</button>
+                <button type="button" class="bar" title="Ne plus afficher de document" @onclick="() => Editor.PdfDocumentPath = string.Empty">Effacer</button>
+            </div>
+            <p class="nd">@Station.PdfStatus(Editor.PdfDocumentPath)</p>
+        }
+    };
+
+    private RenderFragment Cadences() => __builder =>
+    {
+        <h2>Cadence nominale et sachet vide, par machine et par poids</h2>
+        <p class="nd">Cadence : vitesse idéale (sacs/min) de la machine pour ce poids de sac, pour la Performance et le TRS. Sachet vide : poids de
+            l'emballage vide (g), déduit du poids mesuré. Une production prend la ligne de SA machine pour le poids le plus proche de son poids cible
+            (à 5 % près), sinon la ligne « Toutes ». Cadence vide = TRS non calculé pour ce poids.</p>
+        <div class="scroll">
+            <table class="t settings-t">
+                <thead><tr><th>Machine</th><th>Poids (g)</th><th>Cadence (sacs/min)</th><th>Sachet vide (g)</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var row in Editor.Rates)
+                    {
+                        <tr>
+                            <td>
+                                <select class="input" @bind="row.MachineId" aria-label="Machine">
+                                    <option value="">Toutes</option>
+                                    @foreach (var (id, label) in Editor.MachineChoices)
+                                    {
+                                        <option value="@id">@label</option>
+                                    }
+                                </select>
+                            </td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="row.Weight" aria-label="Poids" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="row.Rate" aria-label="Cadence" /></td>
+                            <td><input class="input num-in" inputmode="decimal" @bind="row.Tare" aria-label="Sachet vide" /></td>
+                            <td class="r">
+                                <span class="actions">
+                                    <button type="button" class="link" title="Copier cette ligne (pour une autre machine)" @onclick="() => Editor.DuplicateRate(row)">Dupliquer</button>
+                                    <button type="button" class="link danger" @onclick="() => Editor.Rates.Remove(row)">Supprimer</button>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="form"><button type="button" class="bar small" @onclick="Editor.AddRate">+ Ligne</button></div>
+    };
+
+    private RenderFragment Pauses() => __builder =>
+    {
+        <h2>Pauses planifiées et arrêts</h2>
+        <p class="nd">Pauses quotidiennes, communes à toutes les machines. Le temps où la ligne est à l'arrêt pendant une pause n'est compté ni dans la
+            Disponibilité (ni le TRS), ni dans la liste des arrêts ; une ligne qui tourne pendant la pause garde ce temps de marche. Même règle pour les
+            créneaux de maintenance et les arrêts « Planifié ».</p>
+        <table class="t settings-t" style="max-width:520px">
+            <thead><tr><th>Début (hh:mm)</th><th>Durée (min)</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var row in Editor.Breaks)
+                {
+                    <tr>
+                        <td><input class="input num-in" placeholder="10:00" @bind="row.Start" aria-label="Début de la pause" /></td>
+                        <td><input class="input num-in" inputmode="numeric" @bind="row.Duration" aria-label="Durée de la pause" /></td>
+                        <td class="r"><button type="button" class="link danger" @onclick="() => Editor.Breaks.Remove(row)">Supprimer</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <div class="form"><button type="button" class="bar small" @onclick="Editor.AddBreak">+ Pause</button></div>
+        <div class="form">
+            <div class="f">
+                <label for="se-threshold">Seuil d'arrêt (min)</label>
+                <input id="se-threshold" inputmode="numeric" @bind="Editor.StopThreshold" />
+            </div>
+        </div>
+        <p class="nd">Tout arrêt du compteur au moins égal à cette durée, hors pauses, apparaît dans les arrêts et sur la fiche à imprimer.</p>
+    };
+
+    private RenderFragment Equipes() => __builder =>
+    {
+        <h2>Équipes (rotation sur les 3 postes)</h2>
+        <p class="nd">Cycle par défaut : celui du site (8 jours : chaque équipe fait 2 jours sur chaque poste, Matin puis Après-midi puis Nuit, puis 2 jours de repos).</p>
+        <div class="form">
+            @for (var i = 0; i < 4; i++)
+            {
+                var index = i;
+                <div class="f">
+                    <label for="se-team@(index)">Équipe @(index + 1)</label>
+                    <input id="se-team@(index)" value="@Editor.TeamNames[index]" @onchange="e => Editor.TeamNames[index] = e.Value as string ?? string.Empty" />
+                </div>
+            }
+            <div class="f">
+                <label for="se-rot">Jour 1 du cycle</label>
+                <input id="se-rot" type="date" @bind="Editor.RotationStart" />
+            </div>
+        </div>
+        <h3 class="pe-sub">Planning du cycle : équipe par jour et par poste</h3>
+        <table class="t settings-t" style="max-width:720px">
+            <thead><tr><th>Jour</th><th>Matin (06-14)</th><th>Après-midi (14-22)</th><th>Nuit (22-06)</th></tr></thead>
+            <tbody>
+                @foreach (var day in Editor.Roster)
+                {
+                    <tr>
+                        <td class="n">Jour @(day.CycleDay + 1) <small>@Editor.RotationStart.AddDays(day.CycleDay).ToString("ddd dd/MM", Fmt.French)</small></td>
+                        <td>@TeamSelect(day.Matin, v => day.Matin = v)</td>
+                        <td>@TeamSelect(day.Soir, v => day.Soir = v)</td>
+                        <td>@TeamSelect(day.Nuit, v => day.Nuit = v)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <div class="form">
+            <button type="button" class="bar small" @onclick="Editor.AddRosterDay">+ Jour</button>
+            <button type="button" class="bar small" disabled="@(Editor.Roster.Count <= 1)" @onclick="Editor.RemoveRosterDay">− Jour</button>
+        </div>
+    };
+
+    private RenderFragment TeamSelect(int value, Action<int> set) => __builder =>
+    {
+        <select class="input" value="@value" @onchange="e => set(int.Parse((string)e.Value!, CultureInfo.InvariantCulture))" aria-label="Équipe">
+            @for (var i = -1; i < 4; i++)
+            {
+                <option value="@i">@TeamLabel(Editor, i)</option>
+            }
+        </select>
+    };
+
+    private RenderFragment Couleurs() => __builder =>
+    {
+        var c = Editor.Colors;
+        <h2>Couleurs des indicateurs</h2>
+        <p class="nd">Limites entre vert, orange et rouge des chiffres colorés du tableau de bord, de l'écran TV et de l'historique. Une valeur égale à
+            une limite prend la meilleure des deux couleurs.</p>
+        <table class="t settings-t" style="max-width:780px">
+            <thead><tr><th>Indicateur</th><th class="ok">Vert</th><th class="warn">Orange</th><th class="bad">Rouge</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>TRS <small>machines sans tolérance</small></td>
+                    <td class="n">≥ cible de la machine</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.TrsWarning" aria-label="TRS, orange à partir de" /> % de la cible</td>
+                    <td class="n">en dessous</td>
+                </tr>
+                <tr>
+                    <td>Disponibilité</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.AvailabilityGood" aria-label="Disponibilité, vert" /> %</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.AvailabilityWarning" aria-label="Disponibilité, orange" /> %</td>
+                    <td class="n">en dessous</td>
+                </tr>
+                <tr>
+                    <td>Performance</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.PerformanceGood" aria-label="Performance, vert" /> %</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.PerformanceWarning" aria-label="Performance, orange" /> %</td>
+                    <td class="n">en dessous</td>
+                </tr>
+                <tr>
+                    <td>Performance <small>orange aussi au-dessus de</small></td>
+                    <td class="n" colspan="3"><input class="input num-in" @bind="c.PerformanceHigh" aria-label="Performance, orange au-dessus de" /> % (cadence nominale probablement trop basse)</td>
+                </tr>
+                <tr>
+                    <td>Conformité (Qualité)</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.QualityGood" aria-label="Conformité, vert" /> %</td>
+                    <td class="n">≥ <input class="input num-in" @bind="c.QualityWarning" aria-label="Conformité, orange" /> %</td>
+                    <td class="n">en dessous</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="nd">Écart de poids : limites propres à chaque machine, dans l'onglet Machines.</p>
+        <div class="form"><button type="button" class="bar small" title="Limites d'origine (appliquées à l'enregistrement)" @onclick="() => Editor.ResetColors()">Valeurs par défaut</button></div>
+
+        var t = Editor.Ticker;
+        <h3 class="pe-sub">Barre défilante des arrêts</h3>
+        <p class="nd">Sous la photo de la machine tant que la ligne est à l'arrêt. Couleur : #RRGGBB (ex. #E74C3C) ou un nom anglais (Red, Orange…).</p>
+        <div class="form">
+            <div class="f">
+                <label for="se-speed">Vitesse (pixels / s, @StopTickerSettings.MinSpeed à @StopTickerSettings.MaxSpeed)</label>
+                <input id="se-speed" inputmode="numeric" @bind="t.Speed" @bind:event="oninput" />
+            </div>
+            @ColorField("se-panne", "Panne / cause à définir", t.Panne, v => t.Panne = v)
+            @ColorField("se-other", "Autre cause", t.Other, v => t.Other = v)
+            @ColorField("se-planned", "Arrêt planifié / maintenance", t.Planned, v => t.Planned = v)
+            @ColorField("se-text", "Texte", t.Text, v => t.Text = v)
+        </div>
+        var speed = int.TryParse(t.Speed, out var s) ? Math.Clamp(s, StopTickerSettings.MinSpeed, StopTickerSettings.MaxSpeed) : 120;
+        var ink = StationSettingsEditor.CssColor(t.Text) ?? "#fff";
+        <div class="ticker-preview" aria-label="Aperçu" style="--dur:@((1600.0 / speed).ToString("0.##", CultureInfo.InvariantCulture))s">
+            <div style="background:@(StationSettingsEditor.CssColor(t.Panne) ?? "transparent");color:@ink"><b>EN PANNE</b><span>Ligne à l'arrêt depuis 09:42 (35 min) · Panne mécanique · Mâchoires de soudure · Retour prévu à 11:00</span></div>
+            <div style="background:@(StationSettingsEditor.CssColor(t.Other) ?? "transparent");color:@ink"><b>EN ARRÊT</b><span>Ligne à l'arrêt depuis 10:05 (12 min) · Manque produit</span></div>
+        </div>
+        <div class="form"><button type="button" class="bar small" title="Vitesse et couleurs d'origine (appliquées à l'enregistrement)" @onclick="() => Editor.ResetTicker()">Valeurs par défaut</button></div>
+    };
+
+    private RenderFragment ColorField(string id, string label, string value, Action<string> set) => __builder =>
+    {
+        var css = StationSettingsEditor.CssColor(value);
+        <div class="f">
+            <label for="@id">@label</label>
+            <span class="color-in">
+                <i style="background:@(css ?? "transparent")" class="@(css == null ? "bad" : "")"></i>
+                <input id="@id" class="@(css == null ? "invalid" : "")" value="@value" @oninput="e => set(e.Value as string ?? string.Empty)" />
+            </span>
+        </div>
+    };
+}

@@ -178,20 +178,30 @@
         var count = Math.Max(0, to - from);
         double w = expanded ? 1000 : 480, h = expanded ? 460 : Height;
         double left = 46, right = 12, top = 22, bottom = 28;
+        var labelEvery = Math.Max(1, (int)Math.Ceiling(count / (expanded ? 24.0 : 12.0)));
+        // Labels too long for their slot (causes, components): slanted, cut
+        // at 22 characters (the tooltips keep them whole).
+        var longest = Labels.Skip(from).Take(count).Select(l => Math.Min(22, l.Length)).DefaultIfEmpty(0).Max();
+        var slanted = longest * 6.4 > (w - left - right) / Math.Max(1, count) * labelEvery * 0.92;
+        if (slanted)
+            bottom += Math.Min(72, longest * 4.3);
         double pw = w - left - right, ph = h - top - bottom;
         var shown = Series.Where(s => !view.Hidden.Contains(s.Name)).ToList();
-        var values = shown.SelectMany(s => s.Values.Skip(from).Take(count)).Where(v => v != null).Select(v => v!.Value).ToList();
+        // Series on their own scale (ScaleMax) stay off the drawn axis.
+        var values = shown.Where(s => s.ScaleMax == null).SelectMany(s => s.Values.Skip(from).Take(count)).Where(v => v != null).Select(v => v!.Value).ToList();
         var min = YMin ?? Math.Min(0, values.DefaultIfEmpty(0).Min());
         var max = YMax ?? Math.Max(min + 1, values.DefaultIfEmpty(1).Max() * 1.15);
         if (Integer && YMax == null)
             max = min + Math.Max(4, Math.Ceiling((max - min) / 4) * 4);
         double Y(double v) => top + ph - (Math.Clamp(v, min, max) - min) / (max - min) * ph;
+        double YOf(ChartSeries s, double v) => s.ScaleMax is { } sm ? top + ph - Math.Clamp(v, 0, sm) / sm * ph : Y(v);
+        double BaseOf(ChartSeries s) => s.ScaleMax != null ? top + ph : Y(Math.Max(min, 0));
+        string F(ChartSeries s, double v) => (s.Format ?? Format)(v);
         var band = count == 0 ? pw : pw / count;
         double X(int i) => left + band * (i + 0.5);
         var bars = shown.Where(s => !s.Reference && KindOf(s, view.Kind) == ChartKind.Bars).ToList();
         var barW = Math.Min(expanded ? 70 : 42, band * 0.72 / Math.Max(1, bars.Count));
         var showLabels = count <= (expanded ? 31 : 16);
-        var labelEvery = Math.Max(1, (int)Math.Ceiling(count / (expanded ? 24.0 : 12.0)));
 
         <svg class="chart-svg" viewBox="0 0 @N(w) @N(h)" role="img" aria-label="@Title" @ondblclick="Open"
              style="@(expanded ? "" : $"max-height:{Height + 40}px")">
@@ -203,7 +213,17 @@
             }
             @for (var i = 0; i < count; i += labelEvery)
             {
-                @Txt("chart-axis", X(i), h - 8, "middle", Labels[from + i])
+                var label = Labels[from + i];
+                if (slanted)
+                {
+                    var y = top + ph + 14;
+                    var cut = label.Length > 22 ? label[..21] + "…" : label;
+                    @((MarkupString)$"<text class=\"chart-axis\" x=\"{N(X(i))}\" y=\"{N(y)}\" text-anchor=\"end\" transform=\"rotate(-30 {N(X(i))} {N(y)})\"><title>{System.Net.WebUtility.HtmlEncode(label)}</title>{System.Net.WebUtility.HtmlEncode(cut)}</text>")
+                }
+                else
+                {
+                    @Txt("chart-axis", X(i), h - 8, "middle", label)
+                }
             }
 
             @* bars first, lines and points over them *@
@@ -215,15 +235,15 @@
                     if (s.Values[from + i] is not { } v)
                         continue;
                     var x = X(i) - barW * bars.Count / 2 + barW * b;
-                    var y0 = Y(Math.Max(min, 0));
-                    var y = Y(v);
+                    var y0 = BaseOf(s);
+                    var y = YOf(s, v);
                     <g class="chart-bar" style="--d:@(i * 40)ms">
-                        <title>@Labels[from + i] · @s.Name : @Format(v)</title>
+                        <title>@Labels[from + i] · @s.Name : @F(s, v)</title>
                         <rect x="@N(x + 1)" y="@N(Math.Min(y, y0))" width="@N(Math.Max(1, barW - 2))" height="@N(Math.Max(1, Math.Abs(y0 - y)))" rx="@N(Math.Min(6, barW / 4))" fill="@s.Color" />
                         @* Side-by-side bars: a 0 label would run into its neighbour's (the tooltip keeps it). *@
-                        @if (showLabels && (bars.Count == 1 || v != 0))
+                        @if (showLabels && s.ScaleMax == null && (bars.Count == 1 || v != 0))
                         {
-                            @Txt("chart-value", x + barW / 2, Math.Min(y, y0) - 5, "middle", Format(v))
+                            @Txt("chart-value", x + barW / 2, Math.Min(y, y0) - 5, "middle", F(s, v))
                         }
                     </g>
                 }
@@ -231,7 +251,7 @@
             @foreach (var s in shown.Where(s => s.Reference || KindOf(s, view.Kind) != ChartKind.Bars))
             {
                 var kind = s.Reference ? ChartKind.Line : KindOf(s, view.Kind);
-                var pts = Enumerable.Range(0, count).Where(i => s.Values[from + i] != null).Select(i => (I: i, X: X(i), Y: Y(s.Values[from + i]!.Value))).ToList();
+                var pts = Enumerable.Range(0, count).Where(i => s.Values[from + i] != null).Select(i => (I: i, X: X(i), Y: YOf(s, s.Values[from + i]!.Value))).ToList();
                 if (pts.Count == 0)
                     continue;
                 var line = string.Join(" ", pts.Select((p, k) => (k == 0 ? "M" : "L") + N(p.X) + " " + N(p.Y)));
@@ -243,7 +263,7 @@
                 }
                 @if (kind == ChartKind.Area)
                 {
-                    var baseY = N(Y(Math.Max(min, 0)));
+                    var baseY = N(BaseOf(s));
                     <path class="chart-area" d="@($"{line} L{N(pts[^1].X)} {baseY} L{N(pts[0].X)} {baseY} Z")" fill="@s.Color" />
                 }
                 @if (kind is ChartKind.Line or ChartKind.Area)
@@ -254,11 +274,12 @@
                 {
                     var v = s.Values[from + p.I]!.Value;
                     <g class="chart-point @(kind == ChartKind.Points ? "big" : "")" style="--d:@(p.I * 40)ms">
-                        <title>@Labels[from + p.I] · @s.Name : @Format(v)</title>
+                        <title>@Labels[from + p.I] · @s.Name : @F(s, v)</title>
                         <circle cx="@N(p.X)" cy="@N(p.Y)" r="@(kind == ChartKind.Points ? "7" : "4.5")" fill="@(kind == ChartKind.Points ? s.Color : "var(--tile)")" stroke="@s.Color" />
-                        @if (showLabels)
+                        @* A series on its own scale: its values in the tooltips only (labels would overlap). *@
+                        @if (showLabels && s.ScaleMax == null)
                         {
-                            @Txt("chart-value", p.X, p.Y - 11, "middle", Format(v))
+                            @Txt("chart-value", p.X, p.Y - 11, "middle", F(s, v))
                         }
                     </g>
                 }

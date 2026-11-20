@@ -111,7 +111,8 @@
     // A WPF page (dashboard, arrêts, planification, paramètres): in the
     // Windows application the window shows the rail here and the page beside it.
     private NativePage? CurrentNative
-        => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && NativePages.IsAllowed(Session.Actor, page)
+        => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && NativePages.IsWpf(page)
+           && NativePages.IsAllowed(Session.Actor, page)
             ? page
             : null;
 
@@ -183,7 +184,7 @@
     // administrator disappears without signing out.
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        if (NativePages.FromRoute(CurrentPath) == null)
+        if (NativePages.FromRoute(CurrentPath) is not { } page || !NativePages.IsWpf(page))
             _lastWebRoute = CurrentPath;
         UpdateShift();
         await Session.RefreshAsync();

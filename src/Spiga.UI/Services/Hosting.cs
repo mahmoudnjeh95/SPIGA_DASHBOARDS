@@ -12,8 +12,10 @@ using SpigaDashboards.App.Services;
 
 namespace Spiga.UI.Services;
 
-// The SPIGA Dashboards screens that are WPF, not Razor: in the Windows
-// application they are shown in the main window beside the menu.
+// The SPIGA Dashboards screens that were WPF pages. Those still WPF
+// (NativePages.IsWpf) are shown in the main window beside the menu in the
+// Windows application; the others have moved to Razor (web migration) and
+// keep their route and rights here.
 public enum NativePage
 {
     Dashboard,
@@ -46,6 +48,10 @@ public static class NativePages
         NativePage.StopQualification or NativePage.StopPlanning => "maintenance:saisir",
         _ => Perm.ParametresPoste,
     };
+
+    // Still a WPF page (the desktop application shows it beside the menu, a
+    // browser a placeholder). The others are Razor pages, in both hosts.
+    public static bool IsWpf(NativePage page) => page is not (NativePage.StopStatistics or NativePage.Settings);
 
     public static NativePage? FromRoute(string path)
         => Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(p => Route(p!.Value) == path);
@@ -116,6 +122,15 @@ public interface IDesktopBridge
     // The station's hall screen: for NativeAccess.CanTv only.
     void OpenTvScreen();
 
+    // "Planifier un préventif" (Statistiques des arrêts): the planning board
+    // opens on the preventive rule form for this line and component.
+    // access: the account's rights on the planning page.
+    void PlanPreventive(NativeAccess access, string machineId, string component);
+
+    // What only this PC has in its Paramètres (database connection, display,
+    // stop alert): null in a browser.
+    IStationHost? Station { get; }
+
     // The WPF pages follow the signed-in user's light / dark choice.
     void ApplyTheme(bool dark);
 
@@ -152,6 +167,8 @@ public sealed class NoDesktop : IDesktopBridge
     public void ShowNative(NativePage? page, NativeAccess access) { }
     public void DiscardNativePages() { }
     public void OpenTvScreen() { }
+    public void PlanPreventive(NativeAccess access, string machineId, string component) { }
+    public IStationHost? Station => null;
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }
     public event Action<NativePage>? NativeClosed { add { } remove { } }
@@ -221,6 +238,12 @@ public static class SpigaServices
         // stats is only read; what the screens write goes to the application database.
         services.AddSingleton(sp => new ProductionRepository(production, AppData.ConnectionFor(appDb), productionSettings));
         services.AddSingleton(sp => new TeamScheduleService(productionSettings));
+        // Paramètres: the settings file and the shared part in the
+        // application database. The desktop application registers its own
+        // (same instances as its dashboard) before calling this.
+        services.TryAddSingleton(_ => new SettingsService());
+        services.TryAddSingleton(sp => new SharedSettingsSync(
+            new SharedSettingsRepository(AppData.ConnectionFor(appDb), production), productionSettings, sp.GetRequiredService<SettingsService>()));
         services.AddSingleton<PlantData>();
         services.AddSingleton<IPlantReferential>(sp => sp.GetRequiredService<PlantData>());
 
@@ -238,6 +261,8 @@ public static class SpigaServices
         services.AddScoped<WasteDashboard>();
         services.AddScoped<PosteBoard>();
         services.AddScoped<SourceStatusService>();
+        services.AddScoped<StopStatsService>();
+        services.AddScoped<StationSettingsEditor>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();
         return services;
@@ -255,6 +280,7 @@ public sealed class UiState
     public Period? WastePeriod { get; set; }
     public WasteFilter? WasteFilter { get; set; }
     public Period? PresencePeriod { get; set; }
+    public StatsFilter? StopStats { get; set; }
 
     // Menu: the screens planned for a later version ("à venir") are folded
     // away unless the user opens them.
@@ -272,6 +298,9 @@ public enum ChartKind { Auto, Bars, Line, Points, Area }
 public sealed record ChartView(ChartKind Kind, IReadOnlySet<string> Hidden);
 
 // One series of a SpigaChart. Reference = a target / threshold: always a
-// dashed line, never changed into bars or points.
+// dashed line, never changed into bars or points. ScaleMax: the series is
+// drawn on its own scale, 0 to ScaleMax, not on the chart's axis (another
+// unit: a count beside hours, a cumulated %); Format: how its values read
+// (else the chart's).
 public sealed record ChartSeries(string Name, IReadOnlyList<double?> Values, string Color,
-    ChartKind Kind = ChartKind.Bars, bool Reference = false);
+    ChartKind Kind = ChartKind.Bars, bool Reference = false, double? ScaleMax = null, Func<double, string>? Format = null);

@@ -1,3 +1,369 @@
 @page "/maintenance/statistiques-arrets"
+@inherits SpigaPage
+@inject StopStatsService Stats
+@inject UiState Ui
+@inject IDesktopBridge Desktop
 
-<NativePagePlaceholder Page="NativePage.StopStatistics" Group="Maintenance" Title="Statistiques des arrêts" />
+@* Statistiques des arrêts: was a WPF page of the desktop application
+   (StatsViewModel) until the web migration; the same figures, in both hosts. *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.StopStatistics))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(StopStatsService.Permission) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Maintenance</span><h1>Statistiques des arrêts</h1>
+            <p>@PeriodLabel()@(_machine == null ? "" : " · " + MachineName(_machine))@(Team == null ? "" : " · " + Team) · arrêts qualifiés seulement</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Période</span>
+            <div class="segs" role="group" aria-label="Période">
+                @foreach (var days in StopStatsService.Periods)
+                {
+                    <button type="button" class="seg @(_days == days ? "on" : "")" aria-pressed="@(_days == days)" @onclick="() => SetPeriodAsync(days)">
+                        @(days == 1 ? "Aujourd'hui" : $"{days} jours")
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <label for="st-line">Ligne</label>
+            <select id="st-line" value="@(_machine ?? "")" @onchange="OnMachineAsync">
+                <option value="">Toutes les lignes</option>
+                @foreach (var m in _machines)
+                {
+                    <option value="@m.MachineId">@m.MachineName</option>
+                }
+            </select>
+        </div>
+        <div class="f">
+            @if (Actor.Team is { } myTeam)
+            {
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les arrêts de votre équipe">@myTeam</span>
+            }
+            else
+            {
+                <label for="st-team">Équipe</label>
+                <select id="st-team" value="@(_team ?? "")" @onchange="OnTeamAsync">
+                    <option value="">Toutes les équipes</option>
+                    @foreach (var t in Stats.Teams)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            }
+        </div>
+        <div class="f">
+            <span>Arrêts</span>
+            <label class="check" title="Coché : seulement les pannes (mécanique, électrique, pneumatique). Décoché : tous les arrêts qualifiés.">
+                <input type="checkbox" checked="@_pannesOnly" @onchange="OnPannesAsync" /> pannes seulement
+            </label>
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar" @onclick="LoadAsync" disabled="@_loading">Actualiser</button>
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_open is { Count: > 0 } open)
+    {
+        <div class="notice warn" role="status">
+            <span>
+                @open.Count arrêt@(open.Count > 1 ? "s" : "") sans cause · @StopStatsService.Duration(open.Minutes) sur la période :
+                les statistiques ne comptent que les arrêts qualifiés.
+            </span>
+            @if (NativePages.IsAllowed(Session.Actor, NativePage.StopQualification))
+            {
+                <a class="bar small" style="margin-left:auto" href="@NativePages.Route(NativePage.StopQualification)">Qualifier →</a>
+            }
+        </div>
+    }
+
+    @if (_stats == null)
+    {
+        @if (_loading)
+        {
+            <Loader />
+        }
+    }
+    else
+    {
+        var s = _stats;
+        @* A new period or filter: the previous figures stay, dimmed, until the new ones are in. *@
+        <div class="stats-body @(_loading ? "stale" : "")" aria-busy="@_loading">
+        <div class="row">
+            @foreach (var t in s.Tiles)
+            {
+                <KpiTile Label="@t.Label" Value="@t.Value" Css="@(t.Value == "—" ? "nd" : null)"
+                         Sub="@(t.Delta.Length > 0 ? t.Delta + " · " + t.Hint : t.Hint)" />
+            }
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:1 1 440px">
+                @Chart("Pareto par composant", "stats-component", s.ByComponent, 300)
+                <p class="nd stat-cap">@s.ParetoCaption</p>
+            </section>
+            <section class="card" style="flex:1 1 440px">
+                @Chart("Temps d'arrêt par cause", "stats-cause", s.ByCause, 300)
+            </section>
+        </div>
+
+        <div class="row">
+            <section class="card" style="flex:3 1 480px">
+                @Chart("Temps d'arrêt par ligne", "stats-machine", s.ByMachine, 280)
+                @if (s.MachineCaption.Length > 0)
+                {
+                    <p class="nd stat-cap">@s.MachineCaption</p>
+                }
+            </section>
+            <section class="card" style="flex:2 1 360px">
+                @Chart("Par poste", "stats-poste", s.ByPoste, 170)
+                @Chart("Par équipe", "stats-team", s.ByTeam, 170)
+                @if (s.GroupCaption.Length > 0)
+                {
+                    <p class="nd stat-cap">@s.GroupCaption</p>
+                }
+            </section>
+        </div>
+
+        <section class="card">
+            <div class="card-head">
+                <div>
+                    <h2>Quand les arrêts commencent</h2>
+                    <p class="nd stat-cap">@s.HeatCaption</p>
+                </div>
+                <div class="heat-scale" aria-hidden="true">
+                    <span>moins</span>
+                    @for (var step = 0; step <= 5; step++)
+                    {
+                        <i class="h@(step)"></i>
+                    }
+                    <span>plus</span>
+                </div>
+            </div>
+            <div class="scroll">
+                <div class="heat" role="table" aria-label="Arrêts par jour de la semaine et heure de début">
+                    <span></span>
+                    @for (var h = 0; h < 24; h++)
+                    {
+                        <span class="heat-hour" role="columnheader">@h.ToString("00")</span>
+                    }
+                    @for (var d = 0; d < 7; d++)
+                    {
+                        <span class="heat-day" role="rowheader">@Days[d][..3].</span>
+                        @for (var h = 0; h < 24; h++)
+                        {
+                            var n = s.Heat[d, h];
+                            var step = n == 0 ? 0 : Math.Clamp((int)Math.Ceiling(n * 5.0 / Math.Max(1, s.HeatMax)), 1, 5);
+                            <span class="heat-cell h@(step)" role="cell" title="@($"{Days[d]} {h:00}:00–{(h + 1) % 24:00}:00 · {n} arrêt{(n > 1 ? "s" : "")}")">@(n > 0 ? n : "")</span>
+                        }
+                    }
+                    <span></span>
+                    <span class="heat-shift" style="grid-column:span 6">Nuit (fin)</span>
+                    <span class="heat-shift" style="grid-column:span 8">Matin 06–14</span>
+                    <span class="heat-shift" style="grid-column:span 8">Après-midi 14–22</span>
+                    <span class="heat-shift" style="grid-column:span 2">Nuit</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="row">
+            <section class="card" style="flex:2 1 380px">
+                @Chart("Tendance sur 12 semaines", "stats-weeks", s.Weeks, 240)
+                <p class="nd stat-cap">Temps d'arrêt par semaine (la dernière est en cours), quelle que soit la période choisie</p>
+            </section>
+            <section class="card" style="flex:3 1 480px">
+                <h2>Pannes répétitives</h2>
+                <p class="nd stat-cap">Même composant, même ligne, au moins 3 fois sur la période</p>
+                @if (s.Repeats.Count == 0)
+                {
+                    <p class="empty">Aucune panne ne se répète sur la période.</p>
+                }
+                else
+                {
+                    <table class="t">
+                        <tbody>
+                            @foreach (var r in s.Repeats)
+                            {
+                                <tr>
+                                    <td>
+                                        @r.MachineName · @r.Component
+                                        <small>
+                                            <span class="repeat-dots" aria-hidden="true">@for (var i = 0; i < Math.Min(8, r.Count); i++) { <i></i> }</span>
+                                            @r.Count fois · @r.Lost perdues · une tous les @r.Every
+                                        </small>
+                                    </td>
+                                    <td class="n">
+                                        <span class="chip @(r.PlanRule == null ? "" : "warn")">@(r.PlanRule ?? "Aucun préventif")</span>
+                                    </td>
+                                    @if (CanPlan)
+                                    {
+                                        <td class="r"><button type="button" class="bar small" @onclick="() => PlanPreventive(r)">Planifier un préventif</button></td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+        </div>
+        </div>
+    }
+}
+
+@code {
+    private static readonly string[] Days = { "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche" };
+
+    private int _days = 7;
+    private string? _machine;
+    private string? _team;
+    private bool _pannesOnly;
+    private bool _loading;
+    private int _version;
+    private List<Machine> _machines = new();
+    private StopStats? _stats;
+    private (int Count, double Minutes)? _open;
+
+    private string? Team => StopStatsService.TeamFor(Actor, _team);
+
+    // The preventive form is on the planning board, a page of the desktop application for now.
+    private bool CanPlan => Desktop.IsAvailable && NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!NativePages.IsAllowed(Session.Actor, NativePage.StopStatistics))
+            return;
+        if (Ui.StopStats is { } kept)
+            (_days, _machine, _team, _pannesOnly) = (kept.PeriodDays, kept.MachineId, kept.Team, kept.PannesOnly);
+        await Run(async () => _machines = await Stats.MachinesAsync(Actor));
+        if (_machine != null && _machines.All(m => m.MachineId != _machine))
+            _machine = null;
+        await LoadAsync();
+    }
+
+    private StatsFilter Filter => new(_days, _machine, _team, _pannesOnly);
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        var filter = Filter;
+        Ui.StopStats = filter;
+        _loading = true;
+        _open = null;
+        try
+        {
+            StopStats? stats = null;
+            var ok = await Run(async () => stats = await Stats.LoadAsync(Actor, filter));
+            if (version != _version)
+                return;
+            if (!ok || stats == null)
+                return;
+            _stats = stats;
+        }
+        catch (Exception ex)
+        {
+            if (version == _version)
+            {
+                SpigaDashboards.App.Services.AppLogger.Log("Statistiques des arrêts : " + ex);
+                Error = "Statistiques indisponibles : " + ex.Message;
+            }
+            return;
+        }
+        finally
+        {
+            if (version == _version)
+                _loading = false;
+        }
+        StateHasChanged();
+
+        // Then what reads the production database (slower): the run hours
+        // behind MTBF and lost availability, and the stops left to qualify.
+        try
+        {
+            await Stats.AddRunHoursAsync(Actor, filter, _stats);
+            if (version != _version)
+                return;
+            StateHasChanged();
+            var open = await Stats.UnqualifiedAsync(Actor, filter);
+            if (version == _version)
+                _open = open;
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Statistiques des arrêts, arrêts sans cause non comptés : " + ex.Message);
+        }
+    }
+
+    private Task SetPeriodAsync(int days)
+    {
+        _days = days;
+        return LoadAsync();
+    }
+
+    private Task OnMachineAsync(ChangeEventArgs e)
+    {
+        _machine = e.Value as string is { Length: > 0 } id ? id : null;
+        return LoadAsync();
+    }
+
+    private Task OnTeamAsync(ChangeEventArgs e)
+    {
+        _team = e.Value as string is { Length: > 0 } team ? team : null;
+        return LoadAsync();
+    }
+
+    private Task OnPannesAsync(ChangeEventArgs e)
+    {
+        _pannesOnly = e.Value is true;
+        return LoadAsync();
+    }
+
+    private void PlanPreventive(RepeatFailure r)
+        => Desktop.PlanPreventive(NativePages.Access(Actor, NativePage.StopPlanning), r.MachineId, r.Component);
+
+    private string MachineName(string id) => _machines.FirstOrDefault(m => m.MachineId == id)?.MachineName ?? id;
+
+    private string PeriodLabel()
+    {
+        if (_stats is not { From: var from } || from == default)
+            return _days == 1 ? "Aujourd'hui" : $"{_days} derniers jours";
+        return _days == 1
+            ? $"Aujourd'hui depuis {from:dd/MM HH:mm}"
+            : $"Du {from:dd/MM/yyyy} à aujourd'hui ({_days} jours)";
+    }
+
+    // Stop time (bars, hours axis), number of stops (line, own scale) and,
+    // for a Pareto, the cumulated share (line, 0-100 %).
+    private RenderFragment Chart(string title, string key, List<StatGroup> groups, int height) => __builder =>
+    {
+        if (groups.Count == 0 || groups.All(g => g.Minutes <= 0))
+        {
+            <h2>@title</h2>
+            <p class="empty">Aucun arrêt qualifié sur la période.</p>
+            return;
+        }
+        var series = new List<ChartSeries>
+        {
+            new("Temps d'arrêt", groups.Select(g => (double?)Math.Round(g.Minutes / 60, 2)).ToList(), "var(--bar)",
+                Format: StopStatsService.Hours),
+            new("Nombre d'arrêts", groups.Select(g => (double?)g.Count).ToList(), "#F59E0B", ChartKind.Line,
+                ScaleMax: Math.Max(1, groups.Max(g => g.Count)) * 1.5, Format: v => $"{v:0} arrêt{(v > 1 ? "s" : "")}"),
+        };
+        if (groups.Any(g => g.Cumul != null))
+            series.Add(new("Cumul (%)", groups.Select(g => (double?)Math.Round(g.Cumul ?? 0)).ToList(), "var(--ok)", ChartKind.Line,
+                ScaleMax: 125, Format: v => $"{v:0} %"));
+        <SpigaChart Title="@title" Key="@key" Height="height" YMin="0"
+                    Labels="@groups.Select(g => g.Label).ToList()" Series="@series"
+                    Format="@(v => v.ToString("0.#", Fmt.French) + " h")" />
+    };
+}

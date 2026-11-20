@@ -61,6 +61,7 @@ public sealed class TestApp : IDisposable
     // The same application database, as the dashboard's repositories see it.
     public SpigaDashboards.App.Data.ConnectionStringFactory AppData
         => new(SpigaDashboards.App.Models.DatabaseProvider.Sqlite, $"Data Source={_path}");
+    public AppDbOptions Options => AppDbOptions.ForSqliteFile(_path);
     public AppDb Db { get; }
     public UserStore Users { get; }
     public RoleStore Roles { get; }
