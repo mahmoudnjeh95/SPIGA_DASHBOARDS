@@ -3,6 +3,7 @@
 @inject StopListService Arrets
 @inject UiState Ui
 @inject IJSRuntime JS
+@implements IDisposable
 
 @* Arrêts de production: was a WPF page of the desktop application
    (StopsView) until the web migration; the same list, in both hosts. The
@@ -137,10 +138,12 @@ else
     private int _version;
     private List<Machine> _machines = new();
     private StopList? _list;
-    // What was read for the days and line shown, every poste and team: a new
-    // poste or team narrows it without reading the production database again.
-    private (DateTime From, DateTime To, string? Machine)? _readFor;
-    private StopList? _read;
+    // What was read for each days and line asked for on this visit, every
+    // poste and team: a new poste or team, or days asked again, show without
+    // reading the production database again (Actualiser does). A read the
+    // page no longer waits for is cancelled.
+    private readonly Dictionary<(DateTime From, DateTime To, string? Machine), StopList> _reads = new();
+    private CancellationTokenSource? _reading;
     private IReadOnlyList<ProductionStop> _shown = Array.Empty<ProductionStop>();
 
     private bool CanExport => NativePages.Access(Actor, NativePage.Stops).CanExport;
@@ -180,8 +183,14 @@ else
     // Actualiser: read again even if the days and line did not change.
     private Task RefreshAsync()
     {
-        _readFor = null;
+        _reads.Clear();
         return LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _reading?.Cancel();
+        _reading?.Dispose();
     }
 
     private async Task LoadAsync()
@@ -191,9 +200,12 @@ else
         Ui.Stops = filter;
         Error = Info = null;
         var key = (_from, _to, _machine);
-        if (_readFor == key && _read != null)
+        _reading?.Cancel();
+        _reading?.Dispose();
+        _reading = null;
+        if (_reads.TryGetValue(key, out var read))
         {
-            _list = StopListService.Narrow(_read, Actor, filter);
+            _list = StopListService.Narrow(read, Actor, filter);
             _shown = _list.Stops;
             _loading = false; // a read still running for other days is dropped (version)
             return;
@@ -205,13 +217,20 @@ else
             var actor = Actor;
             // Off the UI thread: detection over many days takes a moment.
             var all = filter with { ShiftId = null, Team = null };
-            var ok = await Run(async () => list = await Task.Run(() => Arrets.SearchAsync(actor, all)));
+            var cancel = (_reading = new CancellationTokenSource()).Token;
+            var ok = await Run(async () => list = await Task.Run(() => Arrets.SearchAsync(actor, all, cancel), cancel));
             if (version == _version && ok && list != null)
             {
-                (_readFor, _read) = (key, list);
+                if (_reads.Count >= 8)
+                    _reads.Clear();
+                _reads[key] = list;
                 _list = StopListService.Narrow(list, Actor, Filter);
                 _shown = _list.Stops;
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Other days or line asked for meanwhile, or the page closed.
         }
         catch (Exception ex)
         {

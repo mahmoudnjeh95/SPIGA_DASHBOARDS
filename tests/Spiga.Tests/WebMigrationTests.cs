@@ -181,6 +181,11 @@ public class WebMigrationTests
         Assert.Equal(("Controle CC01", "Saisie manuelle"), (manual.MachineName, manual.TypeLabel));
         Assert.Equal(StopMatching.PostesOf(day, day.AddDays(-1)), StopMatching.PostesOf(day.AddDays(-1), day));
 
+        Assert.Equal($"Suite {first.Start:dd/MM HH:mm}", rest.TypeLabel);
+        // No reading at all: "Sans données", even when the silence began in an earlier poste.
+        rest.NoDataMinutes = rest.NetMinutes;
+        Assert.Equal("Sans données", rest.TypeLabel);
+
         var totals = Assert.Single(TeamStopTotal.Of(stops));
         Assert.Equal(("Equipe A", 4, 125.0), (totals.Team, totals.Count, totals.TotalMinutes));
     }

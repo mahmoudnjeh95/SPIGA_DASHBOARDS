@@ -45,7 +45,8 @@ public sealed class StopListService(
             .ToList();
     }
 
-    public async Task<StopList> SearchAsync(Actor actor, StopsFilter filter)
+    // cancel: the page moved on (other days, line, or left): the read stops.
+    public async Task<StopList> SearchAsync(Actor actor, StopsFilter filter, CancellationToken cancel = default)
     {
         var (from, to) = StopMatching.PostesOf(filter.From, filter.To);
         if ((to - from).TotalDays > MaxDays + 1)
@@ -63,10 +64,10 @@ public sealed class StopListService(
         string? error = null;
         try
         {
-            var segments = await repository.GetLineSegmentsAsync(names.Keys.ToList(), from, to);
+            var segments = await repository.GetLineSegmentsAsync(names.Keys.ToList(), from, to, cancel);
             detected = StopDetector.Detect(segments, from, to, settings, teams, names);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppLogger.Log("Arrêts : base de production illisible : " + ex.Message);
             detected = new();

@@ -513,7 +513,10 @@ rz AS (
     // NoDataSeconds) or unplaced (moved across a gap too long to place). Same cleaned snapshots as the KPIs; an interval runs
     // from the line's previous snapshot to this one. Segments that start
     // before from or end after to are returned whole.
-    public async Task<List<LineSegment>> GetLineSegmentsAsync(IReadOnlyCollection<string> machineIds, DateTime from, DateTime to)
+    // cancel: a search the page no longer waits for (SQL Server stops the
+    // query; SQLite stops between rows).
+    public async Task<List<LineSegment>> GetLineSegmentsAsync(IReadOnlyCollection<string> machineIds, DateTime from, DateTime to,
+        CancellationToken cancel = default)
     {
         await OffUiThread.Switch();
         if (from < _settings.DataStartDate)
@@ -567,7 +570,8 @@ HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
         parameters.Add("readTo", to + SnapshotMargin);
 
         using var connection = _connectionFactory.CreateConnection();
-        var segments = (await connection.QueryAsync<LineSegment>(sql, parameters)).ToList();
+        var segments = (await connection.QueryAsync<LineSegment>(new CommandDefinition(sql, parameters, cancellationToken: cancel))).ToList();
+        cancel.ThrowIfCancellationRequested();
         foreach (var s in segments)
             s.MachineId = s.MachineId.TrimEnd();
 
@@ -577,12 +581,12 @@ HAVING MAX(isl.t1) > @from AND MIN(isl.t0) < @to";
         // so the stop shows while it lasts, not only once the line is back.
         // A line that never wrote a snapshot since DataStartDate gets nothing.
         var until = to < DateTime.Now ? to : DateTime.Now;
-        var lastSnapshots = (await connection.QueryAsync<(string MachineId, DateTime? Last)>($@"
+        var lastSnapshots = (await connection.QueryAsync<(string MachineId, DateTime? Last)>(new CommandDefinition($@"
 SELECT m.MachineId,
        (SELECT MAX(p.tempo_fine) FROM produzione p
         WHERE p.numero_linea = m.MachineId AND p.tempo_fine >= @dataStart AND p.tempo_fine < @until) AS Last
 FROM Machines m WHERE m.MachineId IN @machineIds",
-            new { machineIds = machineIds.ToList(), dataStart = _settings.DataStartDate, until }))
+            new { machineIds = machineIds.ToList(), dataStart = _settings.DataStartDate, until }, cancellationToken: cancel)))
             .ToList();
         foreach (var (machineId, last) in lastSnapshots)
         {

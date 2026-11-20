@@ -55,9 +55,11 @@ public class ProductionStop
     public bool IsManual => Qualification?.IsManual == true;
 
     public string ShiftName => Services.KpiCalculator.ShiftName(ShiftId);
+    // "Sans données" first: a poste with no reading at all is that, even
+    // when the silence began in an earlier poste.
     public string TypeLabel => IsManual ? "Saisie manuelle"
-        : IsContinuation ? $"Suite {RunStart:dd/MM HH:mm}"
-        : IsMostlyNoData ? "Sans données" : "Arrêt";
+        : IsMostlyNoData ? "Sans données"
+        : IsContinuation ? $"Suite {RunStart:dd/MM HH:mm}" : "Arrêt";
     public string EndText => IsLive ? "en cours" : End.ToString("HH:mm");
     public CauseFamily? CauseFamily => Qualification?.Cause?.Family;
     public string CauseLabel => Qualification == null ? "—" : StopCauses.Label(Qualification.CauseCode);
