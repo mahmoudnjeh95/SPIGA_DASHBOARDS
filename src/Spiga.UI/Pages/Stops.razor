@@ -1,3 +1,288 @@
 @page "/maintenance/arrets"
+@inherits SpigaPage
+@inject StopListService Arrets
+@inject UiState Ui
+@inject IJSRuntime JS
 
-<NativePagePlaceholder Page="NativePage.Stops" Group="Maintenance" Title="Arrêts" />
+@* Arrêts de production: was a WPF page of the desktop application
+   (StopsView) until the web migration; the same list, in both hosts. The
+   kiosk PCs (no sign-in) keep the WPF window. *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.Stops))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(StopListService.Permission) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Maintenance</span><h1>Arrêts de production</h1>
+            <p>@Subtitle()</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Jours</span>
+            <div class="segs" role="group" aria-label="Jours">
+                <button type="button" class="seg @(IsDays(0, 0) ? "on" : "")" aria-pressed="@IsDays(0, 0)" @onclick="() => SetDaysAsync(0, 0)">Aujourd'hui</button>
+                <button type="button" class="seg @(IsDays(1, 1) ? "on" : "")" aria-pressed="@IsDays(1, 1)" @onclick="() => SetDaysAsync(1, 1)">Hier</button>
+                <button type="button" class="seg @(IsDays(6, 0) ? "on" : "")" aria-pressed="@IsDays(6, 0)" @onclick="() => SetDaysAsync(6, 0)">7 jours</button>
+            </div>
+        </div>
+        <div class="f">
+            <label for="ar-from">Du</label>
+            <input id="ar-from" type="date" value="@_from.ToString("yyyy-MM-dd")" max="@Arrets.Today.ToString("yyyy-MM-dd")" @onchange="OnFromAsync" />
+        </div>
+        <div class="f">
+            <label for="ar-to">Au</label>
+            <input id="ar-to" type="date" value="@_to.ToString("yyyy-MM-dd")" max="@Arrets.Today.ToString("yyyy-MM-dd")" @onchange="OnToAsync" />
+        </div>
+        <div class="f">
+            <label for="ar-line">Ligne</label>
+            <select id="ar-line" value="@(_machine ?? "")" @onchange="OnMachineAsync">
+                <option value="">Toutes les lignes</option>
+                @foreach (var m in _machines)
+                {
+                    <option value="@m.MachineId">@m.MachineName</option>
+                }
+            </select>
+        </div>
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_shift == null ? "on" : "")" aria-pressed="@(_shift == null)" @onclick="() => SetShiftAsync(null)">Tous</button>
+                @foreach (var shift in Shifts.All)
+                {
+                    <button type="button" class="seg @(_shift == shift ? "on" : "")" aria-pressed="@(_shift == shift)" @onclick="() => SetShiftAsync(shift)">@Shifts.Label(shift)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            @if (Actor.Team is { } myTeam)
+            {
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent">@myTeam</span>
+            }
+            else
+            {
+                <label for="ar-team">Équipe</label>
+                <select id="ar-team" value="@(_team ?? "")" @onchange="OnTeamAsync">
+                    <option value="">Toutes les équipes</option>
+                    @foreach (var t in Arrets.Teams)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            }
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar" @onclick="LoadAsync" disabled="@_loading">Actualiser</button>
+        @if (CanExport)
+        {
+            <button type="button" class="bar acc" @onclick="SheetAsync" disabled="@(_loading || _shown.Count == 0)"
+                    title="Une page par poste et par équipe, avec les colonnes « Cause » et « Action » à remplir à la main">Fiche des arrêts (PDF)</button>
+        }
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+    <p class="nd">@Arrets.SettingsText</p>
+
+    @if (_list == null)
+    {
+        @if (_loading)
+        {
+            <Loader Text="Recherche des arrêts…" />
+        }
+    }
+    else
+    {
+        var list = _list;
+        @if (list.ProductionError is { } down)
+        {
+            <div class="notice warn" role="status">@down</div>
+        }
+        @* New filters: the previous list stays, dimmed, until the new one is in. *@
+        <div class="stats-body @(_loading ? "stale" : "")" aria-busy="@_loading">
+            <div class="row">
+                <KpiTile Label="Temps d'arrêt" Value="@ProductionStop.FormatDuration(list.NetMinutes)"
+                         Sub="@($"{list.Stops.Count} arrêt{(list.Stops.Count > 1 ? "s" : "")} · hors pauses")" />
+                @foreach (var t in list.Teams)
+                {
+                    <KpiTile Label="@t.Team" Value="@t.TotalText" Sub="@($"{t.Count} arrêt{(t.Count > 1 ? "s" : "")} · hors « Sans données » : {t.StopText}")" />
+                }
+            </div>
+
+            <section class="card">
+                <div class="card-head"><h2>Arrêts <small>un par poste : un arrêt à cheval sur deux postes figure dans les deux</small></h2></div>
+                <GridTable TItem="ProductionStop" Items="list.Stops" Columns="Columns" MaxHeight="@null"
+                           RowClass="@(s => s.IsMostlyNoData ? "nodata" : "")" ShownChanged="rows => _shown = rows"
+                           Empty="Aucun arrêt sur cette période." />
+                <p class="nd stat-cap">« Sans données » : aucun relevé de la machine (PC de collecte ou réseau arrêté), elle a pu tourner ou non.
+                    La cause vient de Qualification des arrêts.</p>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    private DateTime _from;
+    private DateTime _to;
+    private string? _machine;
+    private int? _shift;
+    private string? _team;
+    private bool _loading;
+    private int _version;
+    private List<Machine> _machines = new();
+    private StopList? _list;
+    private IReadOnlyList<ProductionStop> _shown = Array.Empty<ProductionStop>();
+
+    private bool CanExport => NativePages.Access(Actor, NativePage.Stops).CanExport;
+
+    private IReadOnlyList<GridColumn<ProductionStop>> Columns => new[]
+    {
+        new GridColumn<ProductionStop>("Date", s => s.ShiftDate.ToString("ddd dd/MM/yyyy", Fmt.French), s => s.ShiftDate, css: "n nowrap"),
+        new GridColumn<ProductionStop>("Poste", s => Shifts.Label(s.ShiftId), s => s.ShiftId),
+        new GridColumn<ProductionStop>("Équipe", s => s.Team),
+        new GridColumn<ProductionStop>("Machine", s => s.MachineName),
+        new GridColumn<ProductionStop>("Début", s => s.Start.ToString("HH:mm"), s => s.Start, css: "n"),
+        new GridColumn<ProductionStop>("Fin", s => s.EndText, s => s.End, css: "n"),
+        new GridColumn<ProductionStop>("Durée", s => s.DurationText, s => s.NetMinutes, css: "r nowrap"),
+        new GridColumn<ProductionStop>("Pause déduite", s => s.BreakText, s => s.BreakMinutes, css: "r nowrap"),
+        new GridColumn<ProductionStop>("Type", s => s.TypeLabel, css: "n"),
+        new GridColumn<ProductionStop>("Cause", s => s.CauseLabel,
+            cell: s => @<span>@if (s.CauseFamily is { } family) { <span class="cause-dot @FamilyCss(family)"></span> }@s.CauseLabel</span>),
+        new GridColumn<ProductionStop>("Détail", s => s.DetailText, css: "wrap"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!NativePages.IsAllowed(Session.Actor, NativePage.Stops))
+            return;
+        var today = Arrets.Today;
+        (_from, _to) = (today, today);
+        if (Ui.Stops is { } kept)
+            (_from, _to, _machine, _shift, _team) = (kept.From, kept.To, kept.MachineId, kept.ShiftId, kept.Team);
+        await Run(async () => _machines = await Arrets.MachinesAsync(Actor));
+        if (_machine != null && _machines.All(m => m.MachineId != _machine))
+            _machine = null;
+        await LoadAsync();
+    }
+
+    private StopsFilter Filter => new(_from, _to, _machine, _shift, _team);
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        var filter = Filter;
+        Ui.Stops = filter;
+        Error = Info = null;
+        _loading = true;
+        try
+        {
+            StopList? list = null;
+            var actor = Actor;
+            // Off the UI thread: detection over many days takes a moment.
+            var ok = await Run(async () => list = await Task.Run(() => Arrets.SearchAsync(actor, filter)));
+            if (version == _version && ok && list != null)
+            {
+                _list = list;
+                _shown = list.Stops;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (version == _version)
+            {
+                SpigaDashboards.App.Services.AppLogger.Log("Arrêts : " + ex);
+                Error = "Recherche des arrêts impossible : " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (version == _version)
+                _loading = false;
+        }
+    }
+
+    private bool IsDays(int back, int backTo) => _from == Arrets.Today.AddDays(-back) && _to == Arrets.Today.AddDays(-backTo);
+
+    private Task SetDaysAsync(int back, int backTo)
+    {
+        (_from, _to) = (Arrets.Today.AddDays(-back), Arrets.Today.AddDays(-backTo));
+        return LoadAsync();
+    }
+
+    private Task OnFromAsync(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d))
+            return Task.CompletedTask;
+        _from = d.Date;
+        if (_to < _from)
+            _to = _from;
+        return LoadAsync();
+    }
+
+    private Task OnToAsync(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d))
+            return Task.CompletedTask;
+        _to = d.Date;
+        if (_from > _to)
+            _from = _to;
+        return LoadAsync();
+    }
+
+    private Task OnMachineAsync(ChangeEventArgs e)
+    {
+        _machine = e.Value as string is { Length: > 0 } id ? id : null;
+        return LoadAsync();
+    }
+
+    private Task SetShiftAsync(int? shift)
+    {
+        _shift = shift;
+        return LoadAsync();
+    }
+
+    private Task OnTeamAsync(ChangeEventArgs e)
+    {
+        _team = e.Value as string is { Length: > 0 } team ? team : null;
+        return LoadAsync();
+    }
+
+    // The rows shown (grid filters and sort applied), one page per poste and team.
+    private async Task SheetAsync()
+    {
+        if (!CanExport || _shown.Count == 0)
+            return;
+        var stops = _shown.ToList();
+        var first = stops.Min(s => s.ShiftDate);
+        var last = stops.Max(s => s.ShiftDate);
+        var name = first == last ? $"fiche_arrets_{first:yyyyMMdd}.pdf" : $"fiche_arrets_{first:yyyyMMdd}_{last:yyyyMMdd}.pdf";
+        await Run(async () =>
+        {
+            var bytes = Arrets.Sheet(stops);
+            await JS.InvokeVoidAsync("spigaDownload", name, "application/pdf", Convert.ToBase64String(bytes));
+        });
+    }
+
+    private string Subtitle()
+    {
+        var days = _from == _to ? $"{_from.ToString("dddd dd/MM/yyyy", Fmt.French)}" : $"Du {_from:dd/MM/yyyy} au {_to:dd/MM/yyyy}";
+        return days
+               + (_machine == null ? "" : " · " + (_machines.FirstOrDefault(m => m.MachineId == _machine)?.MachineName ?? _machine))
+               + (_shift is { } s ? " · poste " + Shifts.Label(s) : "")
+               + (StopListService.TeamFor(Actor, _team) is { } team ? " · " + team : "");
+    }
+
+    private static string FamilyCss(CauseFamily family) => family switch
+    {
+        CauseFamily.Panne => "panne",
+        CauseFamily.Process => "process",
+        CauseFamily.Organisation => "orga",
+        _ => "planifie",
+    };
+}

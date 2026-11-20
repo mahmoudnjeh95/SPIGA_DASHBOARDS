@@ -225,13 +225,7 @@ public sealed class StopStatsService(
     }
 
     private (ProductionRepository Production, PlanningRepository Planning) Repositories(Actor actor)
-    {
-        var rule = actor.MachineRuleFor(Permission);
-        var access = MachineAccess.Nothing();
-        access.Set(rule?.Key ?? "*", rule is { } r ? r.Allows : null);
-        var app = AppData.ConnectionFor(appDb);
-        return (new ProductionRepository(production, app, settings, access), new PlanningRepository(app, production, access));
-    }
+        => ScopedData.For(actor, Permission, production, appDb, settings);
 
     private static List<StatGroup> Pareto(IEnumerable<IGrouping<string, StopQualification>> groups, double total, int take)
     {

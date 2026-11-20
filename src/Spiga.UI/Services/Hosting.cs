@@ -51,7 +51,7 @@ public static class NativePages
 
     // Still a WPF page (the desktop application shows it beside the menu, a
     // browser a placeholder). The others are Razor pages, in both hosts.
-    public static bool IsWpf(NativePage page) => page is not (NativePage.StopStatistics or NativePage.Settings);
+    public static bool IsWpf(NativePage page) => page is not (NativePage.Stops or NativePage.StopStatistics or NativePage.Settings);
 
     public static NativePage? FromRoute(string path)
         => Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(p => Route(p!.Value) == path);
@@ -262,6 +262,7 @@ public static class SpigaServices
         services.AddScoped<PosteBoard>();
         services.AddScoped<SourceStatusService>();
         services.AddScoped<StopStatsService>();
+        services.AddScoped<StopListService>();
         services.AddScoped<StationSettingsEditor>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();
@@ -281,6 +282,7 @@ public sealed class UiState
     public WasteFilter? WasteFilter { get; set; }
     public Period? PresencePeriod { get; set; }
     public StatsFilter? StopStats { get; set; }
+    public StopsFilter? Stops { get; set; }
 
     // Menu: the screens planned for a later version ("à venir") are folded
     // away unless the user opens them.

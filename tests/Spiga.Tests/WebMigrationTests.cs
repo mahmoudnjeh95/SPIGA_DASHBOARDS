@@ -133,9 +133,103 @@ public class WebMigrationTests
     [Fact]
     public void The_moved_pages_are_no_longer_wpf()
     {
+        Assert.False(NativePages.IsWpf(NativePage.Stops));
         Assert.False(NativePages.IsWpf(NativePage.StopStatistics));
         Assert.False(NativePages.IsWpf(NativePage.Settings));
         Assert.True(NativePages.IsWpf(NativePage.StopPlanning));
-        Assert.DoesNotContain(ModuleCatalog.Navigation, n => n.Route is "maintenance/statistiques-arrets" or "admin/parametres" && n.DesktopOnly);
+        Assert.DoesNotContain(ModuleCatalog.Navigation,
+            n => n.Route is "maintenance/arrets" or "maintenance/statistiques-arrets" or "admin/parametres" && n.DesktopOnly);
+    }
+
+    // ---------- Arrêts ----------
+
+    private static ProductionStop Detected(string machine, DateTime start, int minutes, DateTime? runStart = null)
+        => new()
+        {
+            MachineId = machine, MachineName = machine, Start = start, End = start.AddMinutes(minutes), RunStart = runStart ?? start,
+            ShiftDate = start.Date, ShiftId = start.Hour is >= 6 and < 14 ? 1 : 2, Team = "Equipe A",
+        };
+
+    [Fact]
+    public void Stops_get_their_cause_and_causes_left_over_are_listed()
+    {
+        var day = new DateTime(2026, 11, 17);
+        var first = Detected("PC01", day.AddHours(13).AddMinutes(30), 30);
+        // The same stop, carried on into the next poste.
+        var rest = Detected("PC01", day.AddHours(14), 20, runStart: first.Start);
+        var other = Detected("CC01", day.AddHours(9), 15);
+        var quals = new List<StopQualification>
+        {
+            new() { Id = 1, MachineId = "PC01", StopStart = first.Start.AddMinutes(2), StopEnd = first.End, CauseCode = "MECA", Component = "Capteur" },
+            // Declared by hand, no detected stop.
+            new() { Id = 2, MachineId = "CC01", StopStart = day.AddHours(16), StopEnd = day.AddHours(17), ShiftDate = day, ShiftId = 2,
+                Team = "Equipe A", CauseCode = "ELEC", IsManual = true },
+            // Outside the search: not listed.
+            new() { Id = 3, MachineId = "CC01", StopStart = day.AddDays(-2).AddHours(9), StopEnd = day.AddDays(-2).AddHours(10), CauseCode = "MECA" },
+        };
+        var names = new Dictionary<string, string> { ["PC01"] = "Peseuse PC01", ["CC01"] = "Controle CC01" };
+        var (from, to) = StopMatching.PostesOf(day, day);
+
+        var stops = StopMatching.WithQualifications(new List<ProductionStop> { first, rest, other }, quals, names, from, to);
+
+        Assert.Equal((new DateTime(2026, 11, 17, 6, 0, 0), new DateTime(2026, 11, 18, 6, 0, 0)), (from, to));
+        Assert.Equal(4, stops.Count);
+        Assert.Equal("MECA", first.Qualification?.CauseCode);
+        Assert.Same(first.Qualification, rest.Qualification);
+        Assert.Null(other.Qualification);
+        var manual = Assert.Single(stops, s => s.IsManual);
+        Assert.Equal(("Controle CC01", "Saisie manuelle"), (manual.MachineName, manual.TypeLabel));
+        Assert.Equal(StopMatching.PostesOf(day, day.AddDays(-1)), StopMatching.PostesOf(day.AddDays(-1), day));
+
+        var totals = Assert.Single(TeamStopTotal.Of(stops));
+        Assert.Equal(("Equipe A", 4, 125.0), (totals.Team, totals.Count, totals.TotalMinutes));
+    }
+
+    [Fact]
+    public async Task Stops_page_keeps_to_the_machines_and_team_of_the_account()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb();
+        var admin = await app.SetupAdminAsync();
+        var planning = new PlanningRepository(app.AppData, live.Factory);
+        var today = app.Clock.Now.Date; // 17/11/2026
+        await planning.SaveQualificationAsync(Stop("PC01", today.AddHours(9), 30, "MECA", team: TestApp.DefaultTeam));
+        await planning.SaveQualificationAsync(Stop("CC01", today.AddHours(8), 20, "NETT", team: TestApp.DefaultTeam));
+        await planning.SaveQualificationAsync(Stop("CC01", today.AddHours(15), 40, "ELEC", team: "Equipe Z"));
+        await planning.SaveQualificationAsync(Stop("CC01", today.AddDays(-5).AddHours(9), 40, "ELEC", team: TestApp.DefaultTeam));
+        var chef = await app.UserAsync(admin, "maint.cc",
+            TestApp.As(await app.RoleAsync("resp-maintenance"), new DataScope(new[] { Sectors.Couscous }, TestApp.DefaultTeam, Array.Empty<string>())));
+
+        var settings = new AppSettings();
+        var service = new StopListService(live.Factory, app.Options, settings, new TeamScheduleService(settings), app.Clock);
+
+        var all = await service.SearchAsync(admin, new StopsFilter(today, today));
+        // This test base has no production tables: the qualified stops still show, with a warning.
+        Assert.StartsWith("Base de production injoignable", all.ProductionError);
+        Assert.Equal(new[] { "CC01", "CC01", "PC01" }, all.Stops.Select(s => s.MachineId).Order());
+        Assert.Equal(90, all.NetMinutes);
+        Assert.Equal(new[] { "CC01" }, (await service.SearchAsync(admin, new StopsFilter(today, today, ShiftId: 2))).Stops.Select(s => s.MachineId));
+
+        // The couscous lines, the account's team only, whatever team is asked for.
+        Assert.Equal(new[] { "CC01" }, (await service.MachinesAsync(chef)).Select(m => m.MachineId));
+        var mine = await service.SearchAsync(chef, new StopsFilter(today, today, Team: "Equipe Z"));
+        var stop = Assert.Single(mine.Stops);
+        Assert.Equal(("CC01", "Nettoyage", TestApp.DefaultTeam), (stop.MachineId, stop.CauseLabel, stop.Team));
+        Assert.Equal(2, (await service.SearchAsync(chef, new StopsFilter(today.AddDays(-5), today))).Stops.Count);
+
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.SearchAsync(admin, new StopsFilter(today.AddYears(-1), today)));
+    }
+
+    [Fact]
+    public void Stop_sheet_is_a_pdf_with_the_logo()
+    {
+        var settings = new AppSettings();
+        var day = new DateTime(2026, 11, 17);
+        var stops = new List<ProductionStop> { Detected("PC01", day.AddHours(9), 30), Detected("CC01", day.AddHours(15), 12) };
+
+        var pdf = StopSheetPdf.Build(stops, settings, day.AddHours(16));
+
+        Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
+        Assert.NotNull(typeof(StopSheetPdf).Assembly.GetManifestResourceStream("spiga-logo.png"));
     }
 }

@@ -8,6 +8,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:SpigaDashboards.App.ViewModels"
+        xmlns:svc="clr-namespace:SpigaDashboards.App.Services;assembly=SpigaDashboards.Production"
         mc:Ignorable="d"
         Language="fr-FR"
         Background="{DynamicResource WindowBackgroundBrush}">
@@ -104,7 +105,7 @@
                 </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:TeamStopTotal}">
+                <DataTemplate DataType="{x:Type svc:TeamStopTotal}">
                     <Border Background="{DynamicResource TileBackgroundBrush}" CornerRadius="8" Padding="14,8" Margin="0,0,10,0" MinWidth="170">
                         <StackPanel>
                             <TextBlock Text="{Binding Team}" FontWeight="SemiBold" Foreground="{DynamicResource SecondaryTextBrush}"/>

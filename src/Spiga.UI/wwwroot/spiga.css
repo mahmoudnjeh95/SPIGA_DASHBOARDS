@@ -1200,3 +1200,13 @@ table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .tab .badge { margin-left: 6px; }
 .stats-body { display: flex; flex-direction: column; gap: 14px; transition: opacity .25s var(--ease); }
 .stats-body.stale { opacity: .45; pointer-events: none; }
+
+/* ---------- Arrêts de production ---------- */
+/* Cause family, as in the planning board (Panne red, Process blue…). */
+.cause-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.cause-dot.panne { background: #D03B3B; }
+.cause-dot.process { background: #3987E5; }
+.cause-dot.orga { background: #9AA4B2; }
+.cause-dot.planifie { background: #FAB219; }
+/* "Sans données": no reading from the machine, greyed as on the sheet. */
+.t tr.nodata td { color: var(--fg3, var(--fg2)); background: color-mix(in srgb, var(--hover) 60%, transparent); }

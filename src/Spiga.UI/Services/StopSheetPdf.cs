@@ -1,15 +1,15 @@
 using System.Globalization;
-using System.IO;
-using System.Windows;
 using PdfSharpCore.Drawing;
 using PdfSharpCore.Pdf;
 using SpigaDashboards.App.Models;
+using SpigaDashboards.App.Services;
 
-namespace SpigaDashboards.App.Services;
+namespace Spiga.UI.Services;
 
 // Printable "fiche des arrets": one sheet per poste (date + poste + team),
 // listing that poste's stops with blank columns the team fills in by hand
 // (cause, action), and a signature line. A4 landscape, SPIGA logo on every page.
+// Arrêts page (Razor: downloaded) and the kiosk's Arrêts window (WPF: saved).
 public static class StopSheetPdf
 {
     private const double PageWidth = 842, PageHeight = 595;
@@ -35,14 +35,13 @@ public static class StopSheetPdf
         ("Cause de l'arrêt (à remplir par l'équipe)", 181), ("Action / commentaire", 167), ("Visa", 50),
     };
 
-    public static void Export(IReadOnlyList<ProductionStop> stops, AppSettings settings, string path)
+    public static byte[] Build(IReadOnlyList<ProductionStop> stops, AppSettings settings, DateTime generated)
     {
         var document = new PdfDocument();
         document.Info.Title = "Fiche des arrêts de production";
         var logo = LoadLogo();
         var settingsLine = $"Seuil : {settings.StopThresholdMinutes} min  -  Pauses planifiées déduites : "
                            + BreakSchedule.Describe(settings.PlannedBreaks);
-        var generated = DateTime.Now;
 
         foreach (var poste in stops.GroupBy(s => (s.ShiftDate, s.ShiftId, s.Team)))
         {
@@ -80,7 +79,9 @@ public static class StopSheetPdf
         }
 
         NumberPages(document);
-        document.Save(path);
+        using var output = new MemoryStream();
+        document.Save(output, false);
+        return output.ToArray();
     }
 
     private static double DrawHeader(XGraphics gfx, byte[]? logo, string posteLine, string settingsLine, string summary, DateTime generated)
@@ -178,8 +179,7 @@ public static class StopSheetPdf
     {
         try
         {
-            using var stream = Application.GetResourceStream(
-                new Uri("pack://application:,,,/SpigaDashboards.App;component/Assets/spiga-logo.png"))?.Stream;
+            using var stream = typeof(StopSheetPdf).Assembly.GetManifestResourceStream("spiga-logo.png");
             if (stream == null)
                 return null;
             using var copy = new MemoryStream();

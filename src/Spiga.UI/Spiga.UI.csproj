@@ -16,6 +16,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.11" />
+    <PackageReference Include="PdfSharpCore" Version="1.3.67" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Logo of the printed stop sheet (StopSheetPdf). -->
+    <EmbeddedResource Include="wwwroot\img\spiga-logo.png" LogicalName="spiga-logo.png" />
   </ItemGroup>
 
   <ItemGroup>

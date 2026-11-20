@@ -90,7 +90,7 @@ public static class ModuleCatalog
         new NavItem("maintenance", "Indicateurs", "Maintenance", Modules.Maintenance, "module/maintenance", false,
             "Préventif réalisé, ordres de travail clôturés, arrêts dus à la maintenance, pannes répétitives, grandes réparations.",
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
-        new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true, DesktopOnly: true),
+        new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true),
         new NavItem("qualification", "Qualification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/qualification-arrets", true,
             Permission: "maintenance:saisir", DesktopOnly: true),
         new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true),
