@@ -1,0 +1,637 @@
+@page "/maintenance/qualification-arrets"
+@inherits SpigaPage
+@inject StopQualificationService Qual
+@inject UiState Ui
+@inject ClientInfo Client
+@inject IDesktopBridge Desktop
+@implements IDisposable
+
+@* Qualification des arrêts: was the Pannes tab of the WPF planning window
+   (PannesViewModel) until the web migration; the same rules, in both hosts. *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.StopQualification))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(StopQualificationService.Permission) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Maintenance</span><h1>Qualification des arrêts</h1>
+            <p>@Subtitle()</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Période</span>
+            <div class="segs" role="group" aria-label="Période">
+                @foreach (var (days, label) in StopQualificationService.Periods)
+                {
+                    <button type="button" class="seg @(_days == days ? "on" : "")" aria-pressed="@(_days == days)" @onclick="() => SetDaysAsync(days)">@label</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <label for="q-line">Ligne</label>
+            <select id="q-line" value="@(_machine ?? "")" @onchange="OnMachineAsync">
+                <option value="">Toutes les lignes</option>
+                @foreach (var m in _machines)
+                {
+                    <option value="@m.MachineId">@m.MachineName</option>
+                }
+            </select>
+        </div>
+        <div class="f">
+            @if (Actor.Team is { } myTeam)
+            {
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Votre compte est rattaché à cette équipe : seuls ses postes vous concernent">@myTeam</span>
+            }
+            else
+            {
+                <label for="q-team">Équipe</label>
+                <select id="q-team" value="@(_team ?? "")" @onchange="OnTeam">
+                    <option value="">Toutes les équipes</option>
+                    @foreach (var t in Qual.Teams)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            }
+        </div>
+        <div class="f">
+            <span>Arrêts</span>
+            <label class="check"><input type="checkbox" checked="@_onlyOpen" @onchange="OnOnlyOpen" /> sans cause uniquement</label>
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar" @onclick="LoadAsync" disabled="@_loading">Actualiser</button>
+        <button type="button" class="bar acc" @onclick="StartManual" disabled="@(_board == null)">+ Déclarer une panne</button>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_board == null || _view == null)
+    {
+        @if (_loading)
+        {
+            <Loader Text="Chargement des arrêts…" />
+        }
+    }
+    else
+    {
+        var board = _board;
+        var view = _view;
+        @if (board.ProductionError is { } down)
+        {
+            <div class="notice warn" role="status">@down</div>
+        }
+        <div class="stats-body @(_loading ? "stale" : "")" aria-busy="@_loading">
+            <section class="card q-banner @(view.OpenCount == 0 ? "done" : "")">
+                <div>
+                    <h2>@(view.OpenCount == 0 ? "Tous les arrêts ont une cause" : $"{view.OpenCount} arrêt{S(view.OpenCount)} sans cause · {StopStatsService.Duration(view.OpenMinutes)}")</h2>
+                    <p class="nd">Seuil de détection : @board.Threshold min (Paramètres) · pauses planifiées déjà retirées@(view.AutoCount > 0 ? $" · {view.AutoCount} arrêt{S(view.AutoCount)} qualifié{S(view.AutoCount)} par le calendrier" : "")</p>
+                    @if (view.MicroCount > 0)
+                    {
+                        <p class="nd">+ @view.MicroCount micro-arrêt@(S(view.MicroCount)) de moins de @board.Threshold min (@StopStatsService.Duration(view.MicroMinutes)), non listés</p>
+                    }
+                </div>
+                <div class="q-rate" title="Arrêts détectés qui ont une cause">
+                    <b>@view.Rate.ToString("0") %</b><span>qualifiés</span>
+                    <div class="q-meter"><i style="width:@(view.Rate.ToString("0", CultureInfo.InvariantCulture))%"></i></div>
+                </div>
+            </section>
+
+            <div class="q-grid">
+                <section class="card q-list">
+                    <div class="card-head">
+                        <h2>Arrêts détectés <small>cochez-en plusieurs pour leur donner une même cause</small></h2>
+                        <span>
+                            <button type="button" class="link" @onclick="CheckAll" title="Cocher tous les arrêts sans cause, pour leur donner la même cause">Tout cocher</button>
+                            @if (_checked.Count > 0)
+                            {
+                                <span> · </span><button type="button" class="link" @onclick="ClearChecks">Décocher</button>
+                            }
+                        </span>
+                    </div>
+                    @if (view.Rows.Count == 0)
+                    {
+                        <p class="empty">@(_onlyOpen && board.All.Count > 0 ? "Aucun arrêt sans cause sur cette période." : "Aucun arrêt sur cette période.")</p>
+                    }
+                    <ul class="q-rows">
+                        @foreach (var r in view.Rows)
+                        {
+                            <li class="q-row @(r.Key == _selected && !_manual && _checked.Count == 0 ? "sel" : "") @(r.HasCause ? "" : r.IsNoData ? "nodata" : "open")">
+                                <input type="checkbox" aria-label="Cocher l'arrêt de @r.MachineName du @r.Start.ToString("dd/MM HH:mm")"
+                                       checked="@_checked.Contains(r.Key)" disabled="@r.IsLive" @onchange="e => Toggle(r, e.Value is true)" />
+                                <button type="button" class="q-pick" @onclick="() => Select(r)">
+                                    <span class="q-what"><b>@r.MachineName</b>@if (r.IsLive) { <span class="chip bad">EN COURS</span> }</span>
+                                    <span class="q-when">@Day(r.Start) · @r.Start.ToString("HH:mm") → @(r.IsLive ? "maintenant" : r.End.ToString("HH:mm")) · @Shifts.Label(r.ShiftId) · @r.Team</span>
+                                    <span class="q-cause">@Dot(r.Family)@r.CauseLabel</span>
+                                </button>
+                                <span class="q-dur">@StopStatsService.Duration(r.Minutes)</span>
+                            </li>
+                        }
+                    </ul>
+                    @if (view.Recent.Count > 0)
+                    {
+                        <h3 class="pe-sub">Qualifiés récemment</h3>
+                        <ul class="q-rows recent">
+                            @foreach (var r in view.Recent)
+                            {
+                                <li class="q-row @(r.Key == _selected && !_manual && _checked.Count == 0 ? "sel" : "")">
+                                    <button type="button" class="q-pick" @onclick="() => Select(r)">
+                                        <span class="q-what"><b>@r.MachineName</b></span>
+                                        <span class="q-when">@Day(r.Start) · @r.Start.ToString("HH:mm") · @r.Qualification!.CreatedAt.ToString("dd/MM HH:mm")</span>
+                                        <span class="q-cause">@Dot(r.Family)@r.CauseLabel</span>
+                                    </button>
+                                    <span class="q-dur">@StopStatsService.Duration(r.Minutes)</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+
+                <section class="card q-form" aria-live="polite">
+                    @FormPanel(board)
+                </section>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private int _days = 7;
+    private string? _machine;
+    private string? _team;
+    private bool _onlyOpen = true;
+    private bool _loading;
+    private int _version;
+    private CancellationTokenSource? _reading;
+    private List<Machine> _machines = new();
+    private QualBoard? _board;
+    private QualView? _view;
+
+    // The stop shown in the form, the ticked ones, or a panne being declared.
+    private string? _selected;
+    private readonly HashSet<string> _checked = new();
+    private bool _manual;
+
+    // The form.
+    private string? _cause;
+    private string _component = "";
+    private string _technician = "";
+    private string _comment = "";
+    private DateTime? _expectedDate;
+    private string _expectedTime = "";
+    private string _manualMachine = "";
+    private DateTime _manualDate;
+    private string _manualFrom = "";
+    private string _manualTo = "";
+    private bool _saving;
+
+    private SpigaDashboards.App.Data.ChangeAuthor Author => new(Actor.Login, Actor.DisplayName, Client.Workstation);
+    private string? Team => StopQualificationService.TeamFor(Actor, _team);
+    private QualRow? Selected => _board?.All.FirstOrDefault(r => r.Key == _selected);
+    private List<QualRow> Checked => _board?.All.Where(r => _checked.Contains(r.Key)).ToList() ?? new();
+    private bool IsBulk => _checked.Count > 0;
+    // The preventive form is on the planning board, a page of the desktop application for now.
+    private bool CanPlan => Desktop.IsAvailable && NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!NativePages.IsAllowed(Session.Actor, NativePage.StopQualification))
+            return;
+        if (Ui.Qualification is { } kept)
+            (_days, _machine, _team, _onlyOpen) = (kept.Days, kept.MachineId, kept.Team, kept.OnlyOpen);
+        await Run(async () => _machines = await Qual.MachinesAsync(Actor));
+        if (_machine != null && _machines.All(m => m.MachineId != _machine))
+            _machine = null;
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _reading?.Cancel();
+        _reading?.Dispose();
+    }
+
+    private QualFilter Filter => new(_days, _machine, _team, _onlyOpen);
+
+    // Reads the period again (production and planning databases).
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        var filter = Filter;
+        Ui.Qualification = filter;
+        _reading?.Cancel();
+        _reading?.Dispose();
+        var cancel = (_reading = new CancellationTokenSource()).Token;
+        _loading = true;
+        try
+        {
+            QualBoard? board = null;
+            var (actor, author) = (Actor, Author);
+            var ok = await Run(async () => board = await Task.Run(() => Qual.LoadAsync(actor, author, filter, cancel), cancel));
+            if (version != _version || !ok || board == null)
+                return;
+            _board = board;
+            Recount();
+            _checked.RemoveWhere(k => board.All.All(r => r.Key != k));
+            if (!_manual && !IsBulk)
+                Select(Selected is { } still && _view!.Rows.Contains(still) ? still : _view!.Rows.FirstOrDefault());
+        }
+        catch (OperationCanceledException)
+        {
+            // Another period or line asked for meanwhile, or the page closed.
+        }
+        catch (Exception ex)
+        {
+            if (version == _version)
+            {
+                SpigaDashboards.App.Services.AppLogger.Log("Qualification des arrêts : " + ex);
+                Error = "Arrêts indisponibles : " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (version == _version)
+                _loading = false;
+        }
+    }
+
+    // The list, banner and rate again from what was read (after a save, or a new team / box).
+    private void Recount() => _view = _board?.View(Team, _onlyOpen);
+
+    private Task SetDaysAsync(int days)
+    {
+        _days = days;
+        return LoadAsync();
+    }
+
+    private Task OnMachineAsync(ChangeEventArgs e)
+    {
+        _machine = e.Value as string is { Length: > 0 } id ? id : null;
+        return LoadAsync();
+    }
+
+    private void OnTeam(ChangeEventArgs e)
+    {
+        _team = e.Value as string is { Length: > 0 } team ? team : null;
+        Ui.Qualification = Filter;
+        Recount();
+        _checked.Clear();
+    }
+
+    private void OnOnlyOpen(ChangeEventArgs e)
+    {
+        _onlyOpen = e.Value is true;
+        Ui.Qualification = Filter;
+        Recount();
+    }
+
+    // ---------- selection ----------
+
+    private void Select(QualRow? row)
+    {
+        _manual = false;
+        _checked.Clear();
+        _selected = row?.Key;
+        Error = Info = null;
+        LoadForm(row);
+    }
+
+    private void Toggle(QualRow row, bool on)
+    {
+        if (on)
+            _checked.Add(row.Key);
+        else
+            _checked.Remove(row.Key);
+        _manual = false;
+        if (_checked.Count == 1 && on)
+            LoadForm(null);
+        else if (_checked.Count == 0)
+            LoadForm(Selected);
+    }
+
+    private void CheckAll()
+    {
+        foreach (var r in _view?.Rows.Where(r => !r.HasCause && !r.IsLive) ?? Enumerable.Empty<QualRow>())
+            _checked.Add(r.Key);
+        _manual = false;
+        LoadForm(null);
+    }
+
+    private void ClearChecks()
+    {
+        _checked.Clear();
+        LoadForm(Selected);
+    }
+
+    // The form shows the stop's cause (none yet: empty, or "Pas de données").
+    private void LoadForm(QualRow? row)
+    {
+        var q = row?.Qualification;
+        _cause = q?.CauseCode ?? (row?.IsNoData == true ? "NODATA" : null);
+        _component = q?.Component ?? "";
+        _technician = q?.Technician ?? "";
+        _comment = q?.Comment ?? "";
+        _expectedDate = q?.ExpectedEnd?.Date;
+        _expectedTime = q?.ExpectedEnd?.ToString("HH:mm") ?? "";
+    }
+
+    private void StartManual()
+    {
+        _checked.Clear();
+        _selected = null;
+        _manual = true;
+        Error = Info = null;
+        LoadForm(null);
+        _cause = "MECA";
+        _manualMachine = _machine ?? _machines.FirstOrDefault()?.MachineId ?? "";
+        var now = Now;
+        _manualDate = now.Date;
+        _manualFrom = now.AddHours(-1).ToString("HH:mm");
+        _manualTo = now.ToString("HH:mm");
+    }
+
+    private void CancelForm()
+    {
+        _manual = false;
+        _checked.Clear();
+        Select(_view?.Rows.FirstOrDefault());
+    }
+
+    // ---------- save ----------
+
+    private QualForm Form => new(_cause, _component, _technician, _comment, _expectedDate, _expectedTime);
+
+    private async Task SaveAsync()
+    {
+        if (_board is not { } board || _saving)
+            return;
+        _saving = true;
+        try
+        {
+            var cause = StopCauses.Label(_cause);
+            if (_manual)
+            {
+                if (!TimeSpan.TryParse(_manualFrom, CultureInfo.InvariantCulture, out var from) || !TimeSpan.TryParse(_manualTo, CultureInfo.InvariantCulture, out var to))
+                {
+                    Error = "Ligne, date et heures (HH:mm) sont nécessaires.";
+                    return;
+                }
+                var stop = new ManualStop(_manualMachine, _manualDate, from, to);
+                SpigaDashboards.App.Models.StopQualification? q = null;
+                if (await Run(async () => q = await Qual.DeclareAsync(Actor, Author, _machines, stop, Form)) && q != null)
+                {
+                    var row = StopQualificationService.Add(board, q, NameOf(q.MachineId));
+                    _manual = false;
+                    Recount();
+                    Select(row);
+                    Info = $"Panne déclarée : {cause} sur {row.MachineName}.";
+                }
+                return;
+            }
+
+            var bulk = IsBulk;
+            var targets = bulk ? Checked : Selected is { } one ? new List<QualRow> { one } : new List<QualRow>();
+            var next = bulk ? null : NextOpen();
+            var written = 0;
+            if (await Run(async () => written = await Qual.QualifyAsync(Actor, Author, board, targets, Form)))
+            {
+                var many = targets.Count;
+                _checked.Clear();
+                Recount();
+                // On to the next stop without a cause (or stay on this one when all are shown).
+                Select(next != null && _view!.Rows.Contains(next) ? next
+                    : _onlyOpen || bulk ? _view!.Rows.FirstOrDefault() : targets[0]);
+                Info = many > 1
+                    ? $"Enregistré : {cause} sur {many} arrêts."
+                    : $"Enregistré : {cause} sur {targets[0].MachineName}" + (written > 1 ? $" (et les {written - 1} autres postes du même arrêt)." : ".");
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_board is not { } board || Selected is not { } row)
+            return;
+        var removed = 0;
+        if (await Run(async () => removed = await Qual.RemoveAsync(Actor, Author, board, row)))
+        {
+            Info = removed > 1 ? $"Cause retirée de l'arrêt ({removed} postes)." : "Cause retirée.";
+            Recount();
+            if (row.IsManual || !board.All.Contains(row))
+                Select(_view!.Rows.FirstOrDefault());
+            else
+                LoadForm(row);
+        }
+    }
+
+    // The next stop without a cause after the one shown.
+    private QualRow? NextOpen()
+    {
+        if (_view == null || Selected is not { } row)
+            return null;
+        var rows = _view.Rows;
+        var i = rows.IndexOf(row);
+        return rows.Skip(i + 1).FirstOrDefault(r => !r.HasCause && r != row) ?? rows.Take(Math.Max(0, i)).FirstOrDefault(r => !r.HasCause);
+    }
+
+    private void PlanPreventive()
+    {
+        var machineId = _manual ? _manualMachine : Selected?.MachineId;
+        if (machineId != null)
+            Desktop.PlanPreventive(NativePages.Access(Actor, NativePage.StopPlanning), machineId, _component.Trim());
+    }
+
+    // ---------- display ----------
+
+    private RenderFragment FormPanel(QualBoard board) => __builder =>
+    {
+        var row = Selected;
+        if (!_manual && !IsBulk && row == null)
+        {
+            <p class="empty">Choisissez un arrêt dans la liste, ou déclarez une panne.</p>
+            return;
+        }
+        var targets = Checked;
+        <div class="card-head">
+            <h2>
+                @if (IsBulk)
+                {
+                    @($"{targets.Count} arrêt{S(targets.Count)} coché{S(targets.Count)} · {StopStatsService.Duration(targets.Sum(r => r.Minutes))}")
+                    <small>La cause choisie sera donnée à chacun des arrêts cochés.</small>
+                }
+                else if (_manual)
+                {
+                    @("Déclarer une panne")
+                    <small>Pour un arrêt que le compteur n'a pas vu (machine en marche à vide, etc.)</small>
+                }
+                else
+                {
+                    @($"{row!.MachineName} · arrêt de {StopStatsService.Duration(row.Minutes)}")
+                    <small>@Day(row.Start) · @row.Start.ToString("HH:mm") → @(row.IsLive ? "maintenant" : row.End.ToString("HH:mm")) · @Shifts.Label(row.ShiftId) · @row.Team</small>
+                }
+            </h2>
+        </div>
+
+        @if (!_manual && !IsBulk && row != null)
+        {
+            var posteStart = Postes.Of(row.Start).Start;
+            var a = Math.Clamp((row.Start - posteStart).TotalMinutes / 480, 0, 1);
+            var b = Math.Clamp((row.End - posteStart).TotalMinutes / 480, a + 0.006, 1);
+            <div class="q-poste" title="Le poste en entier, et cet arrêt en rouge">
+                <div class="q-track"><i style="left:@Pct(a);width:@Pct(b - a)"></i></div>
+                <div class="q-ticks">@for (var i = 0; i < 5; i++) { <span>@posteStart.AddHours(2 * i).ToString("HH:mm")</span> }</div>
+            </div>
+        }
+
+        @if (_manual)
+        {
+            <div class="form" style="margin-bottom:12px">
+                <div class="f">
+                    <label for="q-m-line">Ligne</label>
+                    <select id="q-m-line" @bind="_manualMachine">
+                        @foreach (var m in _machines)
+                        {
+                            <option value="@m.MachineId">@m.MachineName</option>
+                        }
+                    </select>
+                </div>
+                <div class="f">
+                    <label for="q-m-date">Date</label>
+                    <input id="q-m-date" type="date" value="@_manualDate.ToString("yyyy-MM-dd")" max="@Now.ToString("yyyy-MM-dd")"
+                           @onchange="e => { if (DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)) _manualDate = d; }" />
+                </div>
+                <div class="f"><label for="q-m-from">De</label><input id="q-m-from" type="time" value="@_manualFrom" @onchange="e => _manualFrom = e.Value?.ToString() ?? string.Empty" /></div>
+                <div class="f"><label for="q-m-to">À</label><input id="q-m-to" type="time" value="@_manualTo" @onchange="e => _manualTo = e.Value?.ToString() ?? string.Empty" /></div>
+            </div>
+        }
+
+        <span class="lbl">Cause de l'arrêt</span>
+        <div class="q-causes">
+            @foreach (var family in Enum.GetValues<CauseFamily>())
+            {
+                <div class="q-family">
+                    <span class="q-fam @FamilyCss(family)">@StopCauses.FamilyLabel(family)@if (family == CauseFamily.Planifie) { <small>hors TRS</small> }</span>
+                    <div class="q-chips">
+                        @foreach (var c in StopCauses.All.Where(c => c.Family == family))
+                        {
+                            <button type="button" class="q-chip @FamilyCss(family) @(_cause == c.Code ? "on" : "")" aria-pressed="@(_cause == c.Code)"
+                                    @onclick="() => _cause = c.Code">@c.Label</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="q-fields">
+            <div class="f">
+                <label for="q-comp">Composant</label>
+                <input id="q-comp" list="q-comp-list" maxlength="100" @bind="_component" @bind:event="oninput" placeholder="ex. Capteur" />
+                <datalist id="q-comp-list">@foreach (var c in board.Components) { <option value="@c"></option> }</datalist>
+                <div class="q-sugg">@foreach (var c in board.Components.Take(8)) { <button type="button" class="chip" @onclick="() => _component = c">@c</button> }</div>
+            </div>
+            <div class="f">
+                <label for="q-tech">Intervenant</label>
+                <input id="q-tech" list="q-tech-list" maxlength="100" @bind="_technician" @bind:event="oninput" />
+                <datalist id="q-tech-list">@foreach (var t in board.Technicians) { <option value="@t"></option> }</datalist>
+                <div class="q-sugg">@foreach (var t in board.Technicians.Take(5)) { <button type="button" class="chip" @onclick="() => _technician = t">@t</button> }</div>
+            </div>
+            <div class="f q-wide">
+                <label for="q-comment">Description et action réalisée</label>
+                <textarea id="q-comment" rows="3" maxlength="500" @bind="_comment" @bind:event="oninput"></textarea>
+            </div>
+            <div class="f">
+                <label for="q-exp-date">Retour prévu <small>(panne ou arrêt planifié, facultatif)</small></label>
+                <div class="q-inline">
+                    <input id="q-exp-date" type="date" value="@(_expectedDate?.ToString("yyyy-MM-dd") ?? "")"
+                           @onchange="e => _expectedDate = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null" />
+                    <input type="time" aria-label="Heure de retour prévu" value="@_expectedTime" @onchange="e => _expectedTime = e.Value?.ToString() ?? string.Empty" />
+                    @if (_expectedDate != null || _expectedTime.Length > 0)
+                    {
+                        <button type="button" class="link" @onclick="() => { _expectedDate = null; _expectedTime = string.Empty; }">Effacer</button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        var warnMachine = _manual ? _manualMachine : row?.MachineId;
+        var warning = IsBulk ? "" : StopQualificationService.RepeatWarning(board, warnMachine, NameOf(warnMachine ?? ""), _cause, _component, row?.Qualification?.Id ?? 0);
+        @if (warning.Length > 0)
+        {
+            <div class="notice warn" style="margin-top:10px">
+                <span>@warning</span>
+                @if (CanPlan)
+                {
+                    <button type="button" class="bar small" style="margin-left:auto" @onclick="PlanPreventive">Planifier un préventif</button>
+                }
+            </div>
+        }
+
+        @if (!_manual)
+        {
+            <p class="nd" style="margin-top:10px">Donné à tout l'arrêt (chaque poste / équipe qu'il couvre). Si la ligne repart avant, l'arrêt se termine à la reprise.</p>
+        }
+        <div class="q-actions">
+            <button type="button" class="bar acc" @onclick="SaveAsync" disabled="@(_saving || _cause == null)">
+                @(IsBulk ? $"Enregistrer les {targets.Count}" : "Enregistrer")@(StopCauses.Find(_cause) is { } chosen ? " · " + chosen.Label : "")
+            </button>
+            @if (!IsBulk && !_manual && row?.Qualification != null)
+            {
+                <button type="button" class="bar danger" @onclick="RemoveAsync" disabled="@_saving">Retirer la cause</button>
+            }
+            @if (IsBulk)
+            {
+                <button type="button" class="bar" @onclick="ClearChecks">Décocher</button>
+            }
+            else if (_manual)
+            {
+                <button type="button" class="bar" @onclick="CancelForm">Annuler</button>
+            }
+        </div>
+    };
+
+    private string NameOf(string machineId) => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;
+
+    private string Subtitle()
+    {
+        var period = StopQualificationService.Periods.First(p => p.Days == _days).Label;
+        return period
+               + (_machine == null ? "" : " · " + NameOf(_machine))
+               + (Team is { } team ? " · " + team : "")
+               + " · les statistiques ne comptent que les arrêts qualifiés";
+    }
+
+    private static string S(int n) => n > 1 ? "s" : "";
+    private static string Pct(double f) => (f * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+    private static string Day(DateTime d) => d.ToString("ddd dd/MM", Fmt.French);
+
+    private static RenderFragment Dot(CauseFamily? family) => __builder =>
+    {
+        if (family is { } f)
+        {
+            <span class="cause-dot @FamilyCss(f)"></span>
+        }
+        else
+        {
+            <span class="cause-dot none"></span>
+        }
+    };
+
+    private static string FamilyCss(CauseFamily family) => family switch
+    {
+        CauseFamily.Panne => "panne",
+        CauseFamily.Process => "process",
+        CauseFamily.Organisation => "orga",
+        _ => "planifie",
+    };
+}

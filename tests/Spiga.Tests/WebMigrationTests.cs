@@ -134,11 +134,13 @@ public class WebMigrationTests
     public void The_moved_pages_are_no_longer_wpf()
     {
         Assert.False(NativePages.IsWpf(NativePage.Stops));
+        Assert.False(NativePages.IsWpf(NativePage.StopQualification));
         Assert.False(NativePages.IsWpf(NativePage.StopStatistics));
         Assert.False(NativePages.IsWpf(NativePage.Settings));
         Assert.True(NativePages.IsWpf(NativePage.StopPlanning));
         Assert.DoesNotContain(ModuleCatalog.Navigation,
-            n => n.Route is "maintenance/arrets" or "maintenance/statistiques-arrets" or "admin/parametres" && n.DesktopOnly);
+            n => n.Route is "maintenance/arrets" or "maintenance/qualification-arrets" or "maintenance/statistiques-arrets" or "admin/parametres"
+                 && n.DesktopOnly);
     }
 
     // ---------- Arrêts ----------
@@ -239,5 +241,112 @@ public class WebMigrationTests
 
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
         Assert.NotNull(typeof(StopSheetPdf).Assembly.GetManifestResourceStream("spiga-logo.png"));
+    }
+
+    // ---------- Qualification des arrêts ----------
+
+    private static QualRow Row(string machine, DateTime start, int minutes, string team, DateTime? runStart = null, StopQualification? q = null)
+        => new()
+        {
+            MachineId = machine, MachineName = machine, Start = start, End = start.AddMinutes(minutes), RunStart = runStart ?? start,
+            ShiftDate = start.Date, ShiftId = start.Hour is >= 6 and < 14 ? 1 : 2, Team = team, Minutes = minutes, Qualification = q,
+        };
+
+    [Fact]
+    public async Task A_cause_goes_to_every_poste_of_the_stop_and_the_view_counts_again()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb();
+        var admin = await app.SetupAdminAsync();
+        var settings = new AppSettings();
+        var service = new StopQualificationService(live.Factory, app.Options, settings, new TeamScheduleService(settings), app.Clock);
+        var author = new ChangeAuthor("admin", "Admin", "PC-TEST");
+        var day = app.Clock.Now.Date;
+        // One long stop over two postes (two teams), and another stop.
+        var first = Row("PC01", day.AddHours(13).AddMinutes(30), 30, "Equipe B");
+        var rest = Row("PC01", day.AddHours(14), 40, "Equipe A", runStart: first.Start);
+        var other = Row("CC01", day.AddHours(9), 15, "Equipe B");
+        var board = new QualBoard { All = new() { first, rest, other } };
+
+        Assert.Equal((3, 0.0), (board.View(null, true).OpenCount, board.View(null, true).Rate));
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.QualifyAsync(admin, author, board, new[] { first }, new QualForm(null)));
+
+        var written = await service.QualifyAsync(admin, author, board, new[] { first },
+            new QualForm("MECA", " Capteur ", "Karim", "changé", day.AddDays(1), "08:30"));
+
+        Assert.Equal(2, written);
+        Assert.Equal(("MECA", "Capteur", "Equipe A"), (rest.Qualification!.CauseCode, rest.Qualification.Component, rest.Qualification.Team));
+        Assert.Equal(day.AddDays(1).AddHours(8.5), first.Qualification!.ExpectedEnd);
+        var view = board.View(null, true);
+        Assert.Equal(other, Assert.Single(view.Rows));
+        Assert.Equal(67, view.Rate);
+        // Team B's view: its poste of the long stop, and its other stop.
+        Assert.Equal(2, board.View("Equipe B", false).Rows.Count);
+
+        var saved = await new PlanningRepository(app.AppData, live.Factory).GetQualificationsAsync(day, day.AddDays(1));
+        Assert.Equal(2, saved.Count);
+        // Removed from the whole stop (both postes), not given back by the next load.
+        Assert.Equal(2, await service.RemoveAsync(admin, author, board, rest));
+        Assert.Equal(3, board.View(null, true).Rows.Count);
+        Assert.Empty(await new PlanningRepository(app.AppData, live.Factory).GetQualificationsAsync(day, day.AddDays(1)));
+    }
+
+    [Fact]
+    public async Task A_panne_declared_by_hand_shows_and_keeps_to_the_account_lines()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb();
+        var admin = await app.SetupAdminAsync();
+        var chef = await app.UserAsync(admin, "maint.cc",
+            TestApp.As(await app.RoleAsync("resp-maintenance"), new DataScope(new[] { Sectors.Couscous }, TestApp.DefaultTeam, Array.Empty<string>())));
+        var settings = new AppSettings();
+        var service = new StopQualificationService(live.Factory, app.Options, settings, new TeamScheduleService(settings), app.Clock);
+        var author = new ChangeAuthor("maint.cc", "Maintenance", "PC-TEST");
+        var machines = await service.MachinesAsync(chef);
+        Assert.Equal(new[] { "CC01" }, machines.Select(m => m.MachineId));
+        var day = app.Clock.Now.Date; // 17/11 10:00
+
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.DeclareAsync(chef, author, machines,
+            new ManualStop("PC01", day, TimeSpan.FromHours(8), TimeSpan.FromHours(9)), new QualForm("ELEC")));
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.DeclareAsync(chef, author, machines,
+            new ManualStop("CC01", day, TimeSpan.FromHours(8), TimeSpan.FromHours(9)), new QualForm("ELEC", ExpectedDate: day, ExpectedTime: "25h")));
+        // A poste of the account's team (the rotation moves them), and one of another team.
+        var rota = new TeamScheduleService(settings);
+        var postes = Enumerable.Range(0, 6).SelectMany(d => new[] { (Day: day.AddDays(-d), Shift: 1, Hour: 8), (Day: day.AddDays(-d), Shift: 2, Hour: 15) })
+            .Where(p => p.Day.AddHours(p.Hour) < app.Clock.Now).ToList();
+        var own = postes.First(p => rota.GetTeamForShift(p.Day, p.Shift) == TestApp.DefaultTeam);
+        var foreign = postes.First(p => rota.GetTeamForShift(p.Day, p.Shift) != TestApp.DefaultTeam);
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.DeclareAsync(chef, author, machines,
+            new ManualStop("CC01", foreign.Day, TimeSpan.FromHours(foreign.Hour), TimeSpan.FromHours(foreign.Hour + 1)), new QualForm("ELEC")));
+        var q = await service.DeclareAsync(chef, author, machines,
+            new ManualStop("CC01", own.Day, TimeSpan.FromHours(own.Hour), TimeSpan.FromHours(own.Hour + 1)), new QualForm("ELEC"));
+        Assert.Equal((true, TestApp.DefaultTeam), (q.IsManual, q.Team));
+
+        var board = await service.LoadAsync(chef, author, new QualFilter(7));
+        // No production tables in this test base: said, and the declared panne still listed.
+        Assert.NotNull(board.ProductionError);
+        var row = Assert.Single(board.View(StopQualificationService.TeamFor(chef, "Equipe Z"), false).Rows);
+        Assert.Equal(("CC01", "Panne électrique", true), (row.MachineId, row.CauseLabel, row.IsManual));
+        Assert.Contains("Capteur", board.Components);
+
+        // Removing a declared panne takes it off the list.
+        await service.RemoveAsync(chef, author, board, row);
+        Assert.Empty(board.View(null, false).Rows);
+    }
+
+    [Fact]
+    public void Same_component_failing_again_asks_for_a_preventive()
+    {
+        var day = new DateTime(2026, 11, 17);
+        var board = new QualBoard
+        {
+            Recent30 = Enumerable.Range(1, 2).Select(i => new StopQualification
+                { Id = i, MachineId = "PC01", CauseCode = "MECA", Component = "Capteur", StopStart = day.AddDays(-i) }).ToList(),
+        };
+        Assert.Contains("3e panne en 30 jours", StopQualificationService.RepeatWarning(board, "PC01", "Peseuse PC01", "MECA", "capteur ", 0));
+        Assert.Equal("", StopQualificationService.RepeatWarning(board, "PC01", "Peseuse PC01", "NETT", "Capteur", 0));
+        Assert.Equal("", StopQualificationService.RepeatWarning(board, "PC01", "Peseuse PC01", "MECA", "Capteur", 1));
+        Assert.Equal(day.AddHours(6), StopQualificationService.ReadExpected(day, ""));
+        Assert.Null(StopQualificationService.ReadExpected(null, "10:00"));
     }
 }

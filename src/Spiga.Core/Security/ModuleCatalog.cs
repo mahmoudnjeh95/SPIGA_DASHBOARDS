@@ -92,7 +92,7 @@ public static class ModuleCatalog
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
         new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true),
         new NavItem("qualification", "Qualification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/qualification-arrets", true,
-            Permission: "maintenance:saisir", DesktopOnly: true),
+            Permission: "maintenance:saisir"),
         new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true),
         new NavItem("planification", "Planification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/planification", true,
             Permission: "maintenance:saisir", DesktopOnly: true),
