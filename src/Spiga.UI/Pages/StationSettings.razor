@@ -2,6 +2,7 @@
 @inherits SpigaPage
 @inject StationSettingsEditor Editor
 @inject ClientInfo Client
+@inject PlantData Plant
 
 @* Paramètres: was the WPF Paramètres page of the desktop application
    (SettingsView) until the web migration. The shared part works in both
@@ -144,6 +145,8 @@ else
         try
         {
             var message = await Editor.SaveAsync(new SpigaDashboards.App.Data.ChangeAuthor(Actor.Login, Actor.DisplayName, Client.Workstation));
+            // Renamed machines: every screen shows the new names at once.
+            Plant.ForgetMachines();
             if (message.Length > 0)
                 _sharedMessage = message;
             else
