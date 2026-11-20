@@ -1,6 +1,7 @@
 @page "/admin/audit"
 @inherits SpigaPage
 @inject AuditTrailService Audit
+@inject PlantData Plant
 
 @* The trail has no machine or team to filter on (accounts, rights,
    entries of every line): plant-wide accounts only. *@
@@ -52,11 +53,12 @@
     {
         new GridColumn<AuditEntry>("Date", e => e.At.ToString("dd/MM/yyyy HH:mm:ss"), e => e.At, css: "n nowrap"),
         new GridColumn<AuditEntry>("Utilisateur", e => e.UserLogin),
-        new GridColumn<AuditEntry>("Action", e => e.Action + " " + e.Details,
-            cell: e => @<span><span class="chip @ActionCss(e.Action)">@e.Action</span>@if (!string.IsNullOrEmpty(e.Details)) { <small>@e.Details</small> }</span>),
-        new GridColumn<AuditEntry>("Objet", e => e.Target, css: "n"),
-        new GridColumn<AuditEntry>("Avant", e => e.OldValue ?? "", css: "wrap"),
-        new GridColumn<AuditEntry>("Après", e => e.NewValue ?? "", css: "wrap"),
+        new GridColumn<AuditEntry>("Action", e => e.Action + " " + Plant.WithNames(e.Details),
+            cell: e => @<span><span class="chip @ActionCss(e.Action)">@e.Action</span>@if (!string.IsNullOrEmpty(e.Details)) { <small>@Plant.WithNames(e.Details)</small> }</span>),
+        // A machine shows under its name (Paramètres), as on every screen.
+        new GridColumn<AuditEntry>("Objet", e => Plant.WithNames(e.Target), css: "n"),
+        new GridColumn<AuditEntry>("Avant", e => Plant.WithNames(e.OldValue), css: "wrap"),
+        new GridColumn<AuditEntry>("Après", e => Plant.WithNames(e.NewValue), css: "wrap"),
         new GridColumn<AuditEntry>("Poste", e => e.Workstation, css: "n"),
     };
     private Period _period = default!;
@@ -68,6 +70,7 @@
     protected override async Task OnInitializedAsync()
     {
         _period = new Period(PeriodKind.Last7Days, Now.Date, Now.Date);
+        await Plant.LoadNamesAsync();
         await LoadAsync();
     }
 

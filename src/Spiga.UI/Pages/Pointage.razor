@@ -694,7 +694,7 @@
                     <optgroup label="@StaffFunctions.Label(g.Key)">
                         @foreach (var c in g)
                         {
-                            <option value="@c.EmployeeId">@c.FullName@(c.MachineId != null ? " · " + c.MachineId : "")</option>
+                            <option value="@c.EmployeeId">@c.FullName@(c.MachineId != null ? " · " + Plant.NameOf(c.MachineId) : "")</option>
                         }
                     </optgroup>
                 }
@@ -706,7 +706,7 @@
                             Min="Max(who.EntryAt ?? _sheet.Start, AttendanceService.Earliest(_sheet))" Max="(who.ExitAt ?? _sheet.End).AddMinutes(-AttendanceService.StepMinutes)" />
                 @if (who.MachineId != null)
                 {
-                    <small class="warn-t">@who.MachineId, la machine de @who.FullName, restera sans personne : vous pourrez l'affecter ensuite.</small>
+                    <small class="warn-t">@Plant.NameOf(who.MachineId), la machine de @who.FullName, restera sans personne : vous pourrez l'affecter ensuite.</small>
                 }
             }
             <span>
@@ -717,7 +717,7 @@
     };
 
     private string PostName(AttendanceLine l)
-        => l.MachineId ?? (l.LineId is { } id && _lines.TryGetValue(id, out var line) ? "la ligne " + line.Name : "son poste");
+        => l.MachineId is { } machine ? Plant.NameOf(machine) : (l.LineId is { } id && _lines.TryGetValue(id, out var line) ? "la ligne " + line.Name : "son poste");
 
     private RenderFragment PostCell(AttendanceLine l, bool editable) => __builder =>
     {
@@ -733,13 +733,13 @@
                     }
                     @foreach (var m in _machines)
                     {
-                        <option value="@m.Id">@m.Id</option>
+                        <option value="@m.Id">@m.Name</option>
                     }
                 </select>
             }
             else
             {
-                <span>@l.MachineId</span>
+                <span>@Plant.NameOf(l.MachineId)</span>
             }
         }
         else if (l.LineId is { } lid && _lines.TryGetValue(lid, out var line))
@@ -750,7 +750,7 @@
         {
             var replaced = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId);
             <div class="pt-acting">
-                ↳ @StaffFunctions.Short(l.ActingFunction!.Value) sur @(l.ActingMachineId ?? (l.ActingLineId is { } al && _lines.TryGetValue(al, out var aline) ? "ligne " + aline.Name : "?"))
+                ↳ @StaffFunctions.Short(l.ActingFunction!.Value) sur @(l.ActingMachineId is { } am ? Plant.NameOf(am) : (l.ActingLineId is { } al && _lines.TryGetValue(al, out var aline) ? "ligne " + aline.Name : "?"))
                 à la place de @(replaced?.FullName ?? "?")
                 @if (editable)
                 {
@@ -774,11 +774,12 @@
             .OrderByDescending(a => _sheet != null && a.Line.EntryAt < _sheet.End && a.Line.ExitAt > _sheet.Start)
             .ToList();
 
-    private static string AwayText(AttendanceSheet s, AttendanceLine l)
+    private string AwayText(AttendanceSheet s, AttendanceLine l)
         => $"{s.Team} · {Shifts.Label(s.ShiftId)} du {s.ProductionDate:dd/MM} · {l.EntryAt:HH:mm} – {l.ExitAt:HH:mm} · {PostHeld(l)}";
 
-    private static string PostHeld(AttendanceLine l)
-        => l.IsActing ? $"{StaffFunctions.Short(l.ActingFunction!.Value)} {l.ActingMachineId}".Trim() : l.MachineId ?? StaffFunctions.Short(l.Function);
+    private string PostHeld(AttendanceLine l)
+        => l.IsActing ? $"{StaffFunctions.Short(l.ActingFunction!.Value)} {Plant.NameOf(l.ActingMachineId)}".Trim()
+            : l.MachineId is { } machine ? Plant.NameOf(machine) : StaffFunctions.Short(l.Function);
 
     private static string Hours(double minutes)
         => minutes >= 60 ? $"{(int)(minutes / 60)} h{(minutes % 60 == 0 ? "" : ((int)(minutes % 60)).ToString("00"))}" : $"{(int)minutes} min";

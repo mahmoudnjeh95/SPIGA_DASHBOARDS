@@ -60,7 +60,7 @@
                 <section class="card live-card @StateCss(m)">
                     <div class="lc-head">
                         <div>
-                            <span class="lc-id">@m.Machine.Id</span>
+                            <span class="lc-id">@m.Machine.Name</span>
                             <small>@Sectors.Label(m.Machine.Sector)</small>
                         </div>
                         @* A stop has its banner below: the badge would say it twice. *@
@@ -147,7 +147,7 @@
                 <div class="sheet-head">
                     <div>
                         <span class="pre">Déclarer un déchet emballage</span>
-                        <h2>@_quick.Id <small>@Sectors.Label(_quick.Sector) · @Shifts.Label(_view!.ShiftId) du @_view.Date.ToString("dd/MM")</small></h2>
+                        <h2>@_quick.Name <small>@Sectors.Label(_quick.Sector) · @Shifts.Label(_view!.ShiftId) du @_view.Date.ToString("dd/MM")</small></h2>
                     </div>
                     <ol class="steps">
                         <li class="@(_step >= 1 ? "on" : "")">Motif</li>
@@ -162,7 +162,7 @@
                     <div class="sheet-done">
                         <svg viewBox="0 0 52 52" class="done-check"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg>
                         <h2>Déchet enregistré</h2>
-                        <p>@Fmt.Kg(_savedKg) sur @_quick.Id · en attente de validation</p>
+                        <p>@Fmt.Kg(_savedKg) sur @_quick.Name · en attente de validation</p>
                     </div>
                 }
                 else if (_step == 1)
@@ -234,7 +234,7 @@
                         <MotifArt Reason="@_reason" Size="110" />
                         <div>
                             <span class="confirm-qty">@Fmt.Kg(check.QuantityKg ?? 0)</span>
-                            <span class="confirm-what">@_quick.Id · @_reason</span>
+                            <span class="confirm-what">@_quick.Name · @_reason</span>
                             <span class="confirm-when">@Shifts.Label(_view!.ShiftId) du @_view.Date.ToString("dd/MM/yyyy") · @_view.Team</span>
                             @if (!string.IsNullOrWhiteSpace(_comment))
                             {

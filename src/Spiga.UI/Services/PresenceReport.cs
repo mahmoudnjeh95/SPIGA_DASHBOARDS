@@ -109,7 +109,7 @@ public sealed class PresenceReport(
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
     }
 
-    public static byte[] EventsCsv(IReadOnlyList<PresenceEvent> events, bool names)
+    public static byte[] EventsCsv(IReadOnlyList<PresenceEvent> events, bool names, Func<string?, string>? machineName = null)
     {
         var fr = CultureInfo.GetCultureInfo("fr-FR");
         var sb = new StringBuilder();
@@ -119,7 +119,7 @@ public sealed class PresenceReport(
             {
                 e.Date.ToString("dd/MM/yyyy", fr), Shifts.Label(e.ShiftId), e.Team, names ? e.FullName : "—", StaffFunctions.Label(e.Function),
                 PresenceLabels.Kind(e.Kind), e.Absence?.ToString() ?? "", e.From.ToString("HH:mm", fr), e.To.ToString("HH:mm", fr),
-                e.Minutes.ToString("0", fr), string.Join(" ", e.Machines), e.StoppedMinutes.ToString("0", fr),
+                e.Minutes.ToString("0", fr), string.Join(" ", e.Machines.Select(m => machineName?.Invoke(m) ?? m)), e.StoppedMinutes.ToString("0", fr),
                 e.PacksLost?.ToString("0", fr) ?? "", e.KgLost?.ToString("0.#", fr) ?? "", PresenceLabels.Impact(e.Impact), names ? e.CoveredBy ?? "" : "",
             }.Select(Csv)));
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();

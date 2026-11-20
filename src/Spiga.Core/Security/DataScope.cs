@@ -77,7 +77,8 @@ public sealed record DataScope(IReadOnlyList<string> Sectors, string? Team, IRea
         return true;
     }
 
-    public string Describe()
+    // machineName: the name the screens show for a machine id (the audit keeps the ids).
+    public string Describe(Func<string, string>? machineName = null)
     {
         if (IsUnrestricted)
             return "Toute l'usine";
@@ -87,7 +88,7 @@ public sealed record DataScope(IReadOnlyList<string> Sectors, string? Team, IRea
         if (Sectors.Count > 0)
             parts.Add(string.Join(", ", Sectors.Select(Plant.Sectors.Label)));
         if (Machines.Count > 0)
-            parts.Add(string.Join(", ", Machines));
+            parts.Add(string.Join(", ", machineName == null ? Machines : Machines.Select(machineName)));
         if (!string.IsNullOrEmpty(Team))
             parts.Add(Team);
         else if (Platforms.Count > 0 || Sectors.Count > 0 || Machines.Count > 0)

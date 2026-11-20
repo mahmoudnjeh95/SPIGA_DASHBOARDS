@@ -1,4 +1,5 @@
 @* What a set of role assignments allows, module by module, and where. *@
+@inject PlantData Plant
 @if (Grants.Count == 0)
 {
     <p class="empty">Aucun rôle actif : ce compte ne peut rien faire.</p>
@@ -17,7 +18,7 @@ else
                 <tr>
                     <td style="font-size:14px">@m.Label</td>
                     <td class="n">@string.Join(", ", perms.Select(p => p.Label))</td>
-                    <td class="n">@(holding.Any(g => g.Scope.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", holding.Select(g => g.Scope.Describe()).Distinct()))</td>
+                    <td class="n">@(holding.Any(g => g.Scope.IsUnrestricted) ? "Toute l'usine" : string.Join(" ; ", holding.Select(g => g.Scope.Describe(Plant.NameOf)).Distinct()))</td>
                 </tr>
             }
         </tbody>
@@ -26,4 +27,6 @@ else
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<Actor.Grant> Grants { get; set; } = Array.Empty<Actor.Grant>();
+
+    protected override Task OnInitializedAsync() => Plant.LoadNamesAsync();
 }

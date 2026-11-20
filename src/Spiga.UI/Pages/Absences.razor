@@ -3,6 +3,7 @@
 @inject PresenceReport Report
 @inject IJSRuntime JS
 @inject UiState Ui
+@inject PlantData Plant
 
 @* Lateness, early departures and absences from the validated pointage
    sheets, and what each did to production: the machine of the missing
@@ -157,11 +158,11 @@
         Num<RepeatLateness>("Retards", r => r.Count), Num<RepeatLateness>("dont avec impact", r => r.WithImpact), Num<RepeatLateness>("Minutes", r => r.Minutes),
     };
 
-    private static readonly IReadOnlyList<GridColumn<UnstaffedMachine>> UnstaffedColumns = new[]
+    private IReadOnlyList<GridColumn<UnstaffedMachine>> UnstaffedColumns => new[]
     {
         new GridColumn<UnstaffedMachine>("Date", u => u.Date.ToString("dd/MM/yyyy"), u => u.Date),
         new GridColumn<UnstaffedMachine>("Poste", u => Shifts.Label(u.ShiftId), u => u.ShiftId),
-        new GridColumn<UnstaffedMachine>("Équipe", u => u.Team), new GridColumn<UnstaffedMachine>("Machine", u => u.MachineId),
+        new GridColumn<UnstaffedMachine>("Équipe", u => u.Team), new GridColumn<UnstaffedMachine>("Machine", u => Plant.NameOf(u.MachineId)),
         Num<UnstaffedMachine>("Minutes de production", u => u.ProducingMinutes),
     };
 
@@ -175,7 +176,7 @@
         new GridColumn<PresenceEvent>("Type", e => PresenceLabels.Kind(e.Kind) + (e.Absence is { } a ? $" · {a}" : ""), css: "n"),
         new GridColumn<PresenceEvent>("Heures", e => $"{e.From:HH:mm} – {e.To:HH:mm}", e => e.From, css: "n nowrap"),
         Num<PresenceEvent>("Min.", e => e.Minutes),
-        new GridColumn<PresenceEvent>("Machines", e => string.Join(", ", e.Machines), css: "n"),
+        new GridColumn<PresenceEvent>("Machines", e => string.Join(", ", e.Machines.Select(Plant.NameOf)), css: "n"),
         new GridColumn<PresenceEvent>("Min. d'arrêt", e => e.Impact == ImpactKind.SansMachine ? "" : Fmt.Num(e.StoppedMinutes), e => e.StoppedMinutes, css: "r"),
         new GridColumn<PresenceEvent>("Perdu (est.)", e => e.KgLost is { } kg ? Fmt.Mass(kg) : e.PacksLost is { } p ? $"{Fmt.Num(p)} paquets" : "", e => e.KgLost ?? 0, css: "r nowrap"),
         new GridColumn<PresenceEvent>("Impact", e => PresenceLabels.Impact(e.Impact) + (Named && e.CoveredBy != null ? " · " + e.CoveredBy : ""),
@@ -237,7 +238,7 @@
         if (_r == null)
             return;
         var names = Named && Session.Can("rh-nominatif:exporter");
-        var bytes = PresenceReport.EventsCsv(_shownEvents ?? _r.Events.Where(e => _team == null || e.Team == _team).ToList(), names);
+        var bytes = PresenceReport.EventsCsv(_shownEvents ?? _r.Events.Where(e => _team == null || e.Team == _team).ToList(), names, Plant.NameOf);
         await JS.InvokeVoidAsync("spigaDownload", $"absences-retards_{_r.FromDate:yyyyMMdd}-{_r.ToDate:yyyyMMdd}.csv", "text/csv", Convert.ToBase64String(bytes));
     }
 

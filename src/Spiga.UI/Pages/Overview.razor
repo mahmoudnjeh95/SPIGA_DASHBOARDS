@@ -193,10 +193,10 @@
         // off stops them all at once).
         var offline = snap.Machines.Where(m => m.State is { Connected: false }).ToList();
         if (offline.Count == 1)
-            alerts.Add(new("off", $"{offline[0].Machine.Id} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(offline[0].State!.LastData, Now)}", packaging, "Voir"));
+            alerts.Add(new("off", $"{offline[0].Machine.Name} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(offline[0].State!.LastData, Now)}", packaging, "Voir"));
         else if (offline.Count > 1)
             alerts.Add(new("off", $"{offline.Count} machines déconnectées",
-                $"{string.Join(", ", offline.Select(m => m.Machine.Id))} · dernière donnée {Fmt.Ago(offline.Max(m => m.State!.LastData), Now)}", packaging, "Voir"));
+                $"{string.Join(", ", offline.Select(m => m.Machine.Name))} · dernière donnée {Fmt.Ago(offline.Max(m => m.State!.LastData), Now)}", packaging, "Voir"));
 
         foreach (var m in snap.Machines.Where(m => m.State is { Connected: true }))
         {
@@ -206,19 +206,19 @@
                 if (ongoing.TryGetValue(m.Machine.Id, out var stop))
                 {
                     var cause = stop.Qualification?.Cause?.Label;
-                    alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt depuis {Fmt.Since(stop.Start, Now)}",
+                    alerts.Add(new("bad", $"{m.Machine.Name} à l'arrêt depuis {Fmt.Since(stop.Start, Now)}",
                         $"Depuis {stop.Start:HH:mm} · {cause ?? "cause à définir"} · {product}",
                         cause == null && qualify != null ? qualify : packaging, cause == null && qualify != null ? "Qualifier" : "Voir"));
                 }
                 else
-                    alerts.Add(new("bad", $"{m.Machine.Id} à l'arrêt", $"Conditionnement · {product}", packaging, "Voir"));
+                    alerts.Add(new("bad", $"{m.Machine.Name} à l'arrêt", $"Conditionnement · {product}", packaging, "Voir"));
             }
         }
 
         var lowTrs = snap.Machines.Where(m => m.Figures.HasProduction && m.Figures.TrsSeverity == KpiSeverity.Bad)
             .OrderBy(m => m.Figures.Kpi.TrsPercent).ToList();
         foreach (var m in lowTrs.Take(3))
-            alerts.Add(new("bad", $"{m.Machine.Id} : TRS {Fmt.Pct(m.Figures.Kpi.TrsPercent)}",
+            alerts.Add(new("bad", $"{m.Machine.Name} : TRS {Fmt.Pct(m.Figures.Kpi.TrsPercent)}",
                 $"Cible {Fmt.Num(m.Figures.TrsTarget)} % · {Sectors.Label(m.Machine.Sector)}", packaging, "Voir"));
         if (lowTrs.Count > 3)
             alerts.Add(new("bad", $"{lowTrs.Count - 3} autre(s) machine(s) loin de la cible TRS", "Conditionnement", packaging, "Voir"));

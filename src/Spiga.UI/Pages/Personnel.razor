@@ -96,7 +96,7 @@
                                 <option value="">Choisir…</option>
                                 @foreach (var m in _machines)
                                 {
-                                    <option value="@m.Id">@m.Id · @Sectors.Label(m.Sector)</option>
+                                    <option value="@m.Id">@m.Name · @Sectors.Label(m.Sector)</option>
                                 }
                             </select>
                         </div>
@@ -109,7 +109,7 @@
                                 <option value="0">Choisir…</option>
                                 @foreach (var l in _lines.Where(l => l.IsActive))
                                 {
-                                    <option value="@l.Id">@l.Name (@string.Join(", ", l.Machines))</option>
+                                    <option value="@l.Id">@l.Name (@string.Join(", ", l.Machines.Select(Plant.NameOf)))</option>
                                 }
                             </select>
                         </div>
@@ -194,7 +194,7 @@
                                             <td>@(r.Employee?.FullName ?? r.Raw.Split('	', ';')[0])</td>
                                             <td class="n">@r.Posting?.Team</td>
                                             <td class="n">@(r.Posting is { } pd ? StaffFunctions.Label(pd.Function) : "")</td>
-                                            <td class="n">@(r.Posting?.MachineId ?? (r.Posting?.LineId is { } li ? _lines.FirstOrDefault(l => l.Id == li)?.Name : ""))</td>
+                                            <td class="n">@(r.Posting?.MachineId is { } pm ? Plant.NameOf(pm) : (r.Posting?.LineId is { } li ? _lines.FirstOrDefault(l => l.Id == li)?.Name : ""))</td>
                                             <td>@if (r.Ok) { <span class="chip ok">OK</span> } else { <span class="chip bad">@r.Error</span> }</td>
                                         </tr>
                                     }
@@ -244,10 +244,10 @@
                             @foreach (var m in sector)
                             {
                                 var taken = _lines.FirstOrDefault(l => l.Id != _lineId && l.IsActive && l.Machines.Contains(m.Id));
-                                <label class="check" title="@(taken == null ? m.Name : $"Déjà dans la ligne {taken.Name}")">
+                                <label class="check" title="@(taken == null ? Sectors.Label(m.Sector) : $"Déjà dans la ligne {taken.Name}")">
                                     <input type="checkbox" disabled="@(taken != null)" checked="@_lineMachines.Contains(m.Id)"
                                            @onchange="e => Toggle(m.Id, e.Value is true)" />
-                                    @m.Id @if (taken != null) { <small>(@taken.Name)</small> }
+                                    @m.Name @if (taken != null) { <small>(@taken.Name)</small> }
                                 </label>
                             }
                         </div>
@@ -278,7 +278,7 @@
                         {
                             <tr class="@(l.IsActive ? "" : "cancelled")">
                                 <td>@l.Name @if (!l.IsActive) { <small>inactive</small> }</td>
-                                <td class="n">@string.Join(", ", l.Machines)</td>
+                                <td class="n">@string.Join(", ", l.Machines.Select(Plant.NameOf))</td>
                                 <td class="n">@string.Join(", ", _employees.Where(e => e.IsActive && e.Current(today)?.LineId == l.Id).Select(e => $"{e.FullName} ({e.Current(today)!.Team})"))</td>
                                 <td>
                                     @if (Staff.CanEdit(Actor))
@@ -380,7 +380,7 @@
     }
 
     private string Post(EmployeePosting p)
-        => p.MachineId ?? (p.LineId is { } id ? "Ligne " + (_lines.FirstOrDefault(l => l.Id == id)?.Name ?? "?") : "—");
+        => p.MachineId is { } machine ? Plant.NameOf(machine) : (p.LineId is { } id ? "Ligne " + (_lines.FirstOrDefault(l => l.Id == id)?.Name ?? "?") : "—");
 
     private void NewEmployee()
     {

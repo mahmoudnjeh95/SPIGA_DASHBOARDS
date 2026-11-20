@@ -1,5 +1,6 @@
 @page "/compte"
 @inherits SpigaPage
+@inject PlantData Plant
 
 <div class="head"><div><span class="pre">Usine</span><h1>Mon compte</h1></div></div>
 <div class="row">
@@ -15,7 +16,7 @@
             <tbody>
                 @foreach (var g in Actor.Grants)
                 {
-                    <tr><td>@g.Role.Name</td><td class="n">@g.Scope.Describe()</td><td class="n">@g.Assignment.Validity()</td></tr>
+                    <tr><td>@g.Role.Name</td><td class="n">@g.Scope.Describe(Plant.NameOf)</td><td class="n">@g.Assignment.Validity()</td></tr>
                 }
             </tbody>
         </table>
@@ -27,3 +28,7 @@
         <ChangePasswordForm />
     </section>
 </div>
+
+@code {
+    protected override Task OnInitializedAsync() => Plant.LoadNamesAsync();
+}

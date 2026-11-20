@@ -2,6 +2,7 @@
 @inherits SpigaPage
 @inject AttendanceService Attendance
 @inject IJSRuntime JS
+@inject PlantData Plant
 
 @* The printed pointage form of a day, laid out as the paper one: the three
    postes side by side, the chef de conditionnement first, then the chefs de
@@ -53,7 +54,7 @@
                                         }
                                         @if (l.IsActing && l.ActingFunction is { } af)
                                         {
-                                            <small class="paper-renfort">↳ @StaffFunctions.Short(af) sur @(l.ActingMachineId ?? "sa ligne") à la place de @(sheet.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId)?.FullName ?? "?") dès @l.ActingFrom?.ToString("HH:mm")</small>
+                                            <small class="paper-renfort">↳ @StaffFunctions.Short(af) sur @(l.ActingMachineId is { } am ? Plant.NameOf(am) : "sa ligne") à la place de @(sheet.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId)?.FullName ?? "?") dès @l.ActingFrom?.ToString("HH:mm")</small>
                                         }
                                         else if (l.Status == LineStatus.Ailleurs && Away(team, l) is { } away)
                                         {
@@ -109,6 +110,7 @@
         _sheets = null;
         await Run(async () =>
         {
+            await Plant.LoadNamesAsync();
             _sheets = await Attendance.PaperAsync(Actor, _date);
             _away = new();
             foreach (var team in _sheets.Select(s => s.Team).Distinct())
@@ -134,7 +136,7 @@
             .Select(a => ((AttendanceSheet, AttendanceLine)?)a).FirstOrDefault();
     }
 
-    private static string PostOf(AttendanceLine l) => l.IsActing ? l.ActingMachineId ?? "" : l.MachineId ?? "";
+    private string PostOf(AttendanceLine l) => Plant.NameOf(l.IsActing ? l.ActingMachineId : l.MachineId);
 
     // "Equipe D" -> "D", as on the paper form.
     private static string Letter(string team) => team.StartsWith("Equipe ", StringComparison.OrdinalIgnoreCase) ? team[7..] : team;

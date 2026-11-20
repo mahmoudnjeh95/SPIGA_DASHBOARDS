@@ -40,12 +40,43 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
         if (_machines != null && Now - _machinesLoadedAt < TimeSpan.FromMinutes(5))
             return _machines;
         var rows = await repository.GetMachinesAsync();
+        // The screens never show a machine id: the name set in Paramètres
+        // (Nom affiché), the id only while no name is known.
+        _names = rows.GroupBy(m => m.MachineId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => DisplayName(g.First()), StringComparer.OrdinalIgnoreCase);
         _machines = rows.Where(m => m.IsActive)
             .OrderBy(m => Sectors.All.ToList().IndexOf(m.Sector) is var i && i < 0 ? 99 : i).ThenBy(m => m.MachineId)
-            .Select(m => new PlantMachine(m.MachineId, m.MachineName, m.Sector))
+            .Select(m => new PlantMachine(m.MachineId, DisplayName(m), m.Sector))
             .ToList();
         _machinesLoadedAt = Now;
         return _machines;
+    }
+
+    private static string DisplayName(Machine m) => string.IsNullOrWhiteSpace(m.MachineName) ? m.MachineId : m.MachineName.Trim();
+
+    private IReadOnlyDictionary<string, string> _names = new Dictionary<string, string>();
+
+    // The name shown for a machine id (Paramètres > Machines > Nom affiché),
+    // inactive machines included. Known once GetMachinesAsync has run.
+    public string NameOf(string? machineId)
+        => string.IsNullOrEmpty(machineId) ? "" : _names.TryGetValue(machineId, out var name) ? name : machineId;
+
+    // A text recorded with machine ids (audit values, entry history), as the
+    // screens show it: each id replaced by its name.
+    public string WithNames(string? text) => MachineNames.Replace(text, _names);
+
+    // For the screens that show machines without listing them: the names
+    // loaded, or the ids while the production database is down.
+    public async Task LoadNamesAsync()
+    {
+        try
+        {
+            await GetMachinesAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Log("Noms des machines illisibles, identifiants affichés : " + ex.Message);
+        }
     }
 
     public IReadOnlyList<string> Teams => teams.TeamNames;
@@ -173,4 +204,28 @@ public sealed class PlantData(ProductionRepository repository, AppSettings setti
     }
 
     public void ForgetMachines() => _machines = null;
+}
+
+// Machine ids inside a recorded text ("Machine : PC01 · Tâche : …") replaced
+// by the names the screens show.
+public static class MachineNames
+{
+    public static string Replace(string? text, IReadOnlyDictionary<string, string> names)
+    {
+        if (string.IsNullOrEmpty(text) || names.Count == 0)
+            return text ?? "";
+        var pattern = @"\b(" + string.Join("|", names.Keys.OrderByDescending(k => k.Length).Select(System.Text.RegularExpressions.Regex.Escape)) + @")\b";
+        return System.Text.RegularExpressions.Regex.Replace(text, pattern, m =>
+        {
+            if (!names.TryGetValue(m.Value, out var name) || name.Length == 0)
+                return m.Value;
+            // Already written under its name ("Controle CC01"): left as is.
+            var at = name.IndexOf(m.Value, StringComparison.OrdinalIgnoreCase);
+            var start = m.Index - at;
+            return at >= 0 && start >= 0 && start + name.Length <= text.Length
+                   && string.Compare(text, start, name, 0, name.Length, StringComparison.OrdinalIgnoreCase) == 0
+                ? m.Value
+                : name;
+        }, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
 }

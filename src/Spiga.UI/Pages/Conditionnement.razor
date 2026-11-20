@@ -109,7 +109,7 @@
                             {
                                 var k = m.Figures.Kpi;
                                 <tr>
-                                    <td><span class="machine-id">@m.Machine.Id</span><small>@Sectors.Label(m.Machine.Sector)</small></td>
+                                    <td><span class="machine-id">@m.Machine.Name</span><small>@Sectors.Label(m.Machine.Sector)</small></td>
                                     @if (_snap.IsLive)
                                     {
                                         <td>
@@ -142,7 +142,7 @@
 
             <section class="card" style="flex:4 1 380px">
                 <SpigaChart Title="TRS par machine" Key="cond-trs-machine" YMin="0" YMax="100"
-                            Labels="@_snap.Machines.Select(m => m.Machine.Id).ToList()"
+                            Labels="@_snap.Machines.Select(m => m.Machine.Name).ToList()"
                             Format="@(v => Fmt.Num(v) + " %")"
                             Series="@(new[]
                             {

@@ -107,7 +107,7 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
     public async Task<IReadOnlyList<ImportRow>> ParseImportAsync(string text, DateTime validFrom)
     {
         var existing = (await store.ListEmployeesAsync()).Select(e => e.FullName).ToHashSet(StringComparer.CurrentCultureIgnoreCase);
-        var machines = (await plant.GetMachinesAsync()).Select(m => m.Id).ToList();
+        var machines = await plant.GetMachinesAsync();
         var lines = (await store.ListLinesAsync()).Where(l => l.IsActive).ToList();
         var seen = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
         var rows = new List<ImportRow>();
@@ -148,7 +148,9 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
             int? lineId = null;
             if (StaffFunctions.HoldsMachine(function))
             {
-                machine = machines.FirstOrDefault(m => string.Equals(m, Cell(4), StringComparison.OrdinalIgnoreCase));
+                // The name shown on the screens (Paramètres > Nom affiché) or the id.
+                machine = (machines.FirstOrDefault(m => string.Equals(m.Name, Cell(4), StringComparison.OrdinalIgnoreCase))
+                           ?? machines.FirstOrDefault(m => string.Equals(m.Id, Cell(4), StringComparison.OrdinalIgnoreCase)))?.Id;
                 if (machine == null)
                 {
                     rows.Add(Bad($"machine « {Cell(4)} » inconnue"));
@@ -223,7 +225,9 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
             throw new RuleViolationException("Donnez un nom à la ligne (40 caractères au plus).");
         if (lines.Any(l => l.Id != id && string.Equals(l.Name, name, StringComparison.CurrentCultureIgnoreCase)))
             throw new RuleViolationException($"Une ligne s'appelle déjà « {name} ».");
-        var known = (await plant.GetMachinesAsync()).Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var plantMachines = await plant.GetMachinesAsync();
+        var known = plantMachines.Select(m => m.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string NameOf(string machineId) => plantMachines.FirstOrDefault(m => string.Equals(m.Id, machineId, StringComparison.OrdinalIgnoreCase))?.Name ?? machineId;
         var chosen = machines.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (chosen.Count == 0)
             throw new RuleViolationException("Choisissez au moins une machine.");
@@ -231,7 +235,7 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
             throw new RuleViolationException($"Machine inconnue : {unknown}.");
         foreach (var other in lines.Where(l => l.Id != id && l.IsActive))
             if (chosen.FirstOrDefault(m => other.Machines.Contains(m, StringComparer.OrdinalIgnoreCase)) is { } taken)
-                throw new RuleViolationException($"{taken} est déjà dans la ligne « {other.Name} » : une machine n'est que dans une ligne.");
+                throw new RuleViolationException($"{NameOf(taken)} est déjà dans la ligne « {other.Name} » : une machine n'est que dans une ligne.");
         line.Name = name;
         line.Machines = chosen.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToList();
         line.IsActive = isActive;

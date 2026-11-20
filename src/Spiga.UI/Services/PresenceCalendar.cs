@@ -78,7 +78,7 @@ public sealed record CalEntry(AttendanceSheet Sheet, AttendanceLine Line, IReadO
     public double WorkedHours => Line.Status == LineStatus.Present && Line.EntryAt is { } e && Line.ExitAt is { } x ? (x - e).TotalHours : 0;
 
     // "18/11 Matin · Equipe B · 06:40–14:00 · retard 40 min · remplace KERDMINE Salem sur CC04"
-    public string Describe(string? replacedName)
+    public string Describe(string? replacedName, Func<string?, string>? machineName = null)
     {
         var parts = new List<string> { $"{Date:dd/MM} {Shifts.Label(Sheet.ShiftId)} · {Sheet.Team}" };
         if (Line.Status == LineStatus.Absent && Line.Absence is { } a)
@@ -91,7 +91,7 @@ public sealed record CalEntry(AttendanceSheet Sheet, AttendanceLine Line, IReadO
         if (EarlyMinutes > 0) parts.Add($"parti {EarlyMinutes:0} min avant la fin");
         if (OvertimeMinutes > 0) parts.Add($"{OvertimeMinutes:0} min d'heures sup.");
         if (Line.IsRenfort) parts.Add($"renfort (équipe {Line.HomeTeam})");
-        if (Line.IsActing) parts.Add($"remplace {replacedName ?? "?"} sur {Line.ActingMachineId ?? "sa ligne"}");
+        if (Line.IsActing) parts.Add($"remplace {replacedName ?? "?"} sur {(Line.ActingMachineId is { } m ? machineName?.Invoke(m) ?? m : "sa ligne")}");
         if (Sheet.Status == SheetStatus.Brouillon) parts.Add("feuille en brouillon");
         return string.Join(" · ", parts);
     }
@@ -137,7 +137,7 @@ public static class PresenceCalendar
         return CalKind.Present;
     }
 
-    public static byte[] Csv(IEnumerable<CalEntry> entries, Func<int?, string?> nameOf, string title)
+    public static byte[] Csv(IEnumerable<CalEntry> entries, Func<int?, string?> nameOf, string title, Func<string?, string>? machineName = null)
     {
         var fr = CultureInfo.GetCultureInfo("fr-FR");
         var sb = new StringBuilder();
@@ -152,7 +152,7 @@ public static class PresenceCalendar
                 l.Status switch { LineStatus.Present => "Présent", LineStatus.Absent => "Absent", _ => "À confirmer" },
                 l.Absence?.ToString() ?? "", l.EntryAt?.ToString("HH:mm", fr) ?? "", l.ExitAt?.ToString("HH:mm", fr) ?? "",
                 e.WorkedHours.ToString("0.##", fr), e.LateMinutes.ToString("0", fr), e.EarlyMinutes.ToString("0", fr), e.OvertimeMinutes.ToString("0", fr),
-                l.IsRenfort ? "oui" : "", l.IsActing ? $"{nameOf(l.ReplacesEmployeeId)} sur {l.ActingMachineId ?? "ligne"}" : "",
+                l.IsRenfort ? "oui" : "", l.IsActing ? $"{nameOf(l.ReplacesEmployeeId)} sur {(l.ActingMachineId is { } m ? machineName?.Invoke(m) ?? m : "ligne")}" : "",
                 e.Sheet.Status == SheetStatus.Validee ? "validée" : "brouillon",
             };
             sb.AppendLine(string.Join(";", cells.Select(c => c.IndexOfAny(new[] { ';', '"' }) >= 0 ? "\"" + c.Replace("\"", "\"\"") + "\"" : c)));
