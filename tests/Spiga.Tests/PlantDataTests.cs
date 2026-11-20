@@ -68,8 +68,12 @@ public class PlantDataTests
 {
     private static readonly ChangeAuthor Chef = new("chef.l1", "Chef ligne 1", "PC-ATELIER");
 
+    // Fixed, so the order numbers (OF-2026-...) stay the same whatever the
+    // day the tests run; the reads ask around this day, not around today.
+    private static readonly DateTime OrderDay = new(2026, 11, 17);
+
     private static ProductionOrder Order(string no, string machine)
-        => new() { OrderNo = no, MachineId = machine, Product = "Penne", PlannedStart = new DateTime(2026, 11, 17, 6, 0, 0), PlannedEnd = new DateTime(2026, 11, 17, 14, 0, 0) };
+        => new() { OrderNo = no, MachineId = machine, Product = "Penne", PlannedStart = OrderDay.AddHours(6), PlannedEnd = OrderDay.AddHours(14) };
 
     [Fact]
     public async Task Writing_planning_note_and_names_leaves_the_production_database_untouched()
@@ -88,7 +92,7 @@ public class PlantDataTests
         await production.GetMachinesAsync();
 
         Assert.Equal(before, live.Hash());
-        Assert.Single(await planning.GetOrdersAsync(DateTime.Today.AddDays(-1), DateTime.Today.AddDays(2)));
+        Assert.Single(await planning.GetOrdersAsync(OrderDay.AddDays(-1), OrderDay.AddDays(2)));
     }
 
     [Fact]
@@ -262,7 +266,7 @@ public class PlantDataTests
         var planning = new PlanningRepository(app.AppData, live.Factory, access);
 
         Assert.Equal(new[] { "PC01" }, (await production.GetMachinesAsync()).Select(m => m.MachineId));
-        Assert.Equal(new[] { "OF-2026-0002" }, (await planning.GetOrdersAsync(DateTime.Today.AddDays(-30), DateTime.Today.AddDays(30))).Select(o => o.OrderNo));
+        Assert.Equal(new[] { "OF-2026-0002" }, (await planning.GetOrdersAsync(OrderDay.AddDays(-30), OrderDay.AddDays(30))).Select(o => o.OrderNo));
         Assert.Empty(await production.GetLotsAsync("CC01", DateTime.Today.AddDays(-1), DateTime.Today));
         Assert.Null(await production.GetLatestStatusAsync("CC01"));
 
