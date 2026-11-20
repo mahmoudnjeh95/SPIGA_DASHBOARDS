@@ -33,7 +33,7 @@
                 <option value="">Toutes</option>
                 @foreach (var m in _machines.Where(m => _f.Sector == null || m.Sector == _f.Sector))
                 {
-                    <option value="@m.Id">@m.Id</option>
+                    <option value="@m.Id">@m.Name</option>
                 }
             </select>
         </div>
@@ -207,7 +207,7 @@
                                     <td>@Shifts.Label(e.ShiftId)</td>
                                     <td>@e.Team</td>
                                     <td>@(e.Kind == WasteKind.Emballage ? "Emballage" : "Produit")</td>
-                                    <td>@(e.MachineId ?? Sectors.Label(e.Sector))</td>
+                                    <td>@(e.MachineId != null ? Plant.NameOf(e.MachineId) : Sectors.Label(e.Sector))</td>
                                     <td class="r">@Fmt.Kg(e.QuantityKg)</td>
                                     <td>
                                         @e.Reason
@@ -309,7 +309,7 @@
 
     private string Subtitle()
         => (_f.Sector == null ? "" : " · " + Sectors.Label(_f.Sector))
-           + (_f.MachineId == null ? "" : " · " + _f.MachineId)
+           + (_f.MachineId == null ? "" : " · " + Plant.NameOf(_f.MachineId))
            + (_f.Team == null ? "" : " · " + _f.Team)
            + (_f.ShiftId == null ? "" : " · poste " + Shifts.Label(_f.ShiftId.Value))
            + (_f.ValidatedOnly ? " · saisies validées" : "");

@@ -5,6 +5,7 @@
    changed in between, it is refused and the list reloads (OnChanged). *@
 @inherits SpigaPage
 @inject WasteService Waste
+@inject PlantData Plant
 
 <Flash Error="@Error" Info="@Info" />
 
@@ -46,7 +47,7 @@ else
                             <td class="nowrap">@e.ProductionDate.ToString("dd/MM/yyyy")<small>@Shifts.Label(e.ShiftId) · @e.Team</small></td>
                         }
                         <td class="q">
-                            @(e.MachineId ?? Sectors.Label(e.Sector))
+                            @(e.MachineId != null ? Plant.NameOf(e.MachineId) : Sectors.Label(e.Sector))
                             <small>@(ShowPoste ? (e.Kind == WasteKind.Emballage ? "Emballage · " : "Produit · ") : "")@(e.MachineId == null ? (ShowPoste ? "secteur" : "") : Sectors.Label(e.Sector))</small>
                         </td>
                         <td class="r q nowrap">@Fmt.Num(e.Quantity, e.Quantity % 1 == 0 ? 0 : 2) @e.Unit</td>
@@ -161,7 +162,7 @@ else
                                             <li>
                                                 <span class="chip @WasteStatuses.Css(r.Status)">v@(r.Version) · @WasteStatuses.Label(r.Status)</span>
                                                 <b>@r.Action</b> par @r.UserLogin, @Fmt.Date(r.At)
-                                                <small>@r.Snapshot</small>
+                                                <small>@Plant.WithNames(r.Snapshot)</small>
                                                 @if (!string.IsNullOrEmpty(r.Note))
                                                 {
                                                     <small><b>Motif / commentaire :</b> « @r.Note »</small>
@@ -196,6 +197,9 @@ else
     private List<WasteEntry> _validatable = new();
 
     private int Columns => ShowPoste ? 8 : 7;
+
+    // The machine names (Plant.NameOf) known before the first rows show.
+    protected override Task OnInitializedAsync() => Plant.LoadNamesAsync();
 
     protected override void OnParametersSet()
     {

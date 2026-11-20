@@ -97,7 +97,7 @@ public sealed class WasteDashboard(PlantData plant, WasteService waste)
             .Concat(entries.Where(e => e.MachineId != null).Select(e => e.MachineId!))
             .Distinct().OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToList();
         var machineRows = machineIds
-            .Select(id => Group(id, id,
+            .Select(id => Group(id, plant.NameOf(id),
                 Core.Plant.Sectors.Label(sectorOf.GetValueOrDefault(id) ?? entries.First(e => e.MachineId == id).Sector),
                 entries.Where(e => e.Kind == WasteKind.Emballage && e.MachineId == id), lots.Where(l => l.MachineId == id)))
             .ToList();

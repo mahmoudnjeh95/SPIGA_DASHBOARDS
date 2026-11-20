@@ -2,6 +2,7 @@
 @inherits SpigaPage
 @inject PresenceReport Report
 @inject UiState Ui
+@inject PlantData Plant
 
 @* The temporary assignments of the pointage sheets, by person: how often
    each one held a higher post (an emballage worker on a conducteur's
@@ -77,7 +78,7 @@
                                                             var perf = _r.Performance.GetValueOrDefault(r);
                                                             <tr>
                                                                 <td class="nowrap">@r.Date.ToString("dd/MM/yyyy")<small>@Shifts.Label(r.ShiftId) · @r.Team</small></td>
-                                                                <td>@StaffFunctions.Short(r.ActingFunction) · @r.Post @if (r.IsStepUp) { <span class="chip acc">supérieur</span> }</td>
+                                                                <td>@StaffFunctions.Short(r.ActingFunction) · @Plant.NameOf(r.Post) @if (r.IsStepUp) { <span class="chip acc">supérieur</span> }</td>
                                                                 <td class="n">@r.ReplacedName</td>
                                                                 <td class="n nowrap">@r.From.ToString("HH:mm") – @r.To.ToString("HH:mm")</td>
                                                                 <td class="r" title="@(perf == null ? "" : $"{Fmt.Num(perf.Bags)} sacs")">@(perf == null || perf.Kg <= 0 ? "" : Fmt.Mass(perf.Kg))</td>
@@ -125,7 +126,7 @@
         new GridColumn<Person>("dont supérieurs", p => p.Records.Count(r => r.IsStepUp).ToString(), p => p.Records.Count(r => r.IsStepUp), css: "r"),
         new GridColumn<Person>("Heures", p => Fmt.Num(p.Records.Sum(r => r.Hours), 1), p => p.Records.Sum(r => r.Hours), css: "r"),
         new GridColumn<Person>("Postes tenus", p => string.Join(", ", p.Records.GroupBy(r => r.ActingFunction).Select(g => $"{StaffFunctions.Short(g.Key)} ×{g.Count()}")), css: "n"),
-        new GridColumn<Person>("Machines", p => string.Join(", ", p.Records.Select(r => r.Post).Distinct()), css: "n"),
+        new GridColumn<Person>("Machines", p => string.Join(", ", p.Records.Select(r => Plant.NameOf(r.Post)).Distinct()), css: "n"),
         new GridColumn<Person>("TRS sous lui", p => Fmt.Pct(p.Trs), p => p.Trs, css: "r"),
         new GridColumn<Person>("TRS habituel", p => Fmt.Pct(p.Usual), p => p.Usual, css: "r"),
         new GridColumn<Person>("Écart", p => Fmt.SignedPct(p.Gap, 1), p => p.Gap, css: "r",

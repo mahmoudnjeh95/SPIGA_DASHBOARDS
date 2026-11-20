@@ -2,6 +2,7 @@
 @inherits SpigaPage
 @inject AttendanceService Attendance
 @inject IJSRuntime JS
+@inject PlantData Plant
 
 @* Presence calendar of the responsable: one row per person, one column per
    day, the code of what the pointage says (présent, retard, absence and its
@@ -152,7 +153,7 @@
                             @foreach (var e in events.Take(MonthMax))
                             {
                                 <div class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e })) @(e.Sheet.Status == SheetStatus.Brouillon ? "draft" : "")"
-                                     title="@e.Line.FullName · @e.Describe(NameOf(e.Line.ReplacesEmployeeId))">
+                                     title="@e.Line.FullName · @e.Describe(NameOf(e.Line.ReplacesEmployeeId), Plant.NameOf)">
                                     <b>@CalKinds.Code(PresenceCalendar.Main(new[] { e }))</b> @Short(e.Line.FullName)
                                 </div>
                             }
@@ -203,7 +204,7 @@
                                                     </div>
                                                     @foreach (var e in events)
                                                     {
-                                                        <div class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e }))" title="@e.Describe(NameOf(e.Line.ReplacesEmployeeId))">
+                                                        <div class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e }))" title="@e.Describe(NameOf(e.Line.ReplacesEmployeeId), Plant.NameOf)">
                                                             <b>@CalKinds.Code(PresenceCalendar.Main(new[] { e }))</b> @e.Line.FullName <small>@EventDetail(e)</small>
                                                         </div>
                                                     }
@@ -293,7 +294,7 @@
                                             var selected = _sel == (r.Id, d);
                                             <td class="@(selected ? "sel" : "")">
                                                 <button type="button" class="cal-code @CalKinds.Css(main) @(draft ? "draft" : "")"
-                                                        title="@string.Join("\n", cell.Select(e => e.Describe(NameOf(e.Line.ReplacesEmployeeId))))"
+                                                        title="@string.Join("\n", cell.Select(e => e.Describe(NameOf(e.Line.ReplacesEmployeeId), Plant.NameOf)))"
                                                         @onclick="() => _sel = selected ? null : (r.Id, d)">
                                                     @Code(cell)
                                                 </button>
@@ -311,7 +312,7 @@
                                             <td colspan="@(days.Count + 6)">
                                                 @foreach (var e in r.Entries.Where(e => e.Date == sel.Day).OrderBy(e => e.Sheet.ShiftId))
                                                 {
-                                                    <div><b>@r.Name</b> · @e.Describe(NameOf(e.Line.ReplacesEmployeeId))</div>
+                                                    <div><b>@r.Name</b> · @e.Describe(NameOf(e.Line.ReplacesEmployeeId), Plant.NameOf)</div>
                                                 }
                                             </td>
                                         </tr>
@@ -383,7 +384,7 @@
         if (e.EarlyMinutes > 0) bits.Add($"parti {l.ExitAt:HH:mm}");
         if (e.OvertimeMinutes > 0) bits.Add($"+{e.OvertimeMinutes:0} min");
         if (l.IsRenfort) bits.Add($"de {l.HomeTeam}");
-        if (l.IsActing) bits.Add($"sur {l.ActingMachineId ?? "ligne"} pour {NameOf(l.ReplacesEmployeeId)}");
+        if (l.IsActing) bits.Add($"sur {(l.ActingMachineId is { } m ? Plant.NameOf(m) : "ligne")} pour {NameOf(l.ReplacesEmployeeId)}");
         if (bits.Count == 0) bits.Add($"{l.EntryAt:HH:mm}–{l.ExitAt:HH:mm}");
         return string.Join(" · ", bits);
     }
@@ -454,6 +455,7 @@
             (_from, _to) = (new DateTime(_anchor.Year, _anchor.Month, 1), new DateTime(_anchor.Year, _anchor.Month, 1).AddMonths(1).AddDays(-1));
         await Run(async () =>
         {
+            await Plant.LoadNamesAsync();
             var sheets = await Attendance.SheetsAsync(Actor, Perm.View(Modules.RhNominatif), _from, _to);
             _names = sheets.SelectMany(s => s.Lines).GroupBy(l => l.EmployeeId).ToDictionary(g => g.Key, g => g.First().FullName);
             _entries = PresenceCalendar.Entries(sheets);
@@ -510,7 +512,7 @@
         if (_function != "" && Enum.TryParse<StaffFunction>(_function, out var f)) filters.Add(StaffFunctions.Label(f));
         if (!string.IsNullOrWhiteSpace(_person)) filters.Add("personne « " + _person.Trim() + " »");
         if (_kinds.Count > 0) filters.Add(string.Join(", ", _kinds.Select(CalKinds.Label)));
-        var bytes = PresenceCalendar.Csv(Filtered(), NameOf, "Calendrier des présences · " + string.Join(" · ", filters));
+        var bytes = PresenceCalendar.Csv(Filtered(), NameOf, "Calendrier des présences · " + string.Join(" · ", filters), Plant.NameOf);
         await JS.InvokeVoidAsync("spigaDownload", $"presences_{_from:yyyyMMdd}-{_to:yyyyMMdd}.csv", "text/csv", Convert.ToBase64String(bytes));
     }
 }

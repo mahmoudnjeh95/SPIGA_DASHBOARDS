@@ -179,7 +179,7 @@
                                     {
                                         <tr>
                                             <td>@u.Login<small>@u.DisplayName@(u.IsActive ? "" : " · désactivé")</small></td>
-                                            <td class="n">@a.Scope.Describe()</td>
+                                            <td class="n">@a.Scope.Describe(Plant.NameOf)</td>
                                             <td class="n">@a.Validity()</td>
                                         </tr>
                                     }
@@ -235,7 +235,7 @@
                                     <td>
                                         @foreach (var a in u.Assignments)
                                         {
-                                            <span class="chip @(a.IsCurrent(Now) ? "acc" : "")" style="margin:0 4px 3px 0" title="@a.Scope.Describe() · @a.Validity()">@a.RoleName@(a.Scope.IsUnrestricted ? "" : " · " + a.Scope.Describe())</span>
+                                            <span class="chip @(a.IsCurrent(Now) ? "acc" : "")" style="margin:0 4px 3px 0" title="@a.Scope.Describe(Plant.NameOf) · @a.Validity()">@a.RoleName@(a.Scope.IsUnrestricted ? "" : " · " + a.Scope.Describe(Plant.NameOf))</span>
                                         }
                                     </td>
                                     @if (_form == null)
@@ -330,7 +330,7 @@
                                     <div class="checks">
                                         @foreach (var p in PlatformChoices(a))
                                         {
-                                            <label class="check" title="@string.Join(", ", p.Machines.Select(m => m.MachineId))">
+                                            <label class="check" title="@string.Join(", ", p.Machines.Select(m => Plant.NameOf(m.MachineId)))">
                                                 <input type="checkbox" checked="@a.Platforms.Contains(p.Id)" disabled="@(!editable)"
                                                        @onchange="e => ToggleIn(a.Platforms, p.Id, e.Value is true)" />@p.Name@(p.IsActive ? "" : " (inactive)")
                                                 <small class="nd">&nbsp;@p.Machines.Count machine(s)</small>
@@ -343,7 +343,7 @@
                                     <div class="notice info" style="margin:0">
                                         <div>
                                             Restriction donnée avant les plateformes :
-                                            <b>@string.Join(", ", a.Sectors.Select(Sectors.Label).Concat(a.Machines))</b>.
+                                            <b>@string.Join(", ", a.Sectors.Select(Sectors.Label).Concat(a.Machines.Select(Plant.NameOf)))</b>.
                                             Elle s'ajoute aux plateformes cochées.
                                         </div>
                                         @if (editable)
@@ -463,9 +463,9 @@
                             <div class="checks">
                                 @foreach (var m in inSector)
                                 {
-                                    <label class="check" title="@m.Name">
+                                    <label class="check" title="@m.Id">
                                         <input type="checkbox" checked="@_pfMachines.ContainsKey(m.Id)" disabled="@(!CanPlatforms)"
-                                               @onchange="e => TogglePlatformMachine(m, e.Value is true)" />@m.Id
+                                               @onchange="e => TogglePlatformMachine(m, e.Value is true)" />@m.Name
                                     </label>
                                 }
                             </div>
@@ -490,7 +490,7 @@
                                         <tr>
                                             <td>@u.Login<small>@u.DisplayName@(u.IsActive ? "" : " · désactivé")</small></td>
                                             <td class="n">@a.RoleName</td>
-                                            <td class="n">@a.Scope.Describe()</td>
+                                            <td class="n">@a.Scope.Describe(Plant.NameOf)</td>
                                             <td class="n">@a.Validity()</td>
                                         </tr>
                                     }
@@ -687,7 +687,7 @@
     // database no longer lists (or cannot be reached).
     private IEnumerable<PlantMachine> PlatformMachineChoices()
         => _machines.Concat(_pfMachines.Where(kv => !_machines.Any(m => string.Equals(m.Id, kv.Key, StringComparison.OrdinalIgnoreCase)))
-                .Select(kv => new PlantMachine(kv.Key, kv.Key, kv.Value)))
+                .Select(kv => new PlantMachine(kv.Key, Plant.NameOf(kv.Key), kv.Value)))
             .OrderBy(m => m.Id, StringComparer.OrdinalIgnoreCase);
 
     private void TogglePlatformMachine(PlantMachine m, bool on)
