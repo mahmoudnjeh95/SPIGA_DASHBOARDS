@@ -17,6 +17,8 @@ public class SqliteConnectionFactory : IDbConnectionFactory
             // display names, and writes those back. Production data (lots/status log)
             // is still only ever read, never written, by this app.
             Mode = SqliteOpenMode.ReadWrite,
+            // A locked file (a writer at work) is retried this long, not 30 s.
+            DefaultTimeout = 10,
         }.ToString();
     }
 

@@ -32,6 +32,7 @@ internal static class AuditRows
     public static async Task WriteApartAsync(IDbConnectionFactory appData, ChangeAuthor author,
         string module, string action, string target, string? oldValue, string? newValue)
     {
+        await OffUiThread.Switch();
         try
         {
             using var connection = appData.CreateConnection();

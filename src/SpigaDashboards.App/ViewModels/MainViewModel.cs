@@ -55,6 +55,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowLoading))]
     private bool isLoading;
     private int _loads;
+    private int _slideTicket;
     public bool ShowLoading => IsLoading && IsConnectionHealthy;
 
     private void StartLoad()
@@ -248,7 +249,14 @@ public partial class MainViewModel : ObservableObject
         // Timer handlers are async void: RunGuardedAsync makes sure no
         // exception can escape them and crash the kiosk.
         _rotationTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_settings.SlideDurationSeconds) };
-        _rotationTimer.Tick += async (_, _) => await RunGuardedAsync(AdvanceAsync);
+        // A tick while a slide is still loading (slow base) is skipped: loads
+        // used to pile up behind each other and the screen fell behind.
+        _rotationTimer.Tick += async (_, _) =>
+        {
+            if (_loads > 0)
+                return;
+            await RunGuardedAsync(AdvanceAsync);
+        };
 
         // Also doubles as the "current team" refresh: cheap (no DB call) and a
         // 1-minute cadence is more than enough precision for a poste changeover.
@@ -264,7 +272,13 @@ public partial class MainViewModel : ObservableObject
         _stopAlertTimer.Tick += (_, _) => DismissStopAlert();
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(_settings.DataRefreshIntervalMinutes) };
-        _refreshTimer.Tick += async (_, _) => await RunGuardedAsync(RefreshAsync);
+        // Same: the next tick refreshes, rather than a second load in parallel.
+        _refreshTimer.Tick += async (_, _) =>
+        {
+            if (_loads > 0)
+                return;
+            await RunGuardedAsync(RefreshAsync);
+        };
 
         // Only runs while the DB is unreachable (see SetConnectionState).
         _reconnectTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(5, _settings.ReconnectIntervalSeconds)) };
@@ -408,6 +422,7 @@ public partial class MainViewModel : ObservableObject
         SynthesisSlideViewModel.ClearCache();
         MachinePeriodSlideViewModel.ClearCache();
         PackagingSlideViewModel.ClearCache();
+        ProductionRepository.ClearDayCache();
         RefreshFilterOptions();
 
         StartLoad();
@@ -882,6 +897,9 @@ public partial class MainViewModel : ObservableObject
         if (_slides.Count == 0)
             return true;
 
+        // Clicks (next, period, filters) can start a load while another one
+        // runs: only the latest one is shown, whichever finishes last.
+        var ticket = ++_slideTicket;
         StartLoad();
         try
         {
@@ -901,6 +919,8 @@ public partial class MainViewModel : ObservableObject
                     runState.MachineIds.Select(id => _machinesById[id]).ToList()),
                 _ => null,
             };
+            if (ticket != _slideTicket)
+                return true;
             // Before the slide: its figures read the scope they belong to.
             var now = DateTime.Now;
             var shiftId = KpiCalculator.CurrentShiftId(now);

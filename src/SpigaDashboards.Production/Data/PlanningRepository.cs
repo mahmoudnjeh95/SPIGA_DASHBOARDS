@@ -61,6 +61,7 @@ public class PlanningRepository
     private async Task<int> AuditedAsync(string table, int id, string label,
         Func<IDbConnection, IDbTransaction, Task<int>> write, bool delete = false)
     {
+        await OffUiThread.Switch();
         var target = await _location.WriteTargetAsync();
         var sameDatabase = ReferenceEquals(target, _connectionFactory);
         using var connection = target.CreateConnection();
@@ -175,6 +176,7 @@ public class PlanningRepository
     // Stops that started in [from, to).
     public async Task<List<StopQualification>> GetQualificationsAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await QueryQualificationsAsync(connection, from, to)).Where(q => allowed(q.MachineId)).ToList();
@@ -183,6 +185,7 @@ public class PlanningRepository
     // Same, for the Arrets window (kept for its callers).
     public async Task<List<StopQualification>> FindQualificationsAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await QueryQualificationsAsync(connection, from, to)).Where(q => allowed(q.MachineId)).ToList();
@@ -203,6 +206,7 @@ public class PlanningRepository
 
     public async Task SaveQualificationAsync(StopQualification q)
     {
+        await OffUiThread.Switch();
         await DemandAsync(q.MachineId);
         if (q.Id == 0)
             q.CreatedAt = DateTime.Now;
@@ -231,6 +235,7 @@ public class PlanningRepository
 
     public async Task<List<string>> GetDistinctAsync(string column)
     {
+        await OffUiThread.Switch();
         // Column names come from code only (Component / Technician).
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
@@ -243,6 +248,7 @@ public class PlanningRepository
 
     public async Task<List<MaintenancePlan>> GetPlansAsync()
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await connection.QueryAsync<MaintenancePlan>(
@@ -252,6 +258,7 @@ public class PlanningRepository
 
     public async Task SavePlanAsync(MaintenancePlan p)
     {
+        await OffUiThread.Switch();
         await DemandAsync(p.MachineId);
         p.Id = await AuditedAsync("PlanMaintenancePlans", p.Id, "Plan de maintenance", async (connection, transaction) =>
         {
@@ -273,6 +280,7 @@ public class PlanningRepository
 
     public async Task<List<MaintenanceEvent>> GetEventsAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var rows = await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT Id, PlanId, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status, DoneAt, Technician, Comment
@@ -285,6 +293,7 @@ public class PlanningRepository
     // Planned slots of a plan that aren't done yet (to avoid planning it twice).
     public async Task<List<MaintenanceEvent>> GetOpenEventsAsync()
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await connection.QueryAsync<MaintenanceEvent>(
@@ -294,6 +303,7 @@ public class PlanningRepository
 
     public async Task SaveEventAsync(MaintenanceEvent e)
     {
+        await OffUiThread.Switch();
         await DemandAsync(e.MachineId);
         var label = e.IsStop ? "Arrêt planifié" : "Intervention de maintenance";
         e.Id = await AuditedAsync("PlanMaintenanceEvents", e.Id, label, async (connection, transaction) =>
@@ -314,6 +324,7 @@ public class PlanningRepository
     // cancelled), for the slides.
     public async Task<List<MaintenanceEvent>> FindActiveSlotsAsync(DateTime time)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var rows = await connection.QueryAsync<MaintenanceEvent>(
             @"SELECT Id, Kind, MachineId, Task, PlannedStart, DurationMinutes, Status
@@ -331,6 +342,7 @@ public class PlanningRepository
     // Read by the KPI queries (which carry on without it if it fails).
     public async Task<List<(string MachineId, DateTime Start, DateTime End)>> GetPlannedStopWindowsAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
 
         var planned = StopCauses.All.Where(c => c.Family == CauseFamily.Planifie).Select(c => c.Code).ToList();
@@ -358,6 +370,7 @@ public class PlanningRepository
 
     public async Task<List<ProductionOrder>> GetOrdersAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         var allowed = await AllowedAsync();
         return (await connection.QueryAsync<ProductionOrder>(
@@ -372,6 +385,7 @@ public class PlanningRepository
     // it meanwhile (the number is unique in the database).
     public async Task<string> NextOrderNoAsync(DateTime? at = null)
     {
+        await OffUiThread.Switch();
         using var connection = await OpenAsync();
         return await NextOrderNoAsync(connection, null, at ?? DateTime.Now);
     }
@@ -396,6 +410,7 @@ public class PlanningRepository
     // typed by hand that is already used is refused.
     public async Task SaveOrderAsync(ProductionOrder o)
     {
+        await OffUiThread.Switch();
         await DemandAsync(o.MachineId);
         for (var attempt = 1; ; attempt++)
         {

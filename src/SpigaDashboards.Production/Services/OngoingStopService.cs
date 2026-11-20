@@ -41,6 +41,7 @@ public static class OngoingStopService
 
     public static async Task<IReadOnlyDictionary<string, OngoingStop>> GetAsync(ProductionRepository repository, AppSettings settings)
     {
+        await OffUiThread.Switch();
         await Gate.WaitAsync();
         try
         {

@@ -8,6 +8,7 @@ public sealed class AuditStore(AppDb db) : IAuditLog
 {
     public async Task WriteAsync(AuditEntry e)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         await c.ExecuteAsync(
             @"INSERT INTO AuditLog (At, UserLogin, Module, Action, Target, Details, OldValue, NewValue, Workstation)
@@ -16,6 +17,7 @@ public sealed class AuditStore(AppDb db) : IAuditLog
 
     public async Task<IReadOnlyList<AuditEntry>> QueryAsync(AuditQuery q)
     {
+        await OffUiThread.Switch();
         var where = new List<string> { "At >= @From", "At < @To" };
         if (!string.IsNullOrEmpty(q.UserLogin))
             where.Add("UserLogin = @UserLogin");
@@ -38,6 +40,7 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<IReadOnlyList<WasteEntry>> ListAsync(WasteKind? kind, DateTime fromDate, DateTime toDate)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var sql = $"SELECT {Columns} FROM WasteEntries WHERE IsDeleted = 0 AND ProductionDate >= @from AND ProductionDate <= @to"
                   + (kind == null ? "" : " AND Kind = @kind");
@@ -46,12 +49,14 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<WasteEntry?> GetAsync(long id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return await c.QuerySingleOrDefaultAsync<WasteEntry>($"SELECT {Columns} FROM WasteEntries WHERE Id = @id AND IsDeleted = 0", new { id });
     }
 
     public async Task<long> InsertAsync(WasteEntry e, WasteRevision revision)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var id = await c.ExecuteScalarAsync<long>(
@@ -70,6 +75,7 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<bool> UpdateAsync(WasteEntry e, int expectedVersion, WasteRevision revision)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var rows = await c.ExecuteAsync(
@@ -89,6 +95,7 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<bool> DeleteAsync(long id, int expectedVersion, string deletedBy, DateTime at, WasteRevision revision)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var rows = await c.ExecuteAsync(
@@ -104,6 +111,7 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<IReadOnlyList<WasteRevision>> ListRevisionsAsync(long entryId)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return (await c.QueryAsync<WasteRevision>(
             "SELECT Id, EntryId, Version, At, UserLogin, Action, Status, Snapshot, Note FROM WasteRevisions WHERE EntryId = @entryId ORDER BY Version, Id",
@@ -112,6 +120,7 @@ public sealed class WasteStore(AppDb db) : IWasteStore
 
     public async Task<IReadOnlyList<WasteReason>> ListReasonsAsync(WasteKind kind)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return (await c.QueryAsync<WasteReason>(
             "SELECT Id, Kind, Label, IsActive, SortOrder FROM WasteReasons WHERE Kind = @kind AND IsActive = 1 ORDER BY SortOrder, Label",

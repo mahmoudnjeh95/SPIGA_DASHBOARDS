@@ -16,7 +16,7 @@ public sealed class AppDbOptions
     public string ConnectionString { get; set; } = "";
 
     public static AppDbOptions ForSqliteFile(string path)
-        => new() { Provider = AppDbProvider.Sqlite, ConnectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString() };
+        => new() { Provider = AppDbProvider.Sqlite, ConnectionString = new SqliteConnectionStringBuilder { DataSource = path, DefaultTimeout = 10 }.ToString() };
 }
 
 // Opens connections to the application database and hides the few SQL
@@ -36,10 +36,35 @@ public sealed class AppDb(AppDbOptions options)
 
         var sqlite = new SqliteConnection(options.ConnectionString);
         await sqlite.OpenAsync();
+        UseWriteAheadLog(sqlite);
         using var pragma = sqlite.CreateCommand();
         pragma.CommandText = "PRAGMA foreign_keys = ON;";
         await pragma.ExecuteNonQueryAsync();
         return sqlite;
+    }
+
+    private static readonly HashSet<string> WalFiles = new(StringComparer.OrdinalIgnoreCase);
+
+    // WAL: readers no longer wait for a writer (the dashboard, the Suivi
+    // screens and the web host share this file). It stays set in the file,
+    // so once per file and process is enough. Not set (busy, read-only
+    // folder): the default journal keeps working, only with more waits.
+    public static void UseWriteAheadLog(SqliteConnection connection)
+    {
+        lock (WalFiles)
+        {
+            if (!WalFiles.Add(connection.DataSource))
+                return;
+        }
+        try
+        {
+            using var wal = connection.CreateCommand();
+            wal.CommandText = "PRAGMA journal_mode = WAL;";
+            wal.ExecuteScalar();
+        }
+        catch (SqliteException)
+        {
+        }
     }
 
     // Appended to an INSERT to get the new row's id back.

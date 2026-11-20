@@ -85,6 +85,10 @@ public partial class ChartCard : UserControl
         InitializeComponent();
         Loaded += (_, _) =>
         {
+            // Software rendering: the chart is drawn at once, without its
+            // growing animation (redrawn by the CPU every frame).
+            if (Services.RenderBudget.IsSoftware)
+                ChartView.AnimationsSpeed = TimeSpan.Zero;
             _scope ??= SlideMotion.ScopeOf(this);
             ChartPrefs.Changed -= OnPrefChanged;   // Loaded can come twice
             ChartPrefs.Changed += OnPrefChanged;

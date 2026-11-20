@@ -163,6 +163,7 @@ public partial class App : Application
     {
         MainWindow = window;
         window.Show();
+        UiFreezeWatchdog.Start(Dispatcher);
 
         // From here on the app runs 24/7 on the hall screen: an error in one
         // window (15/11/2026: a font WPF couldn't load while Planification

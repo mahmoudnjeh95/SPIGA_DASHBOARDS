@@ -29,7 +29,7 @@
                 ToolTip="{Binding RunStateLabel}" AutomationProperties.Name="{Binding RunStateLabel}">
         <Grid>
             <!-- Soft halo behind the photo, in the state colour. -->
-            <Rectangle RadiusX="16" RadiusY="16" Margin="-3">
+            <Rectangle x:Name="Halo" RadiusX="16" RadiusY="16" Margin="-3">
                 <Rectangle.Effect>
                     <BlurEffect Radius="14"/>
                 </Rectangle.Effect>

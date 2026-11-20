@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Data;
+using System.Globalization;
 using Dapper;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
@@ -119,11 +121,13 @@ public class ProductionRepository
     public void ResetConnections()
     {
         _hasLotTable = null;
+        ClearDayCache();
         _connectionFactory.ResetPool();
     }
 
     public async Task<List<Machine>> GetMachinesAsync()
     {
+        await OffUiThread.Switch();
         using var connection = _connectionFactory.CreateConnection();
         var machines = (await connection.QueryAsync<Machine>(
             "SELECT MachineId, MachineName, MachineType, Sector, IPAddress, IsActive FROM Machines ORDER BY MachineId")).ToList();
@@ -162,6 +166,7 @@ public class ProductionRepository
     // production (its latest valid snapshot).
     public async Task<MachineStatusSnapshot?> GetLatestStatusAsync(string machineId)
     {
+        await OffUiThread.Switch();
         if (!(await Access.FilterAsync(_connectionFactory))(machineId))
             return null;
         var d = Dialect.For(_connectionFactory.Provider);
@@ -279,6 +284,7 @@ public class ProductionRepository
     // charts that don't show weights.
     public async Task<List<ProductionBucket>> GetLotsAsync(string machineId, DateTime from, DateTime to, bool includeWeights = true)
     {
+        await OffUiThread.Switch();
         if (!(await Access.FilterAsync(_connectionFactory))(machineId))
             return new List<ProductionBucket>();
         return await QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights);
@@ -290,6 +296,7 @@ public class ProductionRepository
     public async Task<List<ProductionBucket>> GetLotsForMachinesAsync(
         IReadOnlyCollection<string> machineIds, DateTime from, DateTime to, BucketSize size = BucketSize.Hour)
     {
+        await OffUiThread.Switch();
         var allowed = await Access.FilterAsync(_connectionFactory);
         machineIds = machineIds.Where(allowed).ToList();
         if (machineIds.Count == 0)
@@ -437,6 +444,7 @@ rz AS (
     // Causes given to stops in the Planification window (Arrets window and sheet).
     public async Task<List<StopQualification>> GetStopQualificationsAsync(DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         var allowed = await Access.FilterAsync(_connectionFactory);
         return (await _planning.FindQualificationsAsync(from, to)).Where(q => allowed(q.MachineId)).ToList();
     }
@@ -445,6 +453,7 @@ rz AS (
     // none if they can't be read.
     public async Task<List<MaintenanceEvent>> GetActiveSlotsAsync()
     {
+        await OffUiThread.Switch();
         try
         {
             var allowed = await Access.FilterAsync(_connectionFactory);
@@ -462,6 +471,7 @@ rz AS (
     // if they can't be read, so a slide never fails on them.
     public async Task<Dictionary<string, SlotKind>> GetActiveSlotKindsAsync()
     {
+        await OffUiThread.Switch();
         try
         {
             var allowed = await Access.FilterAsync(_connectionFactory);
@@ -505,6 +515,7 @@ rz AS (
     // before from or end after to are returned whole.
     public async Task<List<LineSegment>> GetLineSegmentsAsync(IReadOnlyCollection<string> machineIds, DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         if (from < _settings.DataStartDate)
             from = _settings.DataStartDate;
         var allowed = await Access.FilterAsync(_connectionFactory);
@@ -598,16 +609,64 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
         if (from < _settings.DataStartDate)
             from = _settings.DataStartDate;
         if (to - from <= TimeSpan.FromDays(1))
-            return await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+            return await QueryDayAsync(lineFilter, size, from, to, filterParams, includeWeights);
         var buckets = new List<ProductionBucket>();
         for (var start = from; start < to;)
         {
             var end = start.Date.AddDays(1) < to ? start.Date.AddDays(1) : to;
-            buckets.AddRange(await QueryRangeAsync(lineFilter, size, start, end, filterParams, includeWeights));
+            buckets.AddRange(await QueryDayAsync(lineFilter, size, start, end, filterParams, includeWeights));
             start = end;
         }
         return buckets;
     }
+
+    // Closed days, kept for DayCacheFor: Mois / 3 mois / Année, the history
+    // and the exports read the same past days again and again (a year was
+    // 365 queries of 2-4 s on SQLEXPRESS). A day is closed once its
+    // SnapshotMargin has passed too, as its last intervals are read up to
+    // then. Planned stops given afterwards in Planification show within
+    // DayCacheFor, like the synthesis cache. Buckets are shared, never
+    // changed by their readers.
+    private static readonly TimeSpan DayCacheFor = TimeSpan.FromMinutes(30);
+    private const int DayCacheMax = 20000;
+    private static readonly ConcurrentDictionary<string, (DateTime ReadAt, List<ProductionBucket> Buckets)> DayCache = new();
+
+    // Settings changed (nominal rates, planned breaks, another base): read again.
+    public static void ClearDayCache() => DayCache.Clear();
+
+    private async Task<List<ProductionBucket>> QueryDayAsync(
+        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+    {
+        var closed = from == from.Date && to == from.AddDays(1) && to + SnapshotMargin <= DateTime.Now;
+        if (!closed)
+            return await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+
+        var key = string.Join("|", _connectionFactory.Provider, lineFilter, size, from.ToString("yyyyMMdd"), includeWeights,
+            ParamsKey(filterParams));
+        var now = DateTime.UtcNow;
+        if (DayCache.TryGetValue(key, out var hit) && now - hit.ReadAt < DayCacheFor)
+            return new List<ProductionBucket>(hit.Buckets);
+
+        var buckets = await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+        if (DayCache.Count >= DayCacheMax)
+        {
+            foreach (var old in DayCache.Where(e => now - e.Value.ReadAt >= DayCacheFor).Select(e => e.Key).ToList())
+                DayCache.TryRemove(old, out _);
+            if (DayCache.Count >= DayCacheMax)
+                DayCache.Clear();
+        }
+        DayCache[key] = (now, buckets);
+        return new List<ProductionBucket>(buckets);
+    }
+
+    // { machineId = "PL03" } -> "machineId=PL03"; lists joined.
+    private static string ParamsKey(object filterParams)
+        => string.Join(";", filterParams.GetType().GetProperties().Select(p => p.Name + "=" + (p.GetValue(filterParams) switch
+        {
+            string s => s,
+            System.Collections.IEnumerable list => string.Join(",", list.Cast<object>()),
+            var v => Convert.ToString(v, CultureInfo.InvariantCulture),
+        })));
 
     // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
     private async Task<List<ProductionBucket>> QueryRangeAsync(
@@ -853,6 +912,7 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
     // snapshot). null = no lotto table (SQLite dev DB): caller falls back.
     public async Task<List<LotSpan>?> GetLotSpansAsync(string machineId, DateTime from, DateTime to)
     {
+        await OffUiThread.Switch();
         if (!(await Access.FilterAsync(_connectionFactory))(machineId))
             return new List<LotSpan>();
         var d = Dialect.For(_connectionFactory.Provider);
@@ -1043,6 +1103,7 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
     // Throws when the database cannot be read: the caller keeps what it shows.
     public async Task<NoteEntry?> GetActiveNoteAsync()
     {
+        await OffUiThread.Switch();
         if (await _location.ModeAsync() != PlantDataMode.Application)
         {
             using var stats = _connectionFactory.CreateConnection();
@@ -1060,6 +1121,7 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
     // go to the audit trail (in the same transaction once in spiga_suivi).
     public async Task SetActiveNoteAsync(string content, ChangeAuthor author)
     {
+        await OffUiThread.Switch();
         var target = await _location.WriteTargetAsync();
         var legacy = !ReferenceEquals(target, _appData);
         string? previous;
@@ -1102,6 +1164,7 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
     // while PCs still run 2.0. Audited.
     public async Task UpdateMachineNameAsync(string machineId, string machineName, ChangeAuthor author)
     {
+        await OffUiThread.Switch();
         await Access.DemandAsync(_connectionFactory, machineId);
         machineName = (machineName ?? "").Trim();
         if (machineName.Length == 0)

@@ -19,6 +19,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task<IReadOnlyList<Employee>> ListEmployeesAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var employees = (await c.QueryAsync<Employee>("SELECT Id, Matricule, FullName, IsActive FROM StaffEmployees")).ToList();
         var postings = (await c.QueryAsync<EmployeePosting>($"SELECT {PostingColumns} FROM StaffPostings")).ToLookup(p => p.EmployeeId);
@@ -29,6 +30,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task<Employee?> GetEmployeeAsync(int id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var e = await c.QuerySingleOrDefaultAsync<Employee>("SELECT Id, Matricule, FullName, IsActive FROM StaffEmployees WHERE Id = @id", new { id });
         if (e != null)
@@ -39,6 +41,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task<int> InsertEmployeeAsync(Employee employee, EmployeePosting posting)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var id = (int)await c.ExecuteScalarAsync<long>(
@@ -51,12 +54,14 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task UpdateEmployeeAsync(Employee employee)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         await c.ExecuteAsync("UPDATE StaffEmployees SET Matricule = @Matricule, FullName = @FullName, IsActive = @IsActive WHERE Id = @Id", employee);
     }
 
     public async Task SavePostingAsync(EmployeePosting posting)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("DELETE FROM StaffPostings WHERE EmployeeId = @EmployeeId AND ValidFrom = @ValidFrom",
@@ -67,12 +72,14 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task DeletePostingAsync(long id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         await c.ExecuteAsync("DELETE FROM StaffPostings WHERE Id = @id", new { id });
     }
 
     public async Task<IReadOnlyList<ProductionLine>> ListLinesAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return (await c.QueryAsync<LineRow>("SELECT Id, Name, Machines, IsActive FROM StaffLines"))
             .Select(r => new ProductionLine { Id = r.Id, Name = r.Name, IsActive = r.IsActive, Machines = DataScope.FromCsv(r.Machines).ToList() })
@@ -81,6 +88,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task<int> SaveLineAsync(ProductionLine line)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var row = new { line.Id, line.Name, Machines = DataScope.ToCsv(line.Machines), line.IsActive };
         if (line.Id == 0)
@@ -91,6 +99,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
 
     public async Task DeleteLineAsync(int id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         await c.ExecuteAsync("DELETE FROM StaffLines WHERE Id = @id", new { id });
     }
@@ -113,6 +122,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<IReadOnlyList<AttendanceSheet>> ListAsync(DateTime fromDate, DateTime toDate)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var sheets = (await c.QueryAsync<AttendanceSheet>(
             $"SELECT {SheetColumns} FROM AttendanceSheets WHERE ProductionDate >= @from AND ProductionDate <= @to",
@@ -130,6 +140,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<AttendanceSheet?> FindAsync(DateTime productionDate, int shiftId, string team)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var id = await c.ExecuteScalarAsync<long?>(
             "SELECT Id FROM AttendanceSheets WHERE ProductionDate = @date AND ShiftId = @shiftId AND Team = @team",
@@ -139,6 +150,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<AttendanceSheet?> GetAsync(long id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var sheet = await c.QuerySingleOrDefaultAsync<AttendanceSheet>($"SELECT {SheetColumns} FROM AttendanceSheets WHERE Id = @id", new { id });
         if (sheet != null)
@@ -148,6 +160,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<long> InsertAsync(AttendanceSheet s, AttendanceRevision revision)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var id = await c.ExecuteScalarAsync<long>(
@@ -163,6 +176,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<bool> UpdateAsync(AttendanceSheet s, int expectedVersion, AttendanceRevision revision)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var rows = await c.ExecuteAsync(
@@ -181,6 +195,7 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
 
     public async Task<IReadOnlyList<AttendanceRevision>> ListRevisionsAsync(long sheetId)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return (await c.QueryAsync<AttendanceRevision>(
             "SELECT Id, SheetId, Version, At, UserLogin, Action, Changes, Note FROM AttendanceRevisions WHERE SheetId = @sheetId ORDER BY Version, Id",

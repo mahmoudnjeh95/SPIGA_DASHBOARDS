@@ -41,6 +41,7 @@ public sealed class LegacyDataImporter(IDbConnectionFactory live, IDbConnectionF
     // What was copied this time, one line per table ("PlanProductionOrders : 12 lignes").
     public async Task<IReadOnlyList<string>> ImportAsync()
     {
+        await OffUiThread.Switch();
         var report = new List<string>();
         using var target = appData.CreateConnection();
         target.Open();

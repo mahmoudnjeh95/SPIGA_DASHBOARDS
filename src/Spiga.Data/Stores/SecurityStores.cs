@@ -29,6 +29,7 @@ public sealed class RoleStore(AppDb db) : IRoleStore
 
     public async Task<IReadOnlyList<Role>> ListAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var rows = await c.QueryAsync<RoleRow>(
             @"SELECT r.Id, r.Code, r.Name, r.Description, r.IsSystem, r.IsActive,
@@ -57,6 +58,7 @@ public sealed class RoleStore(AppDb db) : IRoleStore
 
     public async Task<int> InsertAsync(Role role)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var now = DateTime.Now;
@@ -70,6 +72,7 @@ public sealed class RoleStore(AppDb db) : IRoleStore
 
     public async Task UpdateAsync(Role role)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("UPDATE Roles SET Name = @Name, Description = @Description, IsActive = @IsActive, UpdatedAt = @now WHERE Id = @Id",
@@ -82,6 +85,7 @@ public sealed class RoleStore(AppDb db) : IRoleStore
 
     public async Task DeleteAsync(int id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("DELETE FROM RoleGrants WHERE RoleId = @id", new { id }, t);
@@ -144,12 +148,14 @@ public sealed class UserStore(AppDb db) : IUserStore
 
     public async Task<int> CountAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         return (int)await c.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM Users");
     }
 
     public async Task<IReadOnlyList<AppUser>> ListAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var rows = await c.QueryAsync<UserRow>(Select + " ORDER BY Login");
         var assignments = (await c.QueryAsync<AssignmentRow>(SelectAssignments + " ORDER BY ur.Id")).ToLookup(a => a.UserId);
@@ -173,6 +179,7 @@ public sealed class UserStore(AppDb db) : IUserStore
 
     public async Task<int> InsertAsync(AppUser user)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var id = (int)await c.ExecuteScalarAsync<long>(
@@ -188,6 +195,7 @@ public sealed class UserStore(AppDb db) : IUserStore
 
     public async Task UpdateAsync(AppUser user)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         await c.ExecuteAsync(
             @"UPDATE Users SET DisplayName = @DisplayName, PasswordHash = @PasswordHash, MustChangePassword = @MustChangePassword,
@@ -199,6 +207,7 @@ public sealed class UserStore(AppDb db) : IUserStore
 
     public async Task SetAssignmentsAsync(int userId, IReadOnlyList<RoleAssignment> assignments)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("DELETE FROM UserRoles WHERE UserId = @userId", new { userId }, t);
@@ -263,6 +272,7 @@ public sealed class SettingsStore(AppDb db) : ISettingsStore
 
     public async Task<T?> GetAsync<T>(string key) where T : class
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var value = await c.QuerySingleOrDefaultAsync<string>($"SELECT Value FROM AppSettings WHERE {db.Key} = @key", new { key });
         return value == null ? null : JsonSerializer.Deserialize<T>(value, Json);
@@ -270,6 +280,7 @@ public sealed class SettingsStore(AppDb db) : ISettingsStore
 
     public async Task SetAsync<T>(string key, T value, string updatedBy) where T : class
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var json = JsonSerializer.Serialize(value, Json);
@@ -300,6 +311,7 @@ public sealed class PlatformStore(AppDb db) : IPlatformStore
 
     public async Task<IReadOnlyList<Platform>> ListAsync()
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         var platforms = await LoadAsync(c);
         var used = (await c.QueryAsync<string>("SELECT ScopePlatforms FROM UserRoles WHERE ScopePlatforms <> ''"))
@@ -313,6 +325,7 @@ public sealed class PlatformStore(AppDb db) : IPlatformStore
 
     public async Task<int> InsertAsync(Platform platform)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var now = DateTime.Now;
@@ -326,6 +339,7 @@ public sealed class PlatformStore(AppDb db) : IPlatformStore
 
     public async Task UpdateAsync(Platform platform)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("UPDATE Platforms SET Name = @Name, Description = @Description, IsActive = @IsActive, UpdatedAt = @now WHERE Id = @Id",
@@ -337,6 +351,7 @@ public sealed class PlatformStore(AppDb db) : IPlatformStore
 
     public async Task DeleteAsync(int id)
     {
+        await OffUiThread.Switch();
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         await c.ExecuteAsync("DELETE FROM PlatformMachines WHERE PlatformId = @id", new { id }, t);

@@ -50,6 +50,7 @@ public sealed class PlantDataLocation(IDbConnectionFactory appData, IDbConnectio
 
     public async Task<PlantDataMode> ModeAsync()
     {
+        await OffUiThread.Switch();
         if (_mode is { } cached && DateTime.UtcNow - _readAt < CacheDuration)
             return cached;
         var mode = (await ReadAsync(appData))?.Mode ?? await DecideAsync();
@@ -75,6 +76,7 @@ public sealed class PlantDataLocation(IDbConnectionFactory appData, IDbConnectio
 
     public static async Task<State?> ReadAsync(IDbConnectionFactory appData)
     {
+        await OffUiThread.Switch();
         using var connection = appData.CreateConnection();
         var json = await connection.QuerySingleOrDefaultAsync<string?>(
             $"SELECT Value FROM AppSettings WHERE {Key(appData)} = @key", new { key = SettingKey });
@@ -83,6 +85,7 @@ public sealed class PlantDataLocation(IDbConnectionFactory appData, IDbConnectio
 
     public static async Task WriteAsync(IDbConnectionFactory appData, PlantDataMode mode, string by)
     {
+        await OffUiThread.Switch();
         using var connection = appData.CreateConnection();
         var args = new
         {
@@ -121,6 +124,7 @@ public sealed class PlantDataLocation(IDbConnectionFactory appData, IDbConnectio
     public static async Task<IReadOnlyList<string>> SwitchToApplicationAsync(
         IDbConnectionFactory appData, IDbConnectionFactory live, string by, Action<string>? progress = null, TimeSpan? pause = null)
     {
+        await OffUiThread.Switch();
         if ((await ReadAsync(appData))?.Mode == PlantDataMode.Application)
             return new[] { "Déjà dans la base de l'application." };
         await WriteAsync(appData, PlantDataMode.Switching, by);

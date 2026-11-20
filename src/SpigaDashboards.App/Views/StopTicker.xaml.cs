@@ -115,6 +115,15 @@ public partial class StopTicker : UserControl
         Glow.Color = (BarColor as SolidColorBrush)?.Color ?? Colors.Red;
         var period = TimeSpan.FromMilliseconds(650);
         var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+        // Software rendering: a still glow, only the icon blinks (the
+        // animated blur over the whole bar was redrawn by the CPU).
+        if (Services.RenderBudget.IsSoftware)
+        {
+            Glow.BlurRadius = 14;
+            Icon.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(1, 0.2, period) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            return;
+        }
         Glow.BeginAnimation(DropShadowEffect.BlurRadiusProperty,
             new DoubleAnimation(4, 30, period) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease });
         Shine.BeginAnimation(OpacityProperty,

@@ -36,6 +36,7 @@ public class SharedSettingsRepository
     // 0 = nothing shared yet.
     public async Task<int> GetVersionAsync()
     {
+        await OffUiThread.Switch();
         await EnsureSchemaAsync();
         using var connection = (await _location.ReadTargetAsync()).CreateConnection();
         return await connection.ExecuteScalarAsync<int?>("SELECT Version FROM AppSharedSettings WHERE Id = 1") ?? 0;
@@ -43,6 +44,7 @@ public class SharedSettingsRepository
 
     public async Task<SharedSettingsRow?> GetAsync()
     {
+        await OffUiThread.Switch();
         await EnsureSchemaAsync();
         using var connection = (await _location.ReadTargetAsync()).CreateConnection();
         return await connection.QuerySingleOrDefaultAsync<SharedSettingsRow>(
@@ -53,6 +55,7 @@ public class SharedSettingsRepository
     // another PC saved in between (or created the first row at the same time).
     public async Task<int?> SaveAsync(string json, int expectedVersion, string updatedBy)
     {
+        await OffUiThread.Switch();
         await EnsureSchemaAsync();
         using var connection = (await _location.WriteTargetAsync()).CreateConnection();
         var args = new { json, expectedVersion, updatedAt = DateTime.Now, updatedBy };
