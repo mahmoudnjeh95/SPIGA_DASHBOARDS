@@ -99,7 +99,6 @@
         Nav.LocationChanged += OnLocationChanged;
         Session.Changed += OnSessionChanged;
         Desktop.UserActivity += Session.Touch;
-        Desktop.NativeClosed += OnNativeClosed;
         Desktop.NavigateRequested += OnNavigateRequested;
         if (CurrentNative == null)
             _lastWebRoute = CurrentPath;
@@ -108,8 +107,8 @@
 
     private string CurrentPath => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
 
-    // A WPF page (dashboard, arrêts, planification, paramètres): in the
-    // Windows application the window shows the rail here and the page beside it.
+    // The WPF page (the dashboard): in the Windows application the window
+    // shows the rail here and the page beside it.
     private NativePage? CurrentNative
         => Desktop.IsAvailable && NativePages.FromRoute(CurrentPath) is { } page && NativePages.IsWpf(page)
            && NativePages.IsAllowed(Session.Actor, page)
@@ -124,13 +123,6 @@
         var page = CurrentNative;
         Desktop.ShowNative(page, page is { } p && Session.Actor is { } actor ? NativePages.Access(actor, p) : NativeAccess.None);
     }
-
-    private void OnNativeClosed(NativePage page)
-        => _ = InvokeAsync(() =>
-        {
-            if (CurrentNative == page)
-                Nav.NavigateTo(_lastWebRoute);
-        });
 
     private void OnNavigateRequested(NativePage page)
         => _ = InvokeAsync(() =>
@@ -220,7 +212,6 @@
         Nav.LocationChanged -= OnLocationChanged;
         Session.Changed -= OnSessionChanged;
         Desktop.UserActivity -= Session.Touch;
-        Desktop.NativeClosed -= OnNativeClosed;
         Desktop.NavigateRequested -= OnNavigateRequested;
     }
 }

@@ -1,6 +1,6 @@
-<!-- Arrêts de production: shown in the main window of SPIGA Suivi Production
-     (Maintenance > Arrêts) and, in kiosk mode, in StopsWindow. It was
-     StopsWindow's content until v1.5.26. -->
+<!-- Arrêts de production of the kiosk PCs (no sign-in), in StopsWindow.
+     Signed-in accounts use the Razor page Maintenance > Arrêts (StopListService),
+     in a browser and in the desktop window alike. -->
 <UserControl x:Class="SpigaDashboards.App.StopsView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

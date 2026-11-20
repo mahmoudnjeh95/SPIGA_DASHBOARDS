@@ -38,10 +38,4 @@ public partial class ShellWindow : Window
         DashboardColumn.Width = new GridLength(0);
         DashboardHost.Visibility = Visibility.Collapsed;
     }
-
-    public void RemoveNative(FrameworkElement view)
-    {
-        if (ReferenceEquals(DashboardHost.Child, view))
-            DashboardHost.Child = null;
-    }
 }

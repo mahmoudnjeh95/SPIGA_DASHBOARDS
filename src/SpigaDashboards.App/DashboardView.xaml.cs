@@ -5,7 +5,6 @@ using SpigaDashboards.App.Data;
 using SpigaDashboards.App.Models;
 using SpigaDashboards.App.Services;
 using SpigaDashboards.App.ViewModels;
-using SpigaDashboards.App.ViewModels.Planning;
 
 namespace SpigaDashboards.App;
 
@@ -156,13 +155,6 @@ public partial class DashboardView : UserControl
         stops.CanExport = canExport;
         return stops;
     }
-
-    // canValidate: « Valider les interventions » (maintenance done).
-    // author: who plans and qualifies, written in the audit trail.
-    public PlanningViewModel CreatePlanningViewModel(MachineAccess access, bool canValidate, ChangeAuthor author)
-        => new(new PlanningContext(new ProductionRepository(_activeFactory, _appData, _settings, access),
-            new PlanningRepository(_appData, _activeFactory, access) { Author = author },
-            _settings, _settingsService, new TeamScheduleService(_settings)) { CanValidate = canValidate });
 
     // The machines this dashboard shows (and its Historique, Arrêts).
     public MachineAccess Access => _repository.Access;

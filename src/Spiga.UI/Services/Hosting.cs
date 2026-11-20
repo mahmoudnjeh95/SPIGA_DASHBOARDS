@@ -129,7 +129,6 @@ public interface IDesktopBridge
     // "Planifier un préventif" (Statistiques des arrêts): the planning board
     // opens on the preventive rule form for this line and component.
     // access: the account's rights on the planning page.
-    void PlanPreventive(NativeAccess access, string machineId, string component);
 
     // What only this PC has in its Paramètres (database connection, display,
     // stop alert): null in a browser.
@@ -141,11 +140,7 @@ public interface IDesktopBridge
     // Clicks and keys in a WPF page (not seen by the Razor screens).
     event Action? UserActivity;
 
-    // A page was closed with its own button (Fermer, Enregistrer, Annuler).
-    event Action<NativePage>? NativeClosed;
-
-    // The dashboard's own Arrêts / Paramètres buttons, and the links between
-    // the stop follow-up pages ("Qualifier →", "Planifier un préventif").
+    // The dashboard's own Arrêts / Paramètres buttons.
     event Action<NativePage>? NavigateRequested;
 }
 
@@ -171,11 +166,9 @@ public sealed class NoDesktop : IDesktopBridge
     public void ShowNative(NativePage? page, NativeAccess access) { }
     public void DiscardNativePages() { }
     public void OpenTvScreen() { }
-    public void PlanPreventive(NativeAccess access, string machineId, string component) { }
     public IStationHost? Station => null;
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }
-    public event Action<NativePage>? NativeClosed { add { } remove { } }
     public event Action<NativePage>? NavigateRequested { add { } remove { } }
 }
 
