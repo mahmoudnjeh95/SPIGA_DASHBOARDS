@@ -79,7 +79,7 @@ else
             }
         </div>
         <span class="sp"></span>
-        <button type="button" class="bar" @onclick="LoadAsync" disabled="@_loading">Actualiser</button>
+        <button type="button" class="bar" @onclick="RefreshAsync" disabled="@_loading">Actualiser</button>
         @if (CanExport)
         {
             <button type="button" class="bar acc" @onclick="SheetAsync" disabled="@(_loading || _shown.Count == 0)"
@@ -111,7 +111,7 @@ else
                          Sub="@($"{list.Stops.Count} arrêt{(list.Stops.Count > 1 ? "s" : "")} · hors pauses")" />
                 @foreach (var t in list.Teams)
                 {
-                    <KpiTile Label="@t.Team" Value="@t.TotalText" Sub="@($"{t.Count} arrêt{(t.Count > 1 ? "s" : "")} · hors « Sans données » : {t.StopText}")" />
+                    <KpiTile Label="@t.Team" Value="@t.TotalText" Sub="@($"{t.Count} arrêt{(t.Count > 1 ? "s" : "")} · hors « Sans données » : {Nb(t.StopText)}")" />
                 }
             </div>
 
@@ -137,6 +137,10 @@ else
     private int _version;
     private List<Machine> _machines = new();
     private StopList? _list;
+    // What was read for the days and line shown, every poste and team: a new
+    // poste or team narrows it without reading the production database again.
+    private (DateTime From, DateTime To, string? Machine)? _readFor;
+    private StopList? _read;
     private IReadOnlyList<ProductionStop> _shown = Array.Empty<ProductionStop>();
 
     private bool CanExport => NativePages.Access(Actor, NativePage.Stops).CanExport;
@@ -173,23 +177,40 @@ else
 
     private StopsFilter Filter => new(_from, _to, _machine, _shift, _team);
 
+    // Actualiser: read again even if the days and line did not change.
+    private Task RefreshAsync()
+    {
+        _readFor = null;
+        return LoadAsync();
+    }
+
     private async Task LoadAsync()
     {
         var version = ++_version;
         var filter = Filter;
         Ui.Stops = filter;
         Error = Info = null;
+        var key = (_from, _to, _machine);
+        if (_readFor == key && _read != null)
+        {
+            _list = StopListService.Narrow(_read, Actor, filter);
+            _shown = _list.Stops;
+            _loading = false; // a read still running for other days is dropped (version)
+            return;
+        }
         _loading = true;
         try
         {
             StopList? list = null;
             var actor = Actor;
             // Off the UI thread: detection over many days takes a moment.
-            var ok = await Run(async () => list = await Task.Run(() => Arrets.SearchAsync(actor, filter)));
+            var all = filter with { ShiftId = null, Team = null };
+            var ok = await Run(async () => list = await Task.Run(() => Arrets.SearchAsync(actor, all)));
             if (version == _version && ok && list != null)
             {
-                _list = list;
-                _shown = list.Stops;
+                (_readFor, _read) = (key, list);
+                _list = StopListService.Narrow(list, Actor, Filter);
+                _shown = _list.Stops;
             }
         }
         catch (Exception ex)
@@ -277,6 +298,9 @@ else
                + (_shift is { } s ? " · poste " + Shifts.Label(s) : "")
                + (StopListService.TeamFor(Actor, _team) is { } team ? " · " + team : "");
     }
+
+    // "14 h 24" kept on one line.
+    private static string Nb(string text) => text.Replace(' ', (char)0xA0);
 
     private static string FamilyCss(CauseFamily family) => family switch
     {

@@ -73,10 +73,21 @@ public sealed class StopListService(
             error = "Base de production injoignable : seuls les arrêts saisis dans Qualification des arrêts sont listés. " + ex.Message;
         }
         var stops = StopMatching.WithQualifications(detected, await QualificationsAsync(planning, names, from, to), names, from, to)
+            .Where(s => team == null || s.Team == team)
+            .ToList();
+        return Narrow(new StopList(stops, TeamStopTotal.Of(stops), from, to, error), actor, filter);
+    }
+
+    // The poste and team of the filter applied to a list already read (the
+    // page changes them without reading the production database again).
+    public static StopList Narrow(StopList list, Actor actor, StopsFilter filter)
+    {
+        var team = TeamFor(actor, filter.Team);
+        var stops = list.Stops
             .Where(s => filter.ShiftId == null || s.ShiftId == filter.ShiftId)
             .Where(s => team == null || s.Team == team)
             .ToList();
-        return new StopList(stops, TeamStopTotal.Of(stops), from, to, error);
+        return list with { Stops = stops, Teams = TeamStopTotal.Of(stops) };
     }
 
     // The sheet of the stops shown, one page per poste and team.

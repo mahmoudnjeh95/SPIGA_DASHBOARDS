@@ -209,6 +209,9 @@ public class WebMigrationTests
         Assert.Equal(new[] { "CC01", "CC01", "PC01" }, all.Stops.Select(s => s.MachineId).Order());
         Assert.Equal(90, all.NetMinutes);
         Assert.Equal(new[] { "CC01" }, (await service.SearchAsync(admin, new StopsFilter(today, today, ShiftId: 2))).Stops.Select(s => s.MachineId));
+        // The page narrows what it read to a poste or a team without reading again.
+        var afternoon = StopListService.Narrow(all, admin, new StopsFilter(today, today, ShiftId: 2));
+        Assert.Equal(("CC01", 40.0), (Assert.Single(afternoon.Stops).MachineId, Assert.Single(afternoon.Teams).TotalMinutes));
 
         // The couscous lines, the account's team only, whatever team is asked for.
         Assert.Equal(new[] { "CC01" }, (await service.MachinesAsync(chef)).Select(m => m.MachineId));
