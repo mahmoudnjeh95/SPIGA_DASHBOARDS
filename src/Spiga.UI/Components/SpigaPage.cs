@@ -22,6 +22,10 @@ public abstract class SpigaPage : ComponentBase
     {
         Error = null;
         Info = null;
+        // Signed out (or locked) while the page was still loading: nothing
+        // to load any more, and no error to show to the next person.
+        if (Session.Actor == null)
+            return false;
         try
         {
             await action();
@@ -31,6 +35,10 @@ public abstract class SpigaPage : ComponentBase
         catch (Exception ex) when (ex is RuleViolationException or AccessDeniedException)
         {
             Error = ex.Message;
+            return false;
+        }
+        catch (Exception) when (Session.Actor == null)
+        {
             return false;
         }
     }

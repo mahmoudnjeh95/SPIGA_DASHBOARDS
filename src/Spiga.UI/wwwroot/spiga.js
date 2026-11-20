@@ -141,3 +141,17 @@
         b.__spRipple = setTimeout(function () { b.removeAttribute("data-ripple"); }, 650);
     }, { passive: true });
 })();
+
+// ---------- file export and printing (called by the screens) ----------
+// A file built by the screen (CSV...), handed to the browser / WebView2
+// download (the desktop app asks where to save it).
+window.spigaDownload = function (name, mime, base64) {
+    var bytes = atob(base64), buf = new Uint8Array(bytes.length);
+    for (var i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([buf], { type: mime }));
+    var a = document.createElement("a");
+    a.href = url; a.download = name; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
+};
+window.spigaPrint = function () { window.print(); };

@@ -25,7 +25,6 @@ public sealed class SourceStatusService(PlantData plant, AppDb appDb, TimeProvid
         list.Add(new SourceStatus("Banderoleuse", "Quantité de produit fini", SourceState.NotConfigured, AwaitingAccess, null));
         list.Add(new SourceStatus("Base Qualité", "Humidité par produit et ligne", SourceState.NotConfigured, AwaitingAccess, null));
         list.Add(new SourceStatus("GMAO / maintenance", "Pièces, consommables, OT, préventif", SourceState.NotConfigured, AwaitingAccess, null));
-        list.Add(new SourceStatus("Base RH", "Taux d'absence", SourceState.NotConfigured, AwaitingAccess, null));
         list.Add(new SourceStatus("Compteurs énergie et vapeur", "kWh / t, vapeur / t", SourceState.NotConfigured,
             "Compteurs à identifier ; à défaut, relevés manuels (module Saisie).", null));
         return list;

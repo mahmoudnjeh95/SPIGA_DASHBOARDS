@@ -1,0 +1,814 @@
+@page "/saisie/pointage"
+@inherits SpigaPage
+@inject AttendanceService Attendance
+@inject StaffService Staff
+@inject PlantData Plant
+
+@* The chef de conditionnement's pointage: his team's sheet of a poste of
+   yesterday or today. Each row comes with the poste's hours: one tap on ✓
+   confirms it, or he changes the hours, or he picks an absence code. Only
+   valid values can be chosen (hours from lists, 5-minute steps, inside the
+   poste); what is still missing is listed above the buttons. *@
+<RequireAccess Module="@Modules.Pointage">
+    <div class="head">
+        <div>
+            <span class="pre">Saisie</span><h1>Pointage</h1>
+            <p>
+                Une ligne par personne, avec les heures du poste. Pour chacun : <b>✓ Présent</b> si les heures sont bonnes, sinon changez l'heure,
+                ou choisissez l'absence (A, M, AT, C). Puis <b>Valider le pointage</b>.
+            </p>
+        </div>
+        <a class="bar no-print" href="@($"saisie/pointage/feuille?date={_date:yyyy-MM-dd}")">@Icons.Svg("print")Feuille papier</a>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Jour</span>
+            <div class="segs" role="group" aria-label="Jour">
+                @foreach (var (label, day) in Days())
+                {
+                    <button type="button" class="seg @(_date == day ? "on" : "")" @onclick="() => AskSwitch(day, null)">@label</button>
+                }
+            </div>
+        </div>
+        @if (Attendance.CanSeeOld(Actor))
+        {
+            <div class="f">
+                <label for="pt-date">Autre date</label>
+                <input id="pt-date" type="date" value="@_date.ToString("yyyy-MM-dd")" max="@Attendance.Today.ToString("yyyy-MM-dd")" @onchange="OnDate" />
+            </div>
+        }
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                @foreach (var (s, team) in Attendance.PostesOn(Actor, _date))
+                {
+                    <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => AskSwitch(_date, s)">
+                        @Shifts.Label(s) <span style="font-weight:400">@Shifts.Hours(s) · @team</span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (_switchTo is { } sw)
+    {
+        <div class="notice warn" role="alert">
+            Vous avez des changements non enregistrés sur cette feuille.
+            <button type="button" class="bar small acc" @onclick="SaveThenSwitchAsync">Enregistrer puis changer</button>
+            <button type="button" class="bar small" @onclick="() => SwitchAsync(sw.Date, sw.Shift)">Abandonner les changements</button>
+            <button type="button" class="link" @onclick="() => _switchTo = null">Rester ici</button>
+        </div>
+    }
+
+    @if (_missing.Count > 0)
+    {
+        <div class="notice warn pt-missing" role="status">
+            <b>@_missing.Count poste(s) non pointé(s) :</b>
+            @foreach (var m in _missing.Take(_allMissing ? 99 : 4))
+            {
+                <button type="button" class="chip warn" @onclick="() => AskSwitch(m.Date, m.ShiftId)">
+                    @Shifts.Label(m.ShiftId) @m.Date.ToString("dd/MM") · @m.Team@(m.Status == SheetStatus.Brouillon ? " · commencé" : "")
+                </button>
+            }
+            @if (_missing.Count > 4)
+            {
+                <button type="button" class="link" @onclick="() => _allMissing = !_allMissing">@(_allMissing ? "moins" : $"+ {_missing.Count - 4} autres")</button>
+            }
+        </div>
+    }
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_shift == 0)
+    {
+        <div class="card"><p class="empty">Aucun poste de votre équipe à pointer ce jour-là.</p></div>
+    }
+    else if (_sheet == null)
+    {
+        <Loader Text="Chargement de la feuille…" />
+    }
+    else
+    {
+        var s = _sheet;
+        var editable = Editable;
+        var problems = AttendanceService.Problems(s, validating: false);
+        var uncovered = AttendanceService.Uncovered(s).ToDictionary(u => u.Line.EmployeeId);
+
+        <section class="card pt-card">
+
+            @if (s.Lines.Count == 0)
+            {
+                <p class="empty">Aucun employé n'est affecté à @s.Team. L'équipe se compose dans Administration › Personnel et lignes.</p>
+            }
+            else
+            {
+                var counts = (All: s.Lines.Count, Pending: s.Lines.Count(l => l.Status == LineStatus.AConfirmer || problems.Any(p => p.EmployeeId == l.EmployeeId)),
+                    Absent: s.Lines.Count(l => l.Status == LineStatus.Absent), Exceptions: s.Lines.Count(l => IsException(s, l)));
+                <div class="pt-tools">
+                    <div class="segs" role="group" aria-label="Afficher">
+                        <button type="button" class="seg @(_show == 0 ? "on" : "")" @onclick="() => _show = 0">Tous (@counts.All)</button>
+                        <button type="button" class="seg @(_show == 1 ? "on" : "")" @onclick="() => _show = 1">À confirmer (@counts.Pending)</button>
+                        <button type="button" class="seg @(_show == 2 ? "on" : "")" @onclick="() => _show = 2">Absents (@counts.Absent)</button>
+                        <button type="button" class="seg @(_show == 3 ? "on" : "")" @onclick="() => _show = 3"
+                                title="Absents, retards, départs, heures sup., renforts, remplacements">Exceptions (@counts.Exceptions)</button>
+                    </div>
+                    <span class="sp"></span>
+                    @if (s.IsNew)
+                    {
+                        <span class="chip warn">Pas encore enregistrée</span>
+                    }
+                    else if (s.Status == SheetStatus.Brouillon)
+                    {
+                        <span class="chip warn" title="Enregistrée par @s.CreatedBy">Brouillon, à valider</span>
+                    }
+                    else
+                    {
+                        <span class="chip ok">Validée par @s.ValidatedBy, @Fmt.Date(s.ValidatedAt)</span>
+                    }
+                    @if (_dirty)
+                    {
+                        <span class="chip bad">Changements non enregistrés</span>
+                    }
+                </div>
+                <div class="scroll">
+                    <table class="t pt">
+                        <thead>
+                            <tr><th>Nom et prénom</th><th>Présence</th><th>Heures</th><th>Poste tenu</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (title, group) in Groups(s))
+                            {
+                                var shownLines = group.Where(l => Visible(s, l, problems)).ToList();
+                                if (shownLines.Count == 0)
+                                    continue;
+                                var pending = group.Where(l => l.Status == LineStatus.AConfirmer).ToList();
+                                <tr class="pt-group">
+                                    <td colspan="4">
+                                        <b>@title</b>
+                                        <small>@group.Count personne(s)@(pending.Count > 0 ? $" · {pending.Count} à confirmer" : "")</small>
+                                        @if (editable && pending.Count > 0)
+                                        {
+                                            <button type="button" class="pt-ok pt-all" title="Présents aux heures du poste : vérifiez d'abord les absents et les retards"
+                                                    @onclick="() => ConfirmGroup(pending)">✓ Tous présents (@pending.Count)</button>
+                                        }
+                                    </td>
+                                </tr>
+                                @foreach (var l in shownLines)
+                                {
+                                    var rowProblems = problems.Where(p => p.EmployeeId == l.EmployeeId).ToList();
+                                    <tr class="pt-@(l.Status.ToString().ToLowerInvariant()) @(rowProblems.Count > 0 ? "pt-bad" : "")">
+                                        <td>
+                                            @l.FullName
+                                            @if (l.IsRenfort)
+                                            {
+                                                <small>@StaffFunctions.Short(l.Function) · <span class="chip acc">Renfort · @l.HomeTeam</span></small>
+                                            }
+                                            @if (l.Status != LineStatus.Ailleurs)
+                                            {
+                                                @foreach (var (os, ol) in AwayOf(l))
+                                                {
+                                                    <small class="pt-away-note">Aussi en renfort : @AwayText(os, ol)</small>
+                                                }
+                                            }
+                                        </td>
+                                        <td class="nowrap">
+                                            @if (l.Status == LineStatus.Ailleurs)
+                                            {
+                                                <span class="chip acc">Renfort · @(AwayOf(l).FirstOrDefault().Sheet?.Team ?? "autre équipe")</span>
+                                            }
+                                            else if (editable)
+                                            {
+                                                <button type="button" class="pt-ok @(l.Status == LineStatus.Present ? "on" : "")" title="Présent aux heures indiquées"
+                                                        @onclick="() => SetPresent(l)">✓ Présent</button>
+                                                <select class="pt-abs @(l.Status == LineStatus.Absent ? "on" : "")" aria-label="Absence de @l.FullName"
+                                                        value="@(l.Status == LineStatus.Absent ? l.Absence?.ToString() : "")" @onchange="e => SetAbsent(l, e.Value?.ToString())">
+                                                    <option value="">Absence…</option>
+                                                    @foreach (var c in AbsenceCodes.All)
+                                                    {
+                                                        <option value="@c">@c · @AbsenceCodes.Label(c)</option>
+                                                    }
+                                                </select>
+                                                @if (l.IsRenfort)
+                                                {
+                                                    <button type="button" class="link danger" @onclick="() => Remove(l)">Retirer</button>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="chip @(l.Status == LineStatus.Present ? "ok" : l.Status == LineStatus.Absent ? "bad" : "warn")">
+                                                    @(l.Status == LineStatus.Absent && l.Absence is { } a ? $"{a} · {AbsenceCodes.Label(a)}" : l.Status == LineStatus.Present ? "Présent" : "À confirmer")
+                                                </span>
+                                            }
+                                        </td>
+                                        @if (l.Status == LineStatus.Ailleurs)
+                                        {
+                                            var away = AwayOf(l).FirstOrDefault();
+                                            <td colspan="2" class="pt-away">
+                                                @if (away.Sheet != null)
+                                                {
+                                                    <b>@away.Sheet.Team</b>
+                                                    <span>@Shifts.Label(away.Sheet.ShiftId) du @away.Sheet.ProductionDate.ToString("dd/MM")</span>
+                                                    <span>@away.Line.EntryAt?.ToString("HH:mm") – @away.Line.ExitAt?.ToString("HH:mm")</span>
+                                                    <span>@PostHeld(away.Line)</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Pointé dans une autre équipe sur ces heures.</span>
+                                                }
+                                            </td>
+                                        }
+                                        else
+                                        {
+                                            <td class="nowrap">
+                                                @if (l.Status is LineStatus.Present or LineStatus.AConfirmer)
+                                                {
+                                                    @if (editable && _editTimes == l.EmployeeId)
+                                                    {
+                                                        <div class="pt-times">
+                                                            <TimePicker Label="Entrée" Value="l.EntryAt" ValueChanged="t => SetEntry(l, t)"
+                                                                        Min="AttendanceService.Earliest(s)" Max="AttendanceService.Latest(s)" />
+                                                            <b>→</b>
+                                                            <TimePicker Label="Sortie" Value="l.ExitAt" ValueChanged="t => SetExit(l, t)"
+                                                                        Min="AttendanceService.Earliest(s)" Max="AttendanceService.Latest(s)" />
+                                                            <button type="button" class="bar small" @onclick="() => _editTimes = null">OK</button>
+                                                        </div>
+                                                    }
+                                                    else if (editable)
+                                                    {
+                                                        <button type="button" class="pt-hours @(l.EntryAt != s.Start || l.ExitAt != s.End ? "chg" : "")"
+                                                                title="Changer l'heure d'entrée ou de sortie" @onclick="() => _editTimes = l.EmployeeId">
+                                                            @l.EntryAt?.ToString("HH:mm") – @l.ExitAt?.ToString("HH:mm") <span aria-hidden="true">✎</span>
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="pt-hours-ro @(l.EntryAt != s.Start || l.ExitAt != s.End ? "chg" : "")">@l.EntryAt?.ToString("HH:mm") – @l.ExitAt?.ToString("HH:mm")</span>
+                                                    }
+                                                    @if (l.EntryAt > s.Start)
+                                                    {
+                                                        <small class="warn-t">retard @Hours((l.EntryAt.Value - s.Start).TotalMinutes)</small>
+                                                    }
+                                                    @if (l.ExitAt < s.End)
+                                                    {
+                                                        <small class="warn-t">parti @Hours((s.End - l.ExitAt.Value).TotalMinutes) avant la fin</small>
+                                                    }
+                                                    else if (l.ExitAt > s.End)
+                                                    {
+                                                        <small>@Hours((l.ExitAt.Value - s.End).TotalMinutes) en heures sup.</small>
+                                                    }
+                                                }
+                                            </td>
+                                            <td>
+                                                @PostCell(l, editable)
+                                                @if (uncovered.ContainsKey(l.EmployeeId))
+                                                {
+                                                    <div class="pt-warn">
+                                                        ⚠ @StaffFunctions.Short(l.Function) sur @PostName(l) : personne à ce poste
+                                                        @if (editable)
+                                                        {
+                                                            <button type="button" class="bar small" @onclick="() => OpenAssign(l)">Affecter…</button>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (_assignFor == l.EmployeeId)
+                                                {
+                                                    @AssignPanel(l)
+                                                }
+                                                @foreach (var p in rowProblems)
+                                                {
+                                                    <small class="bad-t">@p.Message</small>
+                                                }
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @if (editable)
+            {
+                <div class="pt-add">
+                    <div class="f">
+                        <label for="pt-renfort">Ajouter un renfort (autre équipe)</label>
+                        <select id="pt-renfort" @bind="_renfort">
+                            <option value="0">Choisir une personne…</option>
+                            @foreach (var team in _candidates.GroupBy(c => c.Posting.Team))
+                            {
+                                <optgroup label="@team.Key">
+                                    @foreach (var c in team)
+                                    {
+                                        <option value="@c.Employee.Id">@c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <button type="button" class="bar" disabled="@(_renfort == 0)" @onclick="AddRenfortAsync">Ajouter</button>
+                </div>
+            }
+
+            @if (editable || CanCorrectNow)
+            {
+                var blocking = AttendanceService.Problems(s, validating: true);
+                <div class="savebar pt-save">
+                    @if (_correcting)
+                    {
+                        <div class="f" style="flex:1 1 320px">
+                            <label for="pt-reason">Motif de la correction (obligatoire)</label>
+                            <input id="pt-reason" maxlength="300" placeholder="ex. retard oublié, mauvaise heure de sortie" @bind="_reason" @bind:event="oninput" />
+                        </div>
+                    }
+                    @if (editable && blocking.Count > 0)
+                    {
+                        <div class="pt-todo">
+                            <b>Encore @blocking.Count point(s) avant de valider</b>
+                            <button type="button" class="link" @onclick="() => _show = 1">Afficher seulement ces lignes</button>
+                        </div>
+                    }
+                    else if (editable && !_correcting && !Attendance.CanValidateNow(s))
+                    {
+                        <div class="pt-todo">
+                            <b>Validation à partir de @Attendance.ValidationOpensAt(s).ToString("HH:mm")</b>
+                            <small>en fin de poste ; d'ici là, enregistrez la feuille</small>
+                        </div>
+                    }
+                    <span class="sp"></span>
+                    @if (!editable)
+                    {
+                        <button type="button" class="bar" @onclick="StartCorrection">Corriger ce pointage</button>
+                    }
+                    else if (_correcting)
+                    {
+                        <button type="button" class="bar" @onclick="CancelCorrectionAsync">Annuler</button>
+                        <button type="button" class="bar acc" disabled="@(blocking.Count > 0 || string.IsNullOrWhiteSpace(_reason))" @onclick="() => SaveAsync(false)">
+                            Enregistrer la correction
+                        </button>
+                    }
+                    else if (_confirm)
+                    {
+                        <div class="pt-confirm">
+                            <b>Valider le pointage ?</b> @s.Summary().
+                            @if (uncovered.Count > 0)
+                            {
+                                <span class="warn-t">@uncovered.Count poste(s) sans personne.</span>
+                            }
+                        </div>
+                        <button type="button" class="bar" @onclick="() => _confirm = false">Retour</button>
+                        <button type="button" class="bar acc" @onclick="() => SaveAsync(true)">Confirmer</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="bar" disabled="@(!_dirty && !s.IsNew)" @onclick="() => SaveAsync(false)"
+                                title="Garde la feuille en brouillon : vous la terminerez plus tard">Enregistrer</button>
+                        <button type="button" class="bar acc" disabled="@(blocking.Count > 0 || !Attendance.CanValidateNow(s))" @onclick="() => _confirm = true">Valider le pointage</button>
+                    }
+                </div>
+            }
+        </section>
+
+        @if (_history.Count > 0)
+        {
+            <section class="card">
+                <div class="card-head"><h2>Historique de la feuille <small>chaque enregistrement, avec ce qui a changé</small></h2></div>
+                <table class="t">
+                    <thead><tr><th>Version</th><th>Quand · qui</th><th>Action</th><th>Changements</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _history.OrderByDescending(r => r.Version))
+                        {
+                            <tr>
+                                <td class="n">v@(r.Version)</td>
+                                <td class="n nowrap">@Fmt.Date(r.At)<small>@r.UserLogin</small></td>
+                                <td class="n">@r.Action @if (!string.IsNullOrEmpty(r.Note)) { <small>Motif : « @r.Note »</small> }</td>
+                                <td class="wrap">@r.Changes</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+    }
+</RequireAccess>
+
+@code {
+    private DateTime _date;
+    private int _shift;
+    private AttendanceSheet? _sheet;
+    private bool _dirty;
+    private bool _confirm;
+    private bool _correcting;
+    private string _reason = "";
+    private int _renfort;
+    private (DateTime Date, int? Shift)? _switchTo;
+    private IReadOnlyList<(Employee Employee, EmployeePosting Posting)> _candidates = Array.Empty<(Employee, EmployeePosting)>();
+    private IReadOnlyList<AttendanceRevision> _history = Array.Empty<AttendanceRevision>();
+    private IReadOnlyList<(AttendanceSheet Sheet, AttendanceLine Line)> _away = Array.Empty<(AttendanceSheet, AttendanceLine)>();
+    private IReadOnlyList<(DateTime Date, int ShiftId, string Team, SheetStatus? Status)> _missing = Array.Empty<(DateTime, int, string, SheetStatus?)>();
+    private Dictionary<int, ProductionLine> _lines = new();
+    private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+
+    // Temporary assignment being chosen: whose post, by whom, from when.
+    private int? _assignFor;
+
+    // 0 all, 1 to confirm (or with a problem), 2 absents, 3 exceptions.
+    private int _show;
+    private bool _allMissing;
+    // The row whose hours are being changed (the pickers show for it only).
+    private int? _editTimes;
+    private int _assignWho;
+    private DateTime? _assignFrom;
+
+    private bool Editable => _sheet != null && (_correcting ? Attendance.CanCorrect(Actor, _sheet) : Attendance.CanEnter(Actor, _sheet));
+
+    private bool CanCorrectNow => _sheet != null && Attendance.CanCorrect(Actor, _sheet);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.Can(Perm.PointageVoir))
+            return;
+        await Run(async () =>
+        {
+            _machines = await Plant.GetMachinesAsync();
+            _lines = (await Staff.LinesAsync(Actor)).ToDictionary(l => l.Id);
+        });
+        var start = Attendance.DefaultPoste(Actor);
+        _date = start?.Date ?? Attendance.Today;
+        _shift = start?.ShiftId ?? 0;
+        await LoadAsync();
+    }
+
+    private IEnumerable<(string, DateTime)> Days()
+    {
+        yield return ("Aujourd'hui", Attendance.Today);
+        yield return ("Hier", Attendance.Today.AddDays(-1));
+        if (_date < Attendance.Today.AddDays(-1))
+            yield return (_date.ToString("dd/MM/yyyy"), _date);
+    }
+
+    private void AskSwitch(DateTime date, int? shift)
+    {
+        if (_dirty)
+            _switchTo = (date, shift);
+        else
+            _ = SwitchAsync(date, shift);
+    }
+
+    private async Task SaveThenSwitchAsync()
+    {
+        var target = _switchTo;
+        _switchTo = null;
+        if (await SaveAsync(false) && target is { } t)
+            await SwitchAsync(t.Date, t.Shift);
+    }
+
+    private async Task SwitchAsync(DateTime date, int? shift)
+    {
+        _switchTo = null;
+        _date = date.Date;
+        var postes = Attendance.PostesOn(Actor, _date);
+        _shift = shift is { } s && postes.Any(p => p.ShiftId == s) ? s : postes.Count > 0 ? postes[^1].ShiftId : 0;
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnDate(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d))
+            AskSwitch(d, _shift);
+        await Task.CompletedTask;
+    }
+
+    private async Task LoadAsync()
+    {
+        _sheet = null;
+        _dirty = _confirm = _correcting = false;
+        _reason = "";
+        _assignFor = null;
+        _editTimes = null;
+        await Run(async () =>
+        {
+            _missing = await Attendance.MissingAsync(Actor, Attendance.ReminderFrom(Actor));
+            _away = Array.Empty<(AttendanceSheet, AttendanceLine)>();
+            if (_shift == 0)
+                return;
+            _sheet = await Attendance.OpenAsync(Actor, _date, _shift);
+            _away = await Attendance.AwayAsync(Actor, _sheet.Team, _sheet.ProductionDate.AddDays(-1), _sheet.ProductionDate.AddDays(1));
+            _history = await Attendance.HistoryAsync(Actor, _sheet);
+            _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);
+        });
+    }
+
+    // ---------- row actions ----------
+
+    // The rows by function, as the paper sheet: renforts last.
+    private static IEnumerable<(string Title, List<AttendanceLine> Lines)> Groups(AttendanceSheet s)
+    {
+        foreach (var f in StaffFunctions.All)
+        {
+            var lines = s.Lines.Where(l => !l.IsRenfort && l.Function == f).ToList();
+            if (lines.Count > 0)
+                yield return (f switch
+                {
+                    StaffFunction.ChefConditionnement => "Chef de conditionnement",
+                    StaffFunction.ChefLigne => "Chefs de ligne",
+                    StaffFunction.Conducteur => "Conducteurs de ligne",
+                    StaffFunction.Emballage => "Emballage",
+                    _ => "Nettoyage",
+                }, lines);
+        }
+        var renforts = s.Lines.Where(l => l.IsRenfort).ToList();
+        if (renforts.Count > 0)
+            yield return ("Renforts d'autres équipes", renforts);
+    }
+
+    private static bool IsException(AttendanceSheet s, AttendanceLine l)
+        => l.Status is LineStatus.Absent or LineStatus.Ailleurs || l.IsRenfort || l.IsActing
+           || l.Status == LineStatus.Present && (l.EntryAt != s.Start || l.ExitAt != s.End);
+
+    private bool Visible(AttendanceSheet s, AttendanceLine l, IReadOnlyList<(int EmployeeId, string Message)> problems) => _show switch
+    {
+        1 => l.Status == LineStatus.AConfirmer || problems.Any(p => p.EmployeeId == l.EmployeeId),
+        2 => l.Status == LineStatus.Absent,
+        3 => IsException(s, l) || _editTimes == l.EmployeeId || _assignFor == l.EmployeeId,
+        _ => true,
+    };
+
+    private void ConfirmGroup(List<AttendanceLine> lines)
+    {
+        foreach (var l in lines)
+            SetPresent(l);
+    }
+
+    private void Changed()
+    {
+        _dirty = true;
+        _confirm = false;
+    }
+
+    private void SetPresent(AttendanceLine l)
+    {
+        l.Status = LineStatus.Present;
+        l.Absence = null;
+        l.EntryAt ??= _sheet!.Start;
+        l.ExitAt ??= _sheet!.End;
+        Changed();
+    }
+
+    private void SetAbsent(AttendanceLine l, string? code)
+    {
+        if (!Enum.TryParse<AbsenceCode>(code, out var c))
+        {
+            if (l.Status == LineStatus.Absent)
+            {
+                l.Status = LineStatus.AConfirmer;
+                l.Absence = null;
+                l.EntryAt ??= _sheet!.Start;
+                l.ExitAt ??= _sheet!.End;
+                Changed();
+            }
+            return;
+        }
+        l.Status = LineStatus.Absent;
+        l.Absence = c;
+        l.EntryAt = l.ExitAt = null;
+        ClearActing(l);
+        Changed();
+    }
+
+    private void SetEntry(AttendanceLine l, DateTime t)
+    {
+        l.EntryAt = t;
+        l.Status = LineStatus.Present;
+        if (l.ActingFrom < t)
+            l.ActingFrom = t;
+        Changed();
+    }
+
+    private void SetExit(AttendanceLine l, DateTime t)
+    {
+        l.ExitAt = t;
+        l.Status = LineStatus.Present;
+        Changed();
+    }
+
+    private void SetMachine(AttendanceLine l, string? machine)
+    {
+        l.MachineId = string.IsNullOrEmpty(machine) ? null : machine;
+        foreach (var x in _sheet!.Lines.Where(x => x.ReplacesEmployeeId == l.EmployeeId))
+            x.ActingMachineId = l.MachineId;
+        Changed();
+    }
+
+    private void Remove(AttendanceLine l)
+    {
+        _sheet!.Lines.Remove(l);
+        foreach (var x in _sheet.Lines.Where(x => x.ReplacesEmployeeId == l.EmployeeId).ToList())
+            ClearActing(x);
+        Changed();
+        _ = RefreshCandidatesAsync();
+    }
+
+    private static void ClearActing(AttendanceLine l)
+    {
+        l.ReplacesEmployeeId = null;
+        l.ActingFunction = null;
+        l.ActingMachineId = null;
+        l.ActingLineId = null;
+        l.ActingFrom = null;
+    }
+
+    private async Task AddRenfortAsync()
+    {
+        if (_renfort == 0 || _sheet == null)
+            return;
+        await Run(async () =>
+        {
+            var line = await Attendance.RenfortLineAsync(_sheet, _renfort);
+            _sheet.Lines.Add(line);
+            _sheet.Lines = AttendanceService.Order(_sheet.Lines);
+            _renfort = 0;
+            Changed();
+            await RefreshCandidatesAsync();
+        });
+    }
+
+    private async Task RefreshCandidatesAsync()
+    {
+        if (_sheet != null)
+            _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);
+        StateHasChanged();
+    }
+
+    // ---------- temporary assignment ----------
+
+    private IEnumerable<AttendanceLine> AssignCandidates(AttendanceLine target)
+        => _sheet!.Lines.Where(x => x.EmployeeId != target.EmployeeId && x.Status is LineStatus.Present or LineStatus.AConfirmer && !x.IsActing);
+
+    private void OpenAssign(AttendanceLine target)
+    {
+        _assignFor = target.EmployeeId;
+        _assignWho = 0;
+        _assignFrom = null;
+    }
+
+    private void PickAssignee(string? value)
+    {
+        _assignWho = int.TryParse(value, out var id) ? id : 0;
+        var who = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == _assignWho);
+        _assignFrom = who == null ? null : Max(who.EntryAt ?? _sheet.Start, _sheet.Start);
+    }
+
+    private void ConfirmAssign(AttendanceLine target)
+    {
+        var who = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == _assignWho);
+        if (who == null || _assignFrom == null)
+            return;
+        who.Status = LineStatus.Present;
+        who.EntryAt ??= _sheet.Start;
+        who.ExitAt ??= _sheet.End;
+        who.ReplacesEmployeeId = target.EmployeeId;
+        who.ActingFunction = target.Function;
+        who.ActingMachineId = target.MachineId;
+        who.ActingLineId = target.LineId;
+        who.ActingFrom = _assignFrom;
+        _assignFor = null;
+        Changed();
+    }
+
+    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+
+    private RenderFragment AssignPanel(AttendanceLine target) => __builder =>
+    {
+        var who = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == _assignWho);
+        <div class="pt-assign">
+            <b>Qui prend le poste @StaffFunctions.Short(target.Function) sur @PostName(target) ?</b>
+            <select aria-label="Personne affectée" value="@_assignWho" @onchange="e => PickAssignee(e.Value?.ToString())">
+                <option value="0">Choisir une personne présente…</option>
+                @* Same function first (an emballage worker for an emballage post), then the nearest ones. *@
+                @foreach (var g in AssignCandidates(target).GroupBy(c => c.Function)
+                              .OrderBy(g => g.Key == target.Function ? 0 : 1).ThenBy(g => Math.Abs(StaffFunctions.Rank(g.Key) - StaffFunctions.Rank(target.Function))))
+                {
+                    <optgroup label="@StaffFunctions.Label(g.Key)">
+                        @foreach (var c in g)
+                        {
+                            <option value="@c.EmployeeId">@c.FullName@(c.MachineId != null ? " · " + c.MachineId : "")</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+            @if (who != null)
+            {
+                <span>à partir de</span>
+                <TimePicker Label="Début du remplacement" Value="_assignFrom" ValueChanged="t => _assignFrom = t"
+                            Min="Max(who.EntryAt ?? _sheet.Start, AttendanceService.Earliest(_sheet))" Max="(who.ExitAt ?? _sheet.End).AddMinutes(-AttendanceService.StepMinutes)" />
+                @if (who.MachineId != null)
+                {
+                    <small class="warn-t">@who.MachineId, la machine de @who.FullName, restera sans personne : vous pourrez l'affecter ensuite.</small>
+                }
+            }
+            <span>
+                <button type="button" class="bar small acc" disabled="@(who == null)" @onclick="() => ConfirmAssign(target)">Affecter</button>
+                <button type="button" class="link" @onclick="() => _assignFor = null">Annuler</button>
+            </span>
+        </div>
+    };
+
+    private string PostName(AttendanceLine l)
+        => l.MachineId ?? (l.LineId is { } id && _lines.TryGetValue(id, out var line) ? "la ligne " + line.Name : "son poste");
+
+    private RenderFragment PostCell(AttendanceLine l, bool editable) => __builder =>
+    {
+        if (StaffFunctions.HoldsMachine(l.Function) && l.Status != LineStatus.Absent && l.Status != LineStatus.Ailleurs)
+        {
+            @if (editable)
+            {
+                <select class="pt-machine" aria-label="Machine de @l.FullName" value="@(l.MachineId ?? "")" @onchange="e => SetMachine(l, e.Value?.ToString())"
+                        title="Sa machine pour ce poste">
+                    @if (l.MachineId == null)
+                    {
+                        <option value="">Machine…</option>
+                    }
+                    @foreach (var m in _machines)
+                    {
+                        <option value="@m.Id">@m.Id</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span>@l.MachineId</span>
+            }
+        }
+        else if (l.LineId is { } lid && _lines.TryGetValue(lid, out var line))
+        {
+            <span class="n">Ligne @line.Name</span>
+        }
+        @if (l.IsActing)
+        {
+            var replaced = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId);
+            <div class="pt-acting">
+                ↳ @StaffFunctions.Short(l.ActingFunction!.Value) sur @(l.ActingMachineId ?? (l.ActingLineId is { } al && _lines.TryGetValue(al, out var aline) ? "ligne " + aline.Name : "?"))
+                à la place de @(replaced?.FullName ?? "?")
+                @if (editable)
+                {
+                    <span>dès</span>
+                    <TimePicker Label="Début du remplacement" Value="l.ActingFrom" ValueChanged="t => { l.ActingFrom = t; Changed(); }"
+                                Min="l.EntryAt ?? _sheet.Start" Max="(l.ExitAt ?? _sheet.End).AddMinutes(-AttendanceService.StepMinutes)" />
+                    <button type="button" class="link danger" @onclick="() => { ClearActing(l); Changed(); }">Retirer</button>
+                }
+                else
+                {
+                    <span>dès @l.ActingFrom?.ToString("HH:mm")</span>
+                }
+            </div>
+        }
+    };
+
+    // Where this member of the sheet's team was pointed as renfort in
+    // another team's sheet: the one over this poste first.
+    private List<(AttendanceSheet Sheet, AttendanceLine Line)> AwayOf(AttendanceLine l)
+        => _away.Where(a => a.Line.EmployeeId == l.EmployeeId)
+            .OrderByDescending(a => _sheet != null && a.Line.EntryAt < _sheet.End && a.Line.ExitAt > _sheet.Start)
+            .ToList();
+
+    private static string AwayText(AttendanceSheet s, AttendanceLine l)
+        => $"{s.Team} · {Shifts.Label(s.ShiftId)} du {s.ProductionDate:dd/MM} · {l.EntryAt:HH:mm} – {l.ExitAt:HH:mm} · {PostHeld(l)}";
+
+    private static string PostHeld(AttendanceLine l)
+        => l.IsActing ? $"{StaffFunctions.Short(l.ActingFunction!.Value)} {l.ActingMachineId}".Trim() : l.MachineId ?? StaffFunctions.Short(l.Function);
+
+    private static string Hours(double minutes)
+        => minutes >= 60 ? $"{(int)(minutes / 60)} h{(minutes % 60 == 0 ? "" : ((int)(minutes % 60)).ToString("00"))}" : $"{(int)minutes} min";
+
+    // ---------- saving ----------
+
+    private void StartCorrection()
+    {
+        _correcting = true;
+        _reason = "";
+    }
+
+    private async Task CancelCorrectionAsync() => await LoadAsync();
+
+    private async Task<bool> SaveAsync(bool validate)
+    {
+        if (_sheet == null)
+            return false;
+        _confirm = false;
+        var ok = await Run(async () =>
+        {
+            await Attendance.SaveAsync(Actor, _sheet, validate, _correcting ? _reason : null);
+            await LoadAsync();
+        }, validate ? "Pointage validé." : _correcting ? "Correction enregistrée." : "Feuille enregistrée (brouillon).");
+        if (!ok && Error != null && Error.Contains("entre-temps"))
+        {
+            var message = Error;
+            await LoadAsync();
+            Error = message;
+        }
+        return ok;
+    }
+}

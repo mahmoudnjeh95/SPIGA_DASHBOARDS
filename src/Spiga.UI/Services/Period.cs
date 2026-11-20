@@ -48,10 +48,16 @@ public sealed record Period(PeriodKind Kind, DateTime CustomFrom, DateTime Custo
     }
 
     // Calendar days (midnight to midnight), for timestamps such as the audit trail.
+    // A period that includes the poste in progress reaches the present
+    // moment: between midnight and 06:00 "today" is still the production
+    // day before, and what happened since midnight must not be left out.
     public (DateTime From, DateTime To) CalendarRange(DateTime now)
     {
         var (first, last) = Days(now);
-        return (first, last.AddDays(1));
+        var to = last.AddDays(1);
+        if (IncludesNow(now) && to <= now)
+            to = now.Date.AddDays(1);
+        return (first, to);
     }
 
     public bool IncludesNow(DateTime now)

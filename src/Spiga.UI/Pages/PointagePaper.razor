@@ -1,0 +1,149 @@
+@page "/saisie/pointage/feuille"
+@inherits SpigaPage
+@inject AttendanceService Attendance
+@inject IJSRuntime JS
+
+@* The printed pointage form of a day, laid out as the paper one: the three
+   postes side by side, the chef de conditionnement first, then the chefs de
+   ligne, the conducteurs, the packaging and cleaning staff, and blank rows
+   for renforts. Filled with what was pointed, blank for a day to come. *@
+<RequireAccess Module="@Modules.Pointage">
+    <div class="filters no-print">
+        <a class="link" href="saisie/pointage">← Pointage</a>
+        <div class="f">
+            <label for="pp-date">Date</label>
+            <input id="pp-date" type="date" value="@_date.ToString("yyyy-MM-dd")" @onchange="OnDate" />
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar acc" @onclick="PrintAsync">@Icons.Svg("print")Imprimer</button>
+    </div>
+
+    <Flash Error="@Error" />
+
+    @if (_sheets == null)
+    {
+        <Loader Text="Préparation de la feuille…" />
+    }
+    else
+    {
+        <div class="paper">
+            <div class="paper-head">
+                <b>CDS - Service Conditionnement</b>
+                <b>Pointage</b>
+                <span>Équipes @string.Join(" - ", _sheets.Select(s => Letter(s.Team)))</span>
+                <span>Date : @_date.ToString("dd/MM/yyyy") (<b class="paper-day">@_date.ToString("dddd", Fmt.French)</b>)</span>
+            </div>
+            <div class="paper-cols">
+                @foreach (var (shift, team, sheet, filled) in _sheets)
+                {
+                    <table class="paper-t">
+                        <thead>
+                            <tr><th>Nom &amp; prénom <small>@team · @Shifts.Label(shift) @Shifts.Hours(shift)</small></th><th>Entrée</th><th>Sortie</th></tr>
+                        </thead>
+                        <tbody>
+                            @{ StaffFunction? previous = null; }
+                            @foreach (var l in sheet.Lines)
+                            {
+                                <tr class="paper-@l.Function.ToString().ToLowerInvariant() @(previous != null && previous != l.Function ? "paper-sep" : "")">
+                                    <td>
+                                        @l.FullName
+                                        @if (l.IsRenfort)
+                                        {
+                                            <small class="paper-renfort">Renfort · @l.HomeTeam</small>
+                                        }
+                                        @if (l.IsActing && l.ActingFunction is { } af)
+                                        {
+                                            <small class="paper-renfort">↳ @StaffFunctions.Short(af) sur @(l.ActingMachineId ?? "sa ligne") à la place de @(sheet.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId)?.FullName ?? "?") dès @l.ActingFrom?.ToString("HH:mm")</small>
+                                        }
+                                        else if (l.Status == LineStatus.Ailleurs && Away(team, l) is { } away)
+                                        {
+                                            <small class="paper-renfort">En renfort → @away.Sheet.Team · @Shifts.Label(away.Sheet.ShiftId) @away.Line.EntryAt?.ToString("HH:mm")–@away.Line.ExitAt?.ToString("HH:mm")@(PostOf(away.Line) is { Length: > 0 } post ? " · " + post : "")</small>
+                                        }
+                                    </td>
+                                    @if (l.Status == LineStatus.Ailleurs)
+                                    {
+                                        <td colspan="2" class="paper-away">renfort</td>
+                                    }
+                                    else
+                                    {
+                                        <td>@Cell(l, true)</td>
+                                        <td>@Cell(l, false)</td>
+                                    }
+                                </tr>
+                                previous = l.Function;
+                            }
+                            @for (var i = 0; i < 3; i++)
+                            {
+                                <tr class="@(i == 0 ? "paper-sep" : "")"><td>&nbsp;</td><td></td><td></td></tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+            <p class="paper-foot">
+                Le CC doit remplir cette fiche et la remettre à chaque fin de journée dans la boîte du courrier.<br />
+                A indiquer le pointage de tout employé présent à l'équipe en partie de l'horaire ; aussi l'équipe de nettoyage ou l'employé
+                affecté à l'emballage ou quelqu'un en horaire supplémentaire. Absences : A absent, M maladie, AT accident de travail, C congé.
+            </p>
+        </div>
+    }
+</RequireAccess>
+
+@code {
+    [SupplyParameterFromQuery(Name = "date")] public string? DateText { get; set; }
+
+    private DateTime _date;
+    private IReadOnlyList<(int ShiftId, string Team, AttendanceSheet Sheet, bool Filled)>? _sheets;
+    private Dictionary<string, IReadOnlyList<(AttendanceSheet Sheet, AttendanceLine Line)>> _away = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _date = DateTime.TryParse(DateText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d.Date : Attendance.Today;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.PointageVoir))
+            return;
+        _sheets = null;
+        await Run(async () =>
+        {
+            _sheets = await Attendance.PaperAsync(Actor, _date);
+            _away = new();
+            foreach (var team in _sheets.Select(s => s.Team).Distinct())
+                _away[team] = await Attendance.AwayAsync(Actor, team, _date.AddDays(-1), _date.AddDays(1));
+        });
+    }
+
+    private Task OnDate(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+            Nav.NavigateTo($"saisie/pointage/feuille?date={d:yyyy-MM-dd}");
+        return Task.CompletedTask;
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("spigaPrint");
+
+    // The other team's sheet where this member was pointed over his poste.
+    private (AttendanceSheet Sheet, AttendanceLine Line)? Away(string team, AttendanceLine l)
+    {
+        var poste = _sheets!.First(s => s.Team == team).Sheet;
+        return _away.GetValueOrDefault(team)?
+            .Where(a => a.Line.EmployeeId == l.EmployeeId && a.Line.EntryAt < poste.End && a.Line.ExitAt > poste.Start)
+            .Select(a => ((AttendanceSheet, AttendanceLine)?)a).FirstOrDefault();
+    }
+
+    private static string PostOf(AttendanceLine l) => l.IsActing ? l.ActingMachineId ?? "" : l.MachineId ?? "";
+
+    // "Equipe D" -> "D", as on the paper form.
+    private static string Letter(string team) => team.StartsWith("Equipe ", StringComparison.OrdinalIgnoreCase) ? team[7..] : team;
+
+    private static string Cell(AttendanceLine l, bool entry) => l.Status switch
+    {
+        LineStatus.Absent when entry => l.Absence?.ToString() ?? "",
+        LineStatus.Present => (entry ? l.EntryAt : l.ExitAt)?.ToString("HH:mm") ?? "",
+        LineStatus.Ailleurs when entry => "renfort",
+        _ => "",
+    };
+}

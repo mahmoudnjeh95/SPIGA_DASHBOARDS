@@ -130,6 +130,11 @@ public sealed class Actor
                            && g.Scope.Machines.Count == 0
                            && (team == null || g.Scope.AllowsTeam(team)));
 
+    // The permission for this team, whatever the machines (data kept per
+    // team, such as the pointage sheets).
+    public bool AllowsTeam(string permission, string team)
+        => Grants.Any(g => g.Role.EffectivePermissions.Has(permission) && g.Scope.AllowsTeam(team));
+
     public bool AllowsAny(IEnumerable<string> permissions, string sector, string? machineId = null, string? team = null)
         => permissions.Any(p => Allows(p, sector, machineId, team));
 

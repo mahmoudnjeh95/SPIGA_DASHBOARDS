@@ -11,21 +11,7 @@
     <div class="head">
         <div>
             <span class="pre">Production</span><h1>Déchets</h1>
-            <p>@_period.Label(Now)@Subtitle()</p>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-            @if (Session.Can(Perm.DechetsSaisir))
-            {
-                <a class="bar" href="saisie/dechets-emballage">Saisir déchet emballage</a>
-            }
-            @if (Session.Can(Perm.DechetsProduit))
-            {
-                <a class="bar" href="saisie/dechets-produit">Saisir déchet produit</a>
-            }
-            @if (Session.Can(Perm.DechetsValider))
-            {
-                <a class="bar" href="saisie/a-valider">Saisies à valider</a>
-            }
+            <p>@_period.Label(Now)</p>
         </div>
     </div>
 
@@ -110,6 +96,12 @@
         var t = _r.Total;
         var topMachine = _r.Machines.Where(m => m.PackagingKg > 0).MaxBy(m => m.PackagingKg);
         var topReason = _r.Reasons.FirstOrDefault();
+        @if (t.Entries == 0)
+        {
+            <div class="card"><p class="empty">Aucune saisie de déchet sur la période et les filtres choisis.</p></div>
+        }
+        else
+        {
         <div class="row">
             <KpiTile Label="Déchet emballage" Value="@(_r.PackagingEntries == 0 ? "—" : Fmt.Kg(t.PackagingKg))" Css="@(_r.PackagingEntries == 0 ? "nd" : "")"
                      Sub="@(_r.PackagingEntries == 0 ? "aucune saisie sur la période" : $"{PctOfProduction(t.PackagingPercent)} · {_r.PackagingEntries} saisie(s)")" />
@@ -234,6 +226,7 @@
                 </div>
             }
         </section>
+        }
     }
 </RequireAccess>
 

@@ -56,4 +56,13 @@ public static class AuditActions
     public const string EntryReturned = "Saisie renvoyée à l'auteur";
     public const string EntryResubmitted = "Saisie soumise à nouveau";
     public const string EntryCancelled = "Saisie validée annulée";
+    public const string EmployeeCreated = "Employé créé";
+    public const string EmployeeUpdated = "Employé modifié";
+    public const string PostingSaved = "Affectation d'employé";
+    public const string PostingDeleted = "Affectation d'employé supprimée";
+    public const string LineSaved = "Ligne enregistrée";
+    public const string LineDeleted = "Ligne supprimée";
+    public const string SheetSaved = "Pointage enregistré";
+    public const string SheetValidated = "Pointage validé";
+    public const string SheetCorrected = "Pointage validé corrigé";
 }

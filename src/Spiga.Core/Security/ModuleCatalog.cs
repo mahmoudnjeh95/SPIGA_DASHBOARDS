@@ -16,6 +16,7 @@ public static class Modules
     public const string RhNominatif = "rh-nominatif";
     public const string SaisieDechets = "saisie-dechets";
     public const string SaisieQuantites = "saisie-quantites";
+    public const string Pointage = "pointage";
     public const string Objectifs = "objectifs";
     public const string Referentiels = "referentiels";
     public const string Utilisateurs = "utilisateurs";
@@ -53,9 +54,10 @@ public static class ModuleCatalog
         new ModuleInfo(Modules.Rh, "Ressources humaines (agrégé)", "Ressources humaines", "Taux d'absence par équipe."),
         new ModuleInfo(Modules.RhNominatif, "Ressources humaines (nominatif)", "Ressources humaines", "Taux d'absence par ouvrier. Donnée personnelle."),
         new ModuleInfo(Modules.SaisieDechets, "Saisie des déchets", "Saisie", "Déchets emballage et produit."),
+        new ModuleInfo(Modules.Pointage, "Pointage", "Saisie", "Présences, absences, renforts et remplacements par poste."),
         new ModuleInfo(Modules.SaisieQuantites, "Saisie quantités et relevés", "Saisie", "Quantités du rendement, relevés énergie."),
         new ModuleInfo(Modules.Objectifs, "Objectifs", "Administration", "Cibles et objectifs de coûts et consommations."),
-        new ModuleInfo(Modules.Referentiels, "Référentiels", "Administration", "Machines, produits, équipes, motifs."),
+        new ModuleInfo(Modules.Referentiels, "Référentiels", "Administration", "Machines, produits, équipes, motifs, personnel et lignes."),
         new ModuleInfo(Modules.Utilisateurs, "Utilisateurs et rôles", "Administration", "Comptes, rôles, règles de sécurité."),
         new ModuleInfo(Modules.Sources, "Sources de données", "Administration", "Connexions aux systèmes de l'usine."),
         new ModuleInfo(Modules.Audit, "Journal d'audit", "Administration", "Traçabilité des actions."),
@@ -103,15 +105,17 @@ public static class ModuleCatalog
             "kWh et tonnes de vapeur par jour, ratios par tonne de produit fini, comparés aux objectifs.",
             "Période", "Nouveau (cahier des charges 4.8)"),
 
-        new NavItem("absences", "Absentéisme", "Ressources humaines", Modules.Rh, "module/absences", false,
-            "Taux d'absence : agrégé par équipe, ou nominatif avec le droit RH nominatif.",
-            "Période, équipe", "Nouveau (cahier des charges 4.5), base RH"),
+        new NavItem("absences", "Absences et retards", "Ressources humaines", Modules.Rh, "rh/absences", true),
+        new NavItem("calendrier", "Calendrier des présences", "Ressources humaines", Modules.RhNominatif, "rh/calendrier", true),
+        new NavItem("polyvalence", "Polyvalence", "Ressources humaines", Modules.RhNominatif, "rh/polyvalence", true,
+            Permission: Perm.Polyvalence),
 
         new NavItem("saisie-emballage", "Déchets emballage", "Saisie", Modules.SaisieDechets, "saisie/dechets-emballage", true),
         new NavItem("saisie-produit", "Déchets produit", "Saisie", Modules.SaisieDechets, "saisie/dechets-produit", true,
             Permission: Perm.DechetsProduit),
         new NavItem("a-valider", "Saisies à valider", "Saisie", Modules.SaisieDechets, "saisie/a-valider", true,
             Permission: Perm.DechetsValider),
+        new NavItem("pointage", "Pointage", "Saisie", Modules.Pointage, "saisie/pointage", true),
         new NavItem("saisie-rendement", "Quantités rendement", "Saisie", Modules.SaisieQuantites, "module/saisie-rendement", false,
             "Quantités du jour par secteur pour le calcul du rendement.",
             "Contexte de saisie : date, secteur", "Nouveau (cahier des charges 4.9)"),
@@ -126,6 +130,7 @@ public static class ModuleCatalog
         new NavItem("referentiels", "Référentiels", "Administration", Modules.Referentiels, "module/referentiels", false,
             "Machines, lignes, secteurs, produits et cadences, équipes et roulement, pauses, silos, motifs de déchet.",
             "Recherche", "Reprend cadences, équipes et pauses des Paramètres actuels"),
+        new NavItem("personnel", "Personnel et lignes", "Administration", Modules.Referentiels, "admin/personnel", true),
         new NavItem("sources", "Sources de données", "Administration", Modules.Sources, "admin/sources", true),
         new NavItem("audit", "Journal d'audit", "Administration", Modules.Audit, "admin/audit", true),
         new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "admin/parametres", true,

@@ -1,0 +1,252 @@
+@page "/rh/absences"
+@inherits SpigaPage
+@inject PresenceReport Report
+@inject IJSRuntime JS
+@inject UiState Ui
+
+@* Lateness, early departures and absences from the validated pointage
+   sheets, and what each did to production: the machine of the missing
+   person produced (someone started it), or stood still. Names need the
+   "RH nominatif" right; without it, figures by team only. *@
+<RequireAccess Module="@Modules.Rh">
+    <div class="head">
+        <div>
+            <span class="pre">Ressources humaines</span><h1>Absences et retards</h1>
+            <p>
+                D'après les feuilles de pointage validées. <b>Avec impact</b> : la machine de la personne était à l'arrêt pendant son absence ou
+                son retard (arrêts non qualifiés ou qualifiés « Absence opérateur » ; pannes, changements de format, arrêts planifiés et pauses exclus).
+                <b>Sans impact</b> : la machine a produit, quelqu'un l'a démarrée. <b>Compensée</b> : un remplaçant a tenu le poste.
+            </p>
+        </div>
+        <div class="segs no-print">
+            @if (Session.Can("rh:exporter"))
+            {
+                <button type="button" class="bar" disabled="@(_r == null)" @onclick="ExportEventsAsync">@Icons.Svg("download")Exporter</button>
+            }
+            @if (Named && Session.Can("rh-nominatif:exporter"))
+            {
+                <button type="button" class="bar" disabled="@(_r == null)" @onclick="ExportPayrollAsync"
+                        title="Par employé : postes, heures, heures supplémentaires, absences par code, retards">@Icons.Svg("download")Export paie</button>
+            }
+        </div>
+    </div>
+
+    <div class="filters">
+        <PeriodPicker Value="_period" ValueChanged="SetPeriodAsync" Kinds="Kinds" Id="abs-period" />
+        <div class="f">
+            <span>Équipe</span>
+            <div class="segs" role="group" aria-label="Équipe">
+                <button type="button" class="seg @(_team == null ? "on" : "")" @onclick="() => _team = null">Toutes</button>
+                @foreach (var t in Teams())
+                {
+                    <button type="button" class="seg @(_team == t ? "on" : "")" @onclick="() => _team = t">@t</button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_r == null)
+    {
+        <Loader Text="Calcul à partir des feuilles de pointage et des machines…" />
+    }
+    else
+    {
+        @if (_r.ProductionError != null)
+        {
+            <div class="notice warn">@_r.ProductionError</div>
+        }
+        var all = _r.Events.Where(e => _team == null || e.Team == _team).ToList();
+        var late = all.Where(e => e.Kind == PresenceEventKind.Retard).ToList();
+        var absences = all.Where(e => e.Kind == PresenceEventKind.Absence).ToList();
+        var impact = all.Where(e => e.Impact == ImpactKind.AvecImpact).ToList();
+        var sheets = _r.Sheets.Where(s => _team == null || s.Team == _team).ToList();
+        var pointed = sheets.SelectMany(s => s.Lines).Count(l => l.Status is LineStatus.Present or LineStatus.Absent);
+        var absentLines = sheets.SelectMany(s => s.Lines).Count(l => l.Status == LineStatus.Absent);
+
+        <div class="row">
+            <KpiTile Label="Taux d'absence" Value="@(pointed == 0 ? "—" : Fmt.Pct(100.0 * absentLines / pointed))" Css="@(pointed == 0 ? "nd" : "")"
+                     Sub="@($"{absentLines} absence(s) sur {pointed} personnes-postes, {sheets.Count} feuille(s)")" />
+            <KpiTile Label="Retards" Value="@late.Count.ToString()" Css="@(late.Count == 0 ? "ok" : "")"
+                     Sub="@($"{Fmt.Num(late.Sum(e => e.Minutes))} min au total")" />
+            <KpiTile Label="Événements avec impact" Value="@impact.Count.ToString()" Css="@(impact.Count == 0 ? "ok" : "bad")"
+                     Sub="@($"{Fmt.Num(impact.Sum(e => e.StoppedMinutes))} min d'arrêt machine")" />
+            <KpiTile Label="Tonnage perdu (estimé)" Value="@(impact.Any(e => e.KgLost != null) ? Fmt.Mass(impact.Sum(e => e.KgLost ?? 0)) : "—")"
+                     Css="@(impact.Any(e => e.KgLost != null) ? "bad" : "nd")"
+                     Sub="@($"cadence × minutes d'arrêt × poids cible · {Fmt.Num(impact.Sum(e => e.PacksLost ?? 0))} paquets")" />
+            <KpiTile Label="Absences compensées" Value="@absences.Count(e => e.Impact == ImpactKind.Compensee).ToString()"
+                     Sub="@($"sur {absences.Count} absence(s)")" />
+        </div>
+
+        @if (_r.Events.Count > 0)
+        {
+            var days = Days();
+            <section class="card">
+                <SpigaChart Title="Retards, absences et impact par jour" Key="absences-jour" Labels="@days.Select(d => d.ToString("dd/MM")).ToList()"
+                            Series="@DaySeries(days, all, _r.Sheets)" YMin="0" Integer="true" Format="@(v => v.ToString("0"))" />
+            </section>
+        }
+
+        <section class="card">
+            <div class="card-head"><h2>Par équipe</h2></div>
+            <GridTable TItem="TeamRow" Items="TeamRows(all)" Columns="TeamColumns" MaxHeight="@null" />
+        </section>
+
+        @if (Named)
+        {
+            var repeats = _r.Repeats.Where(r => _team == null || r.Team == _team).ToList();
+            @if (repeats.Count > 0)
+            {
+                <section class="card" style="border-color:var(--warn)">
+                    <div class="card-head"><h2>Retards répétés <small>@PresenceAnalysis.RepeatCount retards ou plus en @PresenceAnalysis.RepeatDays jours</small></h2></div>
+                    <GridTable TItem="RepeatLateness" Items="repeats" Columns="RepeatColumns" MaxHeight="@null" />
+                </section>
+            }
+        }
+
+        var unstaffed = _r.Unstaffed.Where(u => _team == null || u.Team.Contains(_team)).ToList();
+        @if (unstaffed.Count > 0)
+        {
+            <section class="card">
+                <div class="card-head">
+                    <h2>Machines sans personne <small>a produit au moins @PresenceAnalysis.UnstaffedMinutes min sans personne pointé dessus : pointage oublié ou affectation à corriger</small></h2>
+                </div>
+                <GridTable TItem="UnstaffedMachine" Items="unstaffed" Columns="UnstaffedColumns" MaxHeight="@null" />
+            </section>
+        }
+
+        <section class="card">
+            <div class="card-head"><h2>Détail</h2></div>
+            <GridTable TItem="PresenceEvent" Items="all.OrderByDescending(e => e.Date).ThenByDescending(e => e.ShiftId).ToList()"
+                       Columns="EventColumns" ShownChanged="rows => _shownEvents = rows"
+                       Empty="Aucun retard ni absence sur cette période (feuilles validées seulement)." />
+        </section>
+    }
+</RequireAccess>
+
+@code {
+    private static readonly PeriodKind[] Kinds = { PeriodKind.Yesterday, PeriodKind.Last7Days, PeriodKind.Month, PeriodKind.Custom };
+
+    private Period _period = default!;
+    private string? _team;
+    // The detail rows as filtered on screen: what "Exporter" writes.
+    private IReadOnlyList<PresenceEvent>? _shownEvents;
+
+    private sealed record TeamRow(string Team, int Absences, int Compensees, int Retards, double RetardMin, int Departs, int Impact, double StopMin);
+
+    private static IReadOnlyList<TeamRow> TeamRows(List<PresenceEvent> all)
+        => all.GroupBy(e => e.Team).OrderBy(g => g.Key).Select(g => new TeamRow(g.Key,
+            g.Count(e => e.Kind == PresenceEventKind.Absence), g.Count(e => e.Impact == ImpactKind.Compensee),
+            g.Count(e => e.Kind == PresenceEventKind.Retard), g.Where(e => e.Kind == PresenceEventKind.Retard).Sum(e => e.Minutes),
+            g.Count(e => e.Kind == PresenceEventKind.DepartAnticipe), g.Count(e => e.Impact == ImpactKind.AvecImpact), g.Sum(e => e.StoppedMinutes))).ToList();
+
+    private static GridColumn<T> Num<T>(string title, Func<T, double> v) => new(title, x => Fmt.Num(v(x)), x => v(x), css: "r");
+
+    private static readonly IReadOnlyList<GridColumn<TeamRow>> TeamColumns = new[]
+    {
+        new GridColumn<TeamRow>("Équipe", r => r.Team),
+        Num<TeamRow>("Absences", r => r.Absences), Num<TeamRow>("dont compensées", r => r.Compensees),
+        Num<TeamRow>("Retards", r => r.Retards), Num<TeamRow>("Min. de retard", r => r.RetardMin),
+        Num<TeamRow>("Départs anticipés", r => r.Departs), Num<TeamRow>("Avec impact", r => r.Impact), Num<TeamRow>("Min. d'arrêt", r => r.StopMin),
+    };
+
+    private static readonly IReadOnlyList<GridColumn<RepeatLateness>> RepeatColumns = new[]
+    {
+        new GridColumn<RepeatLateness>("Employé", r => r.FullName), new GridColumn<RepeatLateness>("Équipe", r => r.Team),
+        Num<RepeatLateness>("Retards", r => r.Count), Num<RepeatLateness>("dont avec impact", r => r.WithImpact), Num<RepeatLateness>("Minutes", r => r.Minutes),
+    };
+
+    private static readonly IReadOnlyList<GridColumn<UnstaffedMachine>> UnstaffedColumns = new[]
+    {
+        new GridColumn<UnstaffedMachine>("Date", u => u.Date.ToString("dd/MM/yyyy"), u => u.Date),
+        new GridColumn<UnstaffedMachine>("Poste", u => Shifts.Label(u.ShiftId), u => u.ShiftId),
+        new GridColumn<UnstaffedMachine>("Équipe", u => u.Team), new GridColumn<UnstaffedMachine>("Machine", u => u.MachineId),
+        Num<UnstaffedMachine>("Minutes de production", u => u.ProducingMinutes),
+    };
+
+    private IReadOnlyList<GridColumn<PresenceEvent>> EventColumns => new[]
+    {
+        new GridColumn<PresenceEvent>("Date", e => e.Date.ToString("dd/MM/yyyy"), e => e.Date, css: "nowrap"),
+        new GridColumn<PresenceEvent>("Poste", e => Shifts.Label(e.ShiftId), e => e.ShiftId),
+        new GridColumn<PresenceEvent>("Équipe", e => e.Team),
+        new GridColumn<PresenceEvent>("Employé", e => Named ? e.FullName : "—"),
+        new GridColumn<PresenceEvent>("Fonction", e => StaffFunctions.Short(e.Function), css: "n"),
+        new GridColumn<PresenceEvent>("Type", e => PresenceLabels.Kind(e.Kind) + (e.Absence is { } a ? $" · {a}" : ""), css: "n"),
+        new GridColumn<PresenceEvent>("Heures", e => $"{e.From:HH:mm} – {e.To:HH:mm}", e => e.From, css: "n nowrap"),
+        Num<PresenceEvent>("Min.", e => e.Minutes),
+        new GridColumn<PresenceEvent>("Machines", e => string.Join(", ", e.Machines), css: "n"),
+        new GridColumn<PresenceEvent>("Min. d'arrêt", e => e.Impact == ImpactKind.SansMachine ? "" : Fmt.Num(e.StoppedMinutes), e => e.StoppedMinutes, css: "r"),
+        new GridColumn<PresenceEvent>("Perdu (est.)", e => e.KgLost is { } kg ? Fmt.Mass(kg) : e.PacksLost is { } p ? $"{Fmt.Num(p)} paquets" : "", e => e.KgLost ?? 0, css: "r nowrap"),
+        new GridColumn<PresenceEvent>("Impact", e => PresenceLabels.Impact(e.Impact) + (Named && e.CoveredBy != null ? " · " + e.CoveredBy : ""),
+            cell: e => @<span><span class="chip @PresenceLabels.Css(e.Impact)">@PresenceLabels.Impact(e.Impact)</span>@if (Named && e.CoveredBy != null) {<small>remplacé par @e.CoveredBy</small>}</span>),
+    };    private PresenceReport.Result? _r;
+
+    private bool Named => Session.Can(Perm.View(Modules.RhNominatif));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = Shifts.ProductionDate(Now);
+        _period = Ui.PresencePeriod ?? new Period(PeriodKind.Last7Days, today, today);
+        // Show the page and its loader first: the machine history takes seconds.
+        await Task.Yield();
+        await LoadAsync();
+    }
+
+    private async Task SetPeriodAsync(Period p)
+    {
+        _period = Ui.PresencePeriod = p;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.View(Modules.Rh)))
+            return;
+        _r = null;
+        _shownEvents = null;
+        var (first, last) = _period.Days(Now);
+        await Run(async () => _r = await Report.LoadAsync(Actor, Perm.View(Modules.Rh), first, last));
+    }
+
+    private IEnumerable<string> Teams() => _r?.Sheets.Select(s => s.Team).Distinct().OrderBy(t => t) ?? Enumerable.Empty<string>();
+
+    private List<DateTime> Days()
+    {
+        var list = new List<DateTime>();
+        for (var d = _r!.FromDate; d <= _r.ToDate; d = d.AddDays(1))
+            list.Add(d);
+        return list;
+    }
+
+    // A day without any validated sheet has no value (not 0: nobody pointed).
+    private IReadOnlyList<ChartSeries> DaySeries(List<DateTime> days, List<PresenceEvent> events, IReadOnlyList<AttendanceSheet> sheets)
+    {
+        var pointed = sheets.Where(s => _team == null || s.Team == _team).Select(s => s.ProductionDate.Date).ToHashSet();
+        List<double?> Count(Func<PresenceEvent, bool> f) => days.Select(d => pointed.Contains(d) ? (double?)events.Count(e => e.Date == d && f(e)) : null).ToList();
+        return new[]
+        {
+            new ChartSeries("Absences", Count(e => e.Kind == PresenceEventKind.Absence), "var(--bar)"),
+            new ChartSeries("Retards", Count(e => e.Kind == PresenceEventKind.Retard), "var(--warn)"),
+            new ChartSeries("Avec impact", Count(e => e.Impact == ImpactKind.AvecImpact), "var(--bad)", ChartKind.Line),
+        };
+    }
+
+    private async Task ExportEventsAsync()
+    {
+        if (_r == null)
+            return;
+        var names = Named && Session.Can("rh-nominatif:exporter");
+        var bytes = PresenceReport.EventsCsv(_shownEvents ?? _r.Events.Where(e => _team == null || e.Team == _team).ToList(), names);
+        await JS.InvokeVoidAsync("spigaDownload", $"absences-retards_{_r.FromDate:yyyyMMdd}-{_r.ToDate:yyyyMMdd}.csv", "text/csv", Convert.ToBase64String(bytes));
+    }
+
+    private async Task ExportPayrollAsync()
+    {
+        if (_r == null)
+            return;
+        var sheets = _r.Sheets.Where(s => _team == null || s.Team == _team).ToList();
+        var bytes = PresenceReport.PayrollCsv(sheets, _r.Events, _r.FromDate, _r.ToDate);
+        await JS.InvokeVoidAsync("spigaDownload", $"pointage-paie_{_r.FromDate:yyyyMMdd}-{_r.ToDate:yyyyMMdd}.csv", "text/csv", Convert.ToBase64String(bytes));
+    }
+}

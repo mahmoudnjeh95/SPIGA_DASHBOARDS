@@ -1,0 +1,140 @@
+@* A table whose header stays visible while it scrolls, sorted by clicking a
+   column title (ascending, descending, back to the page's order) and
+   filtered with a box under each title (the rows containing that text,
+   accents and case ignored). Columns: GridColumn<TItem>. Optional detail
+   row under a clicked row. *@
+@typeparam TItem
+
+@{ var rows = View().ToList(); }
+<div class="grid-wrap" style="@(MaxHeight == null ? "" : $"max-height:{MaxHeight}")">
+    <table class="t grid @Class">
+        <thead>
+            <tr>
+                @for (var i = 0; i < Columns.Count; i++)
+                {
+                    var c = Columns[i];
+                    var index = i;
+                    <th class="@c.Css @(c.Sortable ? "sortable" : "")" title="@(c.Sortable ? "Cliquer pour trier" : null)"
+                        @onclick="() => SortBy(index)" aria-sort="@(_sort == index ? (_desc ? "descending" : "ascending") : "none")">
+                        @c.Title<span class="sort-mark">@(_sort == index ? (_desc ? " ▼" : " ▲") : c.Sortable ? " ⇅" : "")</span>
+                    </th>
+                }
+            </tr>
+            @if (Columns.Any(c => c.Filter))
+            {
+                <tr class="grid-filter">
+                    @for (var i = 0; i < Columns.Count; i++)
+                    {
+                        var index = i;
+                        <th class="@Columns[i].Css">
+                            @if (Columns[i].Filter)
+                            {
+                                <input type="search" placeholder="Filtrer…" aria-label="@($"Filtrer {Columns[i].Title}")"
+                                       value="@_filters.GetValueOrDefault(index)" @oninput="e => SetFilter(index, e.Value?.ToString())" />
+                            }
+                        </th>
+                    }
+                </tr>
+            }
+        </thead>
+        <tbody>
+            @if (rows.Count == 0)
+            {
+                <tr><td colspan="@Columns.Count" class="n">@(Items.Count == 0 ? Empty : "Aucune ligne ne correspond aux filtres.")</td></tr>
+            }
+            @foreach (var item in rows)
+            {
+                <tr class="@RowClass?.Invoke(item) @(OnRowClick.HasDelegate ? "clickable" : "")" @onclick="() => OnRowClick.InvokeAsync(item)">
+                    @foreach (var c in Columns)
+                    {
+                        <td class="@c.Css">
+                            @if (c.Cell != null)
+                            {
+                                @c.Cell(item)
+                            }
+                            else
+                            {
+                                @c.Text(item)
+                            }
+                        </td>
+                    }
+                </tr>
+                @if (Detail != null && IsOpen?.Invoke(item) == true)
+                {
+                    <tr class="grid-detail"><td colspan="@Columns.Count">@Detail(item)</td></tr>
+                }
+            }
+        </tbody>
+        @if (Footer != null)
+        {
+            <tfoot>@Footer(rows)</tfoot>
+        }
+    </table>
+</div>
+@if (Items.Count > 0 && rows.Count != Items.Count)
+{
+    <p class="n grid-count">@rows.Count ligne(s) sur @Items.Count · <button type="button" class="link" @onclick="ClearFilters">effacer les filtres</button></p>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+    [Parameter, EditorRequired] public IReadOnlyList<GridColumn<TItem>> Columns { get; set; } = Array.Empty<GridColumn<TItem>>();
+    [Parameter] public Func<TItem, string>? RowClass { get; set; }
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+    [Parameter] public RenderFragment<TItem>? Detail { get; set; }
+    [Parameter] public Func<TItem, bool>? IsOpen { get; set; }
+    [Parameter] public RenderFragment<IReadOnlyList<TItem>>? Footer { get; set; }
+    [Parameter] public string Empty { get; set; } = "Aucune ligne.";
+    [Parameter] public string? MaxHeight { get; set; } = "calc(100vh - 150px)";
+    [Parameter] public string? Class { get; set; }
+
+    // The rows as shown (filtered, sorted), for an export of what is shown.
+    [Parameter] public EventCallback<IReadOnlyList<TItem>> ShownChanged { get; set; }
+
+    private int? _sort;
+    private bool _desc;
+    private readonly Dictionary<int, string> _filters = new();
+
+    public IReadOnlyList<TItem> Shown => View().ToList();
+
+    private IEnumerable<TItem> View()
+    {
+        IEnumerable<TItem> rows = Items;
+        foreach (var (i, text) in _filters.Where(f => !string.IsNullOrWhiteSpace(f.Value) && f.Key < Columns.Count))
+        {
+            var needle = GridColumn<TItem>.Fold(text);
+            var col = Columns[i];
+            rows = rows.Where(r => GridColumn<TItem>.Fold(col.Text(r)).Contains(needle, StringComparison.Ordinal));
+        }
+        if (_sort is { } s && s < Columns.Count)
+        {
+            var col = Columns[s];
+            rows = _desc ? rows.OrderByDescending(r => col.Key(r), GridColumn<TItem>.Comparer) : rows.OrderBy(r => col.Key(r), GridColumn<TItem>.Comparer);
+        }
+        return rows;
+    }
+
+    private void SortBy(int index)
+    {
+        if (!Columns[index].Sortable)
+            return;
+        if (_sort != index)
+            (_sort, _desc) = (index, false);
+        else if (!_desc)
+            _desc = true;
+        else
+            _sort = null;
+    }
+
+    private async Task SetFilter(int index, string? text)
+    {
+        _filters[index] = text ?? "";
+        await ShownChanged.InvokeAsync(View().ToList());
+    }
+
+    private async Task ClearFilters()
+    {
+        _filters.Clear();
+        await ShownChanged.InvokeAsync(View().ToList());
+    }
+}

@@ -14,7 +14,7 @@
         <div class="head">
             <div>
                 <span class="pre">Saisie</span><h1>Mon poste</h1>
-                <p>@Shifts.Label(v.ShiftId) du @v.Date.ToString("dd/MM/yyyy") · @Shifts.Hours(v.ShiftId) · @v.Team</p>
+                <p>@Shifts.Label(v.ShiftId) du @v.Date.ToString("dd/MM/yyyy") · @v.Team</p>
             </div>
             <span class="live-pill" title="Actualisé toutes les @RefreshSeconds secondes">
                 <span class="live-dot"></span>En direct · @v.LoadedAt.ToString("HH:mm:ss")
@@ -63,7 +63,11 @@
                             <span class="lc-id">@m.Machine.Id</span>
                             <small>@Sectors.Label(m.Machine.Sector)</small>
                         </div>
-                        <span class="lc-state"><span class="lc-dot"></span>@StateText(m)</span>
+                        @* A stop has its banner below: the badge would say it twice. *@
+                        @if (m.Stop == null)
+                        {
+                            <span class="lc-state"><span class="lc-dot"></span>@StateText(m)</span>
+                        }
                     </div>
                     @* Always one slot for the stop, empty while running: the cards of a
                        row share their rows (CSS subgrid), so a stop banner in one card

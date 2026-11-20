@@ -1,0 +1,177 @@
+@page "/rh/polyvalence"
+@inherits SpigaPage
+@inject PresenceReport Report
+@inject UiState Ui
+
+@* The temporary assignments of the pointage sheets, by person: how often
+   each one held a higher post (an emballage worker on a conducteur's
+   machine), on which machines, and how those machines did under them
+   compared with their usual level. For promotion decisions. *@
+<RequireAccess Module="@Modules.RhNominatif">
+    @if (!Session.Can(Perm.Polyvalence))
+    {
+        <div class="card" style="max-width:640px">
+            <h2>Accès refusé</h2>
+            <p>Vos rôles (@Actor.RoleNames) ne donnent pas le droit « @PermissionCatalog.Label(Perm.Polyvalence) ».</p>
+        </div>
+    }
+    else
+    {
+        <div class="head">
+            <div>
+                <span class="pre">Ressources humaines</span><h1>Polyvalence</h1>
+                <p>
+                    Chaque fois qu'un chef de conditionnement affecte quelqu'un au poste d'un absent, c'est enregistré ici.
+                    Le résultat de la machine (TRS, vitesse) est comparé à son niveau <b>habituel</b> sur la même période,
+                    pour comparer chaque personne à la même machine, pas à une autre.
+                </p>
+            </div>
+        </div>
+
+        <div class="filters">
+            <PeriodPicker Value="_period" ValueChanged="SetPeriodAsync" Kinds="Kinds" Id="poly-period" />
+            <div class="f">
+                <span>Afficher</span>
+                <label class="check"><input type="checkbox" @bind="_stepUpOnly" /> postes supérieurs seulement</label>
+            </div>
+        </div>
+
+        <Flash Error="@Error" Info="@Info" />
+
+        @if (_r == null)
+        {
+            <Loader Text="Lecture des remplacements…" />
+        }
+        else
+        {
+            @if (_r.ProductionError != null)
+            {
+                <div class="notice warn">@_r.ProductionError</div>
+            }
+            var records = _r.Acting.Where(a => !_stepUpOnly || a.IsStepUp).ToList();
+            var people = records.GroupBy(a => a.EmployeeId)
+                .Select(g => new Person(g.First().FullName, g.Last().OwnFunction, g.Last().Team, g.ToList()))
+                .OrderByDescending(p => p.Records.Count(r => r.IsStepUp)).ThenByDescending(p => p.Records.Count)
+                .ToList();
+            foreach (var person in people)
+                (person.Trs, person.Usual) = Trs(person.Records);
+
+            <div class="row">
+                <KpiTile Label="Remplacements" Value="@records.Count.ToString()" Css="@(records.Count == 0 ? "nd" : "")" Sub="postes tenus à la place d'un autre" />
+                <KpiTile Label="Sur un poste supérieur" Value="@records.Count(r => r.IsStepUp).ToString()" Sub="ex. emballage sur la machine d'un conducteur" />
+                <KpiTile Label="Personnes" Value="@people.Count.ToString()" Sub="ayant remplacé au moins une fois" />
+                <KpiTile Label="Heures en remplacement" Value="@Fmt.Num(records.Sum(r => r.Hours), 1)" />
+            </div>
+
+            <section class="card">
+                <div class="card-head"><h2>Par personne <small>cliquez une ligne pour le détail</small></h2></div>
+                <GridTable TItem="Person" Items="people" Columns="PersonColumns" MaxHeight="@null"
+                           RowClass="@(p => _open == p.Name ? "sel" : "")" OnRowClick="@(p => _open = _open == p.Name ? null : p.Name)"
+                           IsOpen="@(p => _open == p.Name)" Empty="Aucun remplacement sur cette période (feuilles validées seulement).">
+                    <Detail Context="p">
+                                                <table class="t">
+                                                    <thead><tr><th>Date · poste</th><th>Poste tenu</th><th>À la place de</th><th>Heures</th><th class="r">Production</th><th class="r">TRS</th><th class="r">Habituel</th><th class="r">Vitesse</th><th class="r">Habituelle</th></tr></thead>
+                                                    <tbody>
+                                                        @foreach (var r in p.Records)
+                                                        {
+                                                            var perf = _r.Performance.GetValueOrDefault(r);
+                                                            <tr>
+                                                                <td class="nowrap">@r.Date.ToString("dd/MM/yyyy")<small>@Shifts.Label(r.ShiftId) · @r.Team</small></td>
+                                                                <td>@StaffFunctions.Short(r.ActingFunction) · @r.Post @if (r.IsStepUp) { <span class="chip acc">supérieur</span> }</td>
+                                                                <td class="n">@r.ReplacedName</td>
+                                                                <td class="n nowrap">@r.From.ToString("HH:mm") – @r.To.ToString("HH:mm")</td>
+                                                                <td class="r" title="@(perf == null ? "" : $"{Fmt.Num(perf.Bags)} sacs")">@(perf == null || perf.Kg <= 0 ? "" : Fmt.Mass(perf.Kg))</td>
+                                                                <td class="r">@Fmt.Pct(perf?.Trs)</td>
+                                                                <td class="r">@Fmt.Pct(perf?.UsualTrs)</td>
+                                                                <td class="r">@(perf?.Speed is { } s ? Fmt.Num(s, 1) + "/min" : Fmt.Missing)</td>
+                                                                <td class="r">@(perf?.UsualSpeed is { } u ? Fmt.Num(u, 1) + "/min" : Fmt.Missing)</td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                                @if (p.Records.Count >= 4)
+                                                {
+                                                    var half = p.Records.Count / 2;
+                                                    var (early, _) = Trs(p.Records.Take(half).ToList());
+                                                    var (recent, _) = Trs(p.Records.Skip(half).ToList());
+                                                    <p class="n" style="margin-top:6px">
+                                                        Tendance : TRS @Fmt.Pct(early) sur ses premiers remplacements, @Fmt.Pct(recent) sur les plus récents
+                                                        @(early != null && recent != null ? recent > early + 1 ? "— en progrès." : recent < early - 1 ? "— en recul." : "— stable." : "")
+                                                    </p>
+                                                }
+                    </Detail>
+                </GridTable>
+            </section>
+        }
+    }
+</RequireAccess>
+
+@code {
+    private static readonly PeriodKind[] Kinds = { PeriodKind.Last7Days, PeriodKind.Month, PeriodKind.Custom };
+
+    private sealed record Person(string Name, StaffFunction Function, string Team, List<ActingRecord> Records)
+    {
+        public double? Trs { get; set; }
+        public double? Usual { get; set; }
+        public double? Gap => Trs - Usual;
+    }
+
+    private IReadOnlyList<GridColumn<Person>> PersonColumns => new[]
+    {
+        new GridColumn<Person>("Employé", p => p.Name),
+        new GridColumn<Person>("Équipe", p => p.Team),
+        new GridColumn<Person>("Sa fonction", p => StaffFunctions.Label(p.Function), p => StaffFunctions.Rank(p.Function), css: "n"),
+        new GridColumn<Person>("Postes", p => p.Records.Count.ToString(), p => p.Records.Count, css: "r"),
+        new GridColumn<Person>("dont supérieurs", p => p.Records.Count(r => r.IsStepUp).ToString(), p => p.Records.Count(r => r.IsStepUp), css: "r"),
+        new GridColumn<Person>("Heures", p => Fmt.Num(p.Records.Sum(r => r.Hours), 1), p => p.Records.Sum(r => r.Hours), css: "r"),
+        new GridColumn<Person>("Postes tenus", p => string.Join(", ", p.Records.GroupBy(r => r.ActingFunction).Select(g => $"{StaffFunctions.Short(g.Key)} ×{g.Count()}")), css: "n"),
+        new GridColumn<Person>("Machines", p => string.Join(", ", p.Records.Select(r => r.Post).Distinct()), css: "n"),
+        new GridColumn<Person>("TRS sous lui", p => Fmt.Pct(p.Trs), p => p.Trs, css: "r"),
+        new GridColumn<Person>("TRS habituel", p => Fmt.Pct(p.Usual), p => p.Usual, css: "r"),
+        new GridColumn<Person>("Écart", p => Fmt.SignedPct(p.Gap, 1), p => p.Gap, css: "r",
+            cell: p => @<span class="chip @(p.Gap is { } d ? d >= -2 ? "ok" : d >= -8 ? "warn" : "bad" : "")">@Fmt.SignedPct(p.Gap, 1)</span>),
+    };
+
+    private Period _period = default!;
+    private bool _stepUpOnly;
+    private string? _open;
+    private PresenceReport.Result? _r;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = Shifts.ProductionDate(Now);
+        _period = new Period(PeriodKind.Month, today, today);
+        // Show the page and its loader first: the machine history takes seconds.
+        await Task.Yield();
+        await LoadAsync();
+    }
+
+    private async Task SetPeriodAsync(Period p)
+    {
+        _period = p;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.Polyvalence))
+            return;
+        _r = null;
+        var (first, last) = _period.Days(Now);
+        await Run(async () => _r = await Report.LoadAsync(Actor, Perm.Polyvalence, first, last));
+    }
+
+    // Average TRS of the records, weighted by the bags made, and the
+    // machines' usual TRS.
+    private (double? Trs, double? Usual) Trs(IReadOnlyList<ActingRecord> records)
+    {
+        var perfs = records.Select(r => _r!.Performance.GetValueOrDefault(r)).Where(p => p?.Trs != null).ToList();
+        if (perfs.Count == 0)
+            return (null, null);
+        var weight = perfs.Sum(p => Math.Max(1, p!.Bags));
+        var trs = perfs.Sum(p => p!.Trs!.Value * Math.Max(1, p.Bags)) / weight;
+        var usuals = perfs.Where(p => p!.UsualTrs != null).ToList();
+        double? usual = usuals.Count == 0 ? null : usuals.Sum(p => p!.UsualTrs!.Value * Math.Max(1, p.Bags)) / usuals.Sum(p => Math.Max(1, p!.Bags));
+        return (trs, usual);
+    }
+}

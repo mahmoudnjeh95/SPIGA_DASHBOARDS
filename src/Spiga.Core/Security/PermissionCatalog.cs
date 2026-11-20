@@ -31,6 +31,14 @@ public static class Perm
     public const string NoteEcran = "conditionnement:note";
     public const string ParametresPoste = "parametres:administrer";
 
+    // Pointage (attendance sheets of the packaging service).
+    public const string PointageVoir = "pointage:voir";
+    public const string PointageSaisir = "pointage:saisir";
+    public const string PointageCorriger = "pointage:corriger";
+    public const string PointageAnciens = "pointage:anciens";
+    public const string ReferentielsSaisir = "referentiels:saisir";
+    public const string Polyvalence = "rh-nominatif:polyvalence";
+
     // Responsables: cover several teams (or all). Without it an account is
     // bound to one team and sees the postes of that team only.
     public const string EquipesMultiples = "vue-ensemble:equipes";
@@ -102,6 +110,13 @@ public static class PermissionCatalog
 
         View(Modules.Rh, "Taux d'absence par équipe"); Export(Modules.Rh);
         View(Modules.RhNominatif, "Taux d'absence par ouvrier"); Export(Modules.RhNominatif);
+        Add(Modules.RhNominatif, "polyvalence", "Polyvalence (remplacements)",
+            "Postes tenus en remplacement par chaque employé et résultat de la machine : aide aux décisions de promotion");
+
+        View(Modules.Pointage, "Consulter les feuilles de pointage");
+        Add(Modules.Pointage, "saisir", "Pointer son équipe", "Feuille du poste de son équipe, d'hier ou d'aujourd'hui");
+        Add(Modules.Pointage, "corriger", "Corriger un pointage validé", "Avec un motif, gardé dans l'historique de la feuille");
+        Add(Modules.Pointage, "anciens", "Pointer et corriger avant hier", "Sans ce droit : uniquement les postes d'hier et d'aujourd'hui");
 
         View(Modules.SaisieDechets, "Consulter les saisies");
         Add(Modules.SaisieDechets, "saisir", "Saisir les déchets emballage", "Par machine ; créer, modifier et soumettre à nouveau ses brouillons");

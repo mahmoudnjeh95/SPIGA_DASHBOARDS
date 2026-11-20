@@ -45,6 +45,9 @@
     [Parameter] public Func<double, string> Format { get; set; } = v => v.ToString("0.#", CultureInfo.GetCultureInfo("fr-FR"));
     [Parameter] public double? YMin { get; set; }
     [Parameter] public double? YMax { get; set; }
+
+    // Counts (people, events): the scale stops on whole numbers.
+    [Parameter] public bool Integer { get; set; }
     [Parameter] public string? Key { get; set; }
     [Parameter] public int Height { get; set; } = 220;
 
@@ -180,6 +183,8 @@
         var values = shown.SelectMany(s => s.Values.Skip(from).Take(count)).Where(v => v != null).Select(v => v!.Value).ToList();
         var min = YMin ?? Math.Min(0, values.DefaultIfEmpty(0).Min());
         var max = YMax ?? Math.Max(min + 1, values.DefaultIfEmpty(1).Max() * 1.15);
+        if (Integer && YMax == null)
+            max = min + Math.Max(4, Math.Ceiling((max - min) / 4) * 4);
         double Y(double v) => top + ph - (Math.Clamp(v, min, max) - min) / (max - min) * ph;
         var band = count == 0 ? pw : pw / count;
         double X(int i) => left + band * (i + 0.5);

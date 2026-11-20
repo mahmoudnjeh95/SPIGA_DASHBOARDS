@@ -127,7 +127,7 @@
                                             }
                                         </td>
                                     }
-                                    <td class="@Fmt.Css(m.Figures.TrsSeverity)">@Fmt.Pct(k.TrsPercent)<small>cible @Fmt.Num(m.Figures.TrsTarget) %</small></td>
+                                    <td class="@Fmt.Css(m.Figures.TrsSeverity)">@Fmt.Pct(k.TrsPercent)@if (Math.Abs(m.Figures.TrsTarget - _snap.TrsTarget) > 0.05) { <small>cible @Fmt.Num(m.Figures.TrsTarget) %</small> }</td>
                                     <td class="n">@Fmt.Pct(k.AvailabilityPercent, 0) · @Fmt.Pct(k.PerformancePercent, 0) · @Fmt.Pct(k.QualityPercent, 0)</td>
                                     <td class="r">@(m.Figures.HasProduction ? Fmt.Mass(k.ProductionKg) : "—")<small>@Fmt.Num(k.TotalBags) sacs</small></td>
                                     <td class="r @Fmt.Css(m.Figures.WeightSeverity)">@Fmt.Grams(k.WeightDeviationGrams)<small>@Fmt.SignedPct(k.WeightDeviationPercent)</small></td>

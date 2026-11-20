@@ -62,8 +62,6 @@
                 <span>Équipe du poste</span>
                 <span class="chip acc" style="align-self:flex-start;margin-top:5px">@_team</span>
             </div>
-            <span class="sp"></span>
-            <span class="chip" title="La date et le poste sont attachés à chaque saisie">Contexte de saisie</span>
         </div>
 
         @if (!_choosePoste && _poste == null)
@@ -92,7 +90,11 @@
                 <div class="card-head">
                     <h2>
                         @(_editing == null ? "Nouvelle saisie" : _editing.Status == WasteStatus.Validee ? $"Corriger la saisie n°{_editing.Id}" : $"Modifier la saisie n°{_editing.Id}")
-                        <small>@Shifts.Label(EditShift) du @EditDate.ToString("dd/MM/yyyy") · @Plant.TeamOnShift(EditDate, EditShift)</small>
+                        @* The poste chosen above: said again only for an entry of another poste. *@
+                        @if (_editing != null && (_editing.ProductionDate.Date != _date.Date || _editing.ShiftId != _shift))
+                        {
+                            <small>@Shifts.Label(EditShift) du @EditDate.ToString("dd/MM/yyyy") · @Plant.TeamOnShift(EditDate, EditShift)</small>
+                        }
                     </h2>
                 </div>
                 @if (_editing?.Status == WasteStatus.Renvoyee)
@@ -206,7 +208,10 @@
                 <h2>
                     Saisies du poste
                     <small>
-                        @_entries.Count saisie(s) · total @Fmt.Kg(_entries.Where(e => e.Counts).Sum(e => e.QuantityKg))
+                        @if (_entries.Count > 0)
+                        {
+                            @($"{_entries.Count} saisie(s) · total {Fmt.Kg(_entries.Where(e => e.Counts).Sum(e => e.QuantityKg))}")
+                        }
                         @if (_returned.Any(r => r.ProductionDate == _date && r.ShiftId == _shift))
                         {
                             @($" · + {_returned.Count(r => r.ProductionDate == _date && r.ShiftId == _shift)} renvoyée(s) à corriger, ci-dessus")

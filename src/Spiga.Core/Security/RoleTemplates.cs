@@ -36,12 +36,14 @@ public static class RoleTemplates
                 Perm.EquipesMultiples, "vue-ensemble:exporter", "conditionnement:exporter", Perm.TableauDetaille, Perm.EcranTv, Perm.NoteEcran, "rendement:exporter", "dechets:exporter",
                 Perm.DechetsSaisir, Perm.DechetsProduit, Perm.DechetsAutresPostes, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsAutrui, Perm.DechetsTardif,
                 "saisie-quantites:saisir", "saisie-quantites:valider", "objectifs:saisir", Perm.ComptesGerer, Perm.ComptesDebloquer,
+                Perm.PointageVoir, Perm.PointageSaisir, Perm.PointageCorriger, Perm.PointageAnciens, Perm.ReferentielsSaisir,
+                Perm.View(Modules.RhNominatif), "rh-nominatif:exporter", "rh:exporter", Perm.Polyvalence,
             }).ToArray(),
             new[] { "chef-equipe", "operateur" }),
-        new("chef-equipe", "Chef d'équipe", "Suivi de son équipe, saisie, validation et renvoi des déchets.",
+        new("chef-equipe", "Chef d'équipe", "Chef de conditionnement : suivi de son équipe, pointage, saisie, validation et renvoi des déchets.",
             Views(Modules.VueEnsemble, Modules.Conditionnement, Modules.Rendement, Modules.Silos, Modules.Dechets)
             .Concat(new[] { Perm.TableauDetaille, "conditionnement:exporter", Perm.DechetsSaisir, Perm.DechetsProduit, Perm.DechetsAutresPostes,
-                Perm.DechetsValider, Perm.DechetsAutrui, "saisie-quantites:saisir" })
+                Perm.DechetsValider, Perm.DechetsAutrui, "saisie-quantites:saisir", Perm.PointageVoir, Perm.PointageSaisir, Perm.PointageCorriger })
             .ToArray(),
             Array.Empty<string>()),
         new("operateur", "Opérateur de saisie", "Saisie du déchet emballage de ses machines, sur le poste en cours de son équipe ; ses statistiques.",
@@ -56,7 +58,8 @@ public static class RoleTemplates
             .Concat(new[] { Perm.EquipesMultiples, Perm.TableauDetaille, "maintenance:saisir", "maintenance:valider", "maintenance:exporter", "objectifs:saisir" }).ToArray(),
             Array.Empty<string>()),
         new("resp-rh", "Responsable RH", "Absentéisme, y compris nominatif.",
-            new[] { Perm.View(Modules.VueEnsemble), Perm.EquipesMultiples, Perm.View(Modules.Rh), "rh:exporter", Perm.View(Modules.RhNominatif), "rh-nominatif:exporter" },
+            new[] { Perm.View(Modules.VueEnsemble), Perm.EquipesMultiples, Perm.View(Modules.Rh), "rh:exporter", Perm.View(Modules.RhNominatif), "rh-nominatif:exporter",
+                Perm.Polyvalence, Perm.PointageVoir, Perm.View(Modules.Referentiels) },
             Array.Empty<string>()),
     };
 

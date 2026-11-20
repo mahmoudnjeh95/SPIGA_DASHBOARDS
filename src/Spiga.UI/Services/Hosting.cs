@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Spiga.Core.Audit;
 using Spiga.Core.Plant;
 using Spiga.Core.Security;
+using Spiga.Core.Staff;
 using Spiga.Core.Waste;
 using Spiga.Data;
 using SpigaDashboards.App.Data;
@@ -212,6 +213,8 @@ public static class SpigaServices
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<IAuditLog, AuditStore>();
         services.AddSingleton<IWasteStore, WasteStore>();
+        services.AddSingleton<IStaffStore, StaffStore>();
+        services.AddSingleton<IAttendanceStore, AttendanceStore>();
 
         services.AddSingleton(productionSettings);
         services.AddSingleton(production);
@@ -227,6 +230,9 @@ public static class SpigaServices
         services.AddScoped<AuditTrailService>();
         services.AddSingleton(sp => new PlantDataLocation(AppData.ConnectionFor(appDb), production));
         services.AddScoped<WasteService>();
+        services.AddScoped<StaffService>();
+        services.AddScoped<AttendanceService>();
+        services.AddScoped<PresenceReport>();
         services.AddScoped<UserSession>();
         services.AddScoped<DashboardQueries>();
         services.AddScoped<WasteDashboard>();
@@ -248,10 +254,14 @@ public sealed class UiState
     public int? PackagingShift { get; set; }
     public Period? WastePeriod { get; set; }
     public WasteFilter? WasteFilter { get; set; }
+    public Period? PresencePeriod { get; set; }
 
     // Menu: the screens planned for a later version ("à venir") are folded
     // away unless the user opens them.
     public bool ShowUpcoming { get; set; }
+
+    // Menu folded to its icons (more room for the sheets).
+    public bool RailMini { get; set; }
 
     // How the user set up each chart (SpigaChart), by chart key.
     public Dictionary<string, ChartView> Charts { get; } = new();

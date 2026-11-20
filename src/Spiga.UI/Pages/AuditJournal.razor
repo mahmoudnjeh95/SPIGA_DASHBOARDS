@@ -30,6 +30,8 @@
                 <option value="">Tous</option>
                 <option value="@Modules.Utilisateurs">Comptes et droits</option>
                 <option value="@Modules.SaisieDechets">Saisie des déchets</option>
+                <option value="@Modules.Pointage">Pointage</option>
+                <option value="@Modules.Referentiels">Personnel et lignes</option>
                 <option value="@Modules.Maintenance">Arrêts et planification (qualifications, interventions, ordres)</option>
                 <option value="@Modules.Conditionnement">Note du tableau de bord</option>
                 <option value="@Modules.Parametres">Paramètres du poste (noms des machines)</option>
@@ -39,37 +41,24 @@
 
     <section class="card">
         <div class="card-head"><h2>Événements <small>@_entries.Count affiché(s)@(_entries.Count >= Limit ? $", limités aux {Limit} plus récents" : "")</small></h2></div>
-        @if (_entries.Count == 0)
-        {
-            <p class="empty">Aucun événement sur la période.</p>
-        }
-        else
-        {
-            <div class="scroll">
-                <table class="t">
-                    <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Objet</th><th>Avant</th><th>Après</th><th>Poste</th></tr></thead>
-                    <tbody>
-                        @foreach (var e in _entries)
-                        {
-                            <tr>
-                                <td class="n" style="white-space:nowrap">@e.At.ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                <td>@e.UserLogin</td>
-                                <td><span class="chip @ActionCss(e.Action)">@e.Action</span>@if (!string.IsNullOrEmpty(e.Details)) { <small>@e.Details</small> }</td>
-                                <td class="n">@e.Target</td>
-                                <td class="wrap">@e.OldValue</td>
-                                <td class="wrap">@e.NewValue</td>
-                                <td class="n">@e.Workstation</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
+        <GridTable TItem="AuditEntry" Items="_entries" Columns="Columns" Empty="Aucun événement sur la période." />
     </section>
 </RequireAccess>
 
 @code {
     private const int Limit = 500;
+
+    private IReadOnlyList<GridColumn<AuditEntry>> Columns => new[]
+    {
+        new GridColumn<AuditEntry>("Date", e => e.At.ToString("dd/MM/yyyy HH:mm:ss"), e => e.At, css: "n nowrap"),
+        new GridColumn<AuditEntry>("Utilisateur", e => e.UserLogin),
+        new GridColumn<AuditEntry>("Action", e => e.Action + " " + e.Details,
+            cell: e => @<span><span class="chip @ActionCss(e.Action)">@e.Action</span>@if (!string.IsNullOrEmpty(e.Details)) { <small>@e.Details</small> }</span>),
+        new GridColumn<AuditEntry>("Objet", e => e.Target, css: "n"),
+        new GridColumn<AuditEntry>("Avant", e => e.OldValue ?? "", css: "wrap"),
+        new GridColumn<AuditEntry>("Après", e => e.NewValue ?? "", css: "wrap"),
+        new GridColumn<AuditEntry>("Poste", e => e.Workstation, css: "n"),
+    };
     private Period _period = default!;
     private string _user = "";
     private string _module = "";

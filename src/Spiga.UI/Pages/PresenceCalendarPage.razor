@@ -1,0 +1,516 @@
+@page "/rh/calendrier"
+@inherits SpigaPage
+@inject AttendanceService Attendance
+@inject IJSRuntime JS
+
+@* Presence calendar of the responsable: one row per person, one column per
+   day, the code of what the pointage says (présent, retard, absence and its
+   code, renfort, remplacement...). Filters by person, team, poste, function
+   and kind; the export holds exactly what the filters show. Drafts are
+   included, marked (a sheet not validated yet). *@
+<RequireAccess Module="@Modules.RhNominatif">
+    <div class="head">
+        <div>
+            <span class="pre">Ressources humaines</span><h1>Calendrier des présences</h1>
+            <p>Vue du mois ou de la semaine, comme un agenda ; « Tableau » : une ligne par personne. Touchez un jour pour le détail ; l'export reprend ce qui est affiché.</p>
+        </div>
+        @if (Session.Can("rh-nominatif:exporter"))
+        {
+            <button type="button" class="bar no-print" disabled="@(_entries == null)" @onclick="ExportAsync">@Icons.Svg("download")Exporter la sélection</button>
+        }
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Affichage</span>
+            <div class="segs" role="group" aria-label="Affichage">
+                @foreach (var v in Enum.GetValues<CalView>())
+                {
+                    <button type="button" class="seg @(_view == v ? "on" : "")" @onclick="() => SetViewAsync(v)">@v</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>@(_view == CalView.Semaine ? "Semaine" : "Mois")</span>
+            <div class="cal-nav">
+                <button type="button" class="seg" title="Précédent" @onclick="() => MoveAsync(-1)">◀</button>
+                <b>@RangeLabel()</b>
+                <button type="button" class="seg" title="Suivant" @onclick="() => MoveAsync(1)">▶</button>
+                <button type="button" class="seg" @onclick="TodayAsync">Aujourd'hui</button>
+            </div>
+        </div>
+        <div class="f">
+            <span>Équipe</span>
+            <div class="segs" role="group" aria-label="Équipe">
+                <button type="button" class="seg @(_team == null ? "on" : "")" @onclick="() => _team = null">Toutes</button>
+                @foreach (var t in Teams())
+                {
+                    <button type="button" class="seg @(_team == t ? "on" : "")" @onclick="() => _team = t">@t</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_shift == 0 ? "on" : "")" @onclick="() => _shift = 0">Tous</button>
+                @foreach (var s in Shifts.All)
+                {
+                    <button type="button" class="seg @(_shift == s ? "on" : "")" @onclick="() => _shift = s">@Shifts.Label(s)</button>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="filters">
+        <div class="f">
+            <label for="cal-person">Personne</label>
+            <input id="cal-person" list="cal-people" placeholder="Nom (tous si vide)" @bind="_person" @bind:event="oninput" />
+            <datalist id="cal-people">
+                @foreach (var n in People())
+                {
+                    <option value="@n"></option>
+                }
+            </datalist>
+        </div>
+        <div class="f">
+            <label for="cal-fn">Fonction</label>
+            <select id="cal-fn" @bind="_function">
+                <option value="">Toutes</option>
+                @foreach (var f in StaffFunctions.All)
+                {
+                    <option value="@f">@StaffFunctions.Label(f)</option>
+                }
+            </select>
+        </div>
+        <div class="f" style="flex:1 1 420px">
+            <span>Événements <small style="text-transform:none;font-weight:400">(aucun choisi = tout)</small></span>
+            <div class="segs" role="group" aria-label="Événements">
+                @foreach (var k in CalKinds.All)
+                {
+                    <button type="button" class="seg cal-k @(_kinds.Contains(k) ? "on" : "")" @onclick="() => ToggleKind(k)">
+                        <span class="cal-code @CalKinds.Css(k)">@CalKinds.Code(k)</span> @CalKinds.Label(k)
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_entries == null)
+    {
+        <Loader Text="Lecture des feuilles de pointage…" />
+    }
+    else
+    {
+        var shown = Filtered().ToList();
+        var days = Days();
+        var rows = shown.GroupBy(e => e.Line.EmployeeId)
+            .Select(g => (Id: g.Key, Name: g.First().Line.FullName, Team: g.OrderBy(e => e.Date).Last().Line.HomeTeam,
+                          Function: g.OrderBy(e => e.Date).Last().Line.Function, Entries: g.ToList()))
+            .OrderBy(r => r.Team).ThenBy(r => SortKey(r.Name, r.Function, r.Entries), SortComparer)
+            .ToList();
+
+        <div class="row">
+            <KpiTile Label="Personnes" Value="@rows.Count.ToString()" Sub="@($"{shown.Count} poste(s) pointé(s)")" />
+            <KpiTile Label="Présences" Value="@shown.Count(e => e.Kinds.Contains(CalKind.Present)).ToString()"
+                     Sub="@($"{Fmt.Num(shown.Sum(e => e.WorkedHours), 1)} h travaillées")" />
+            <KpiTile Label="Retards" Value="@shown.Count(e => e.Kinds.Contains(CalKind.Retard)).ToString()"
+                     Sub="@($"{Fmt.Num(shown.Sum(e => e.LateMinutes))} min")" />
+            <KpiTile Label="Absences" Value="@shown.Count(e => e.Line.Status == LineStatus.Absent).ToString()"
+                     Sub="@string.Join(" · ", new[] { CalKind.A, CalKind.M, CalKind.AT, CalKind.C }.Select(k => $"{k} {shown.Count(e => e.Kinds.Contains(k))}"))" />
+            <KpiTile Label="Heures sup." Value="@Fmt.Num(shown.Sum(e => e.OvertimeMinutes) / 60, 1)" Sub="heures" />
+        </div>
+
+        @if (_view == CalView.Mois)
+        {
+            var gridStart = Monday(_from);
+            var gridEnd = Monday(_to).AddDays(6);
+            <section class="card cal-month">
+                <div class="cal-dow">
+                    @foreach (var n in new[] { "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche" })
+                    {
+                        <div>@n</div>
+                    }
+                </div>
+                <div class="cal-weeks">
+                    @for (var d = gridStart; d <= gridEnd; d = d.AddDays(1))
+                    {
+                        var day = d;
+                        var inMonth = day >= _from && day <= _to;
+                        var dayEntries = inMonth ? shown.Where(e => e.Date == day).ToList() : new List<CalEntry>();
+                        var events = dayEntries.Where(IsEvent).ToList();
+                        var present = dayEntries.Count(e => e.Kinds.Contains(CalKind.Present));
+                        <div class="cal-day @(inMonth ? "" : "out") @(day == Today ? "today" : "") @(_day == day ? "sel" : "") @(day.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")"
+                             @onclick="() => _day = _day == day ? null : day">
+                            <div class="cal-day-head">
+                                <b>@day.Day</b>
+                                @if (present > 0)
+                                {
+                                    <span class="cal-present" title="Présents">✓ @present</span>
+                                }
+                            </div>
+                            @foreach (var e in events.Take(MonthMax))
+                            {
+                                <div class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e })) @(e.Sheet.Status == SheetStatus.Brouillon ? "draft" : "")"
+                                     title="@e.Line.FullName · @e.Describe(NameOf(e.Line.ReplacesEmployeeId))">
+                                    <b>@CalKinds.Code(PresenceCalendar.Main(new[] { e }))</b> @Short(e.Line.FullName)
+                                </div>
+                            }
+                            @if (events.Count > MonthMax)
+                            {
+                                <div class="cal-more">+ @(events.Count - MonthMax) autre(s)</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+        else if (_view == CalView.Semaine)
+        {
+            <section class="card">
+                <div class="cal-wrap">
+                    <table class="cal-week">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                @foreach (var d in days)
+                                {
+                                    <th class="@(d == Today ? "today" : "") @(d.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")">
+                                        @d.ToString("dddd", Fmt.French) <b>@d.ToString("dd/MM")</b>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var shift in Shifts.All.Where(s => _shift == 0 || s == _shift))
+                            {
+                                <tr>
+                                    <th class="cal-shift">@Shifts.Label(shift)<small>@Shifts.Hours(shift)</small></th>
+                                    @foreach (var d in days)
+                                    {
+                                        var cell = shown.Where(e => e.Date == d && e.Sheet.ShiftId == shift).ToList();
+                                        var teams = cell.Select(e => e.Sheet.Team).Distinct().ToList();
+                                        var events = cell.Where(IsEvent).OrderBy(e => PresenceCalendar.Main(new[] { e })).ThenBy(e => e.Line.FullName).ToList();
+                                        var present = cell.Count(e => e.Kinds.Contains(CalKind.Present));
+                                        <td class="@(d == Today ? "today" : "") @(d.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")">
+                                            @if (cell.Count > 0)
+                                            {
+                                                <div class="cal-slot">
+                                                    <div class="cal-slot-head">
+                                                        <b>@string.Join(", ", teams)</b>
+                                                        @if (present > 0) { <span class="cal-present">✓ @present</span> }
+                                                        @if (cell.Any(e => e.Sheet.Status == SheetStatus.Brouillon)) { <span class="chip warn">brouillon</span> }
+                                                    </div>
+                                                    @foreach (var e in events)
+                                                    {
+                                                        <div class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e }))" title="@e.Describe(NameOf(e.Line.ReplacesEmployeeId))">
+                                                            <b>@CalKinds.Code(PresenceCalendar.Main(new[] { e }))</b> @e.Line.FullName <small>@EventDetail(e)</small>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        @if (_day is { } openDay && _view == CalView.Mois)
+        {
+            var dayEntries = shown.Where(e => e.Date == openDay).ToList();
+            <section class="card">
+                <div class="card-head">
+                    <h2>@openDay.ToString("dddd d MMMM", Fmt.French) <small>@dayEntries.Count(e => e.Kinds.Contains(CalKind.Present)) présent(s), @dayEntries.Count(IsEvent) événement(s)</small></h2>
+                    <span class="sp"></span>
+                    <button type="button" class="link" @onclick="() => _day = null">Fermer</button>
+                </div>
+                @foreach (var g in dayEntries.GroupBy(e => (e.Sheet.ShiftId, e.Sheet.Team)).OrderBy(g => g.Key.ShiftId))
+                {
+                    <div class="cal-dayline">
+                        <b>@Shifts.Label(g.Key.ShiftId) · @g.Key.Team</b>
+                        <span class="cal-present">✓ @g.Count(e => e.Kinds.Contains(CalKind.Present))</span>
+                        @foreach (var e in g.Where(IsEvent))
+                        {
+                            <span class="cal-ev @CalKinds.Css(PresenceCalendar.Main(new[] { e }))"><b>@CalKinds.Code(PresenceCalendar.Main(new[] { e }))</b> @e.Line.FullName <small>@EventDetail(e)</small></span>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        @if (_view == CalView.Tableau)
+        {
+        <section class="card">
+            <div class="cal-legend">
+                <span>Codes : voir les boutons « Événements » ci-dessus.</span>
+                <span><span class="cal-code draft">✓</span> feuille en brouillon</span>
+                <span><span class="cal-code"></span> pas pointé (repos)</span>
+            </div>
+            @if (rows.Count == 0)
+            {
+                <p class="empty">Personne ne correspond à ces filtres sur cette période.</p>
+            }
+            else
+            {
+                <div class="cal-wrap">
+                    <table class="cal">
+                        <thead>
+                            <tr>
+                                <th class="cal-name sortable" @onclick="() => SortBy(0)">Nom@Mark(0)</th>
+                                @foreach (var d in days)
+                                {
+                                    <th class="@(d.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")" title="@d.ToString("dddd d MMMM", Fmt.French)">@d.ToString("dd")<small>@d.ToString("ddd", Fmt.French)[..2]</small></th>
+                                }
+                                <th class="cal-sum sortable" title="Présences" @onclick="() => SortBy(1)">✓@Mark(1)</th>
+                                <th class="cal-sum sortable" title="Retards" @onclick="() => SortBy(2)">R@Mark(2)</th>
+                                <th class="cal-sum sortable" title="Absences (A, M, AT)" @onclick="() => SortBy(3)">Abs@Mark(3)</th>
+                                <th class="cal-sum sortable" title="Congés" @onclick="() => SortBy(4)">C@Mark(4)</th>
+                                <th class="cal-sum sortable" title="Heures travaillées" @onclick="() => SortBy(5)">h@Mark(5)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var team in rows.GroupBy(r => r.Team))
+                            {
+                                <tr class="cal-team"><td class="cal-name" colspan="@(days.Count + 6)">@team.Key <small>@team.Count() personne(s)</small></td></tr>
+                                @foreach (var r in team)
+                                {
+                                    <tr>
+                                        <td class="cal-name">@r.Name<small>@StaffFunctions.Short(r.Function)</small></td>
+                                        @foreach (var d in days)
+                                        {
+                                            var cell = r.Entries.Where(e => e.Date == d).OrderBy(e => e.Sheet.ShiftId).ToList();
+                                            if (cell.Count == 0)
+                                            {
+                                                <td class="@(d.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")"></td>
+                                                continue;
+                                            }
+                                            var main = PresenceCalendar.Main(cell);
+                                            var draft = cell.Any(e => e.Sheet.Status == SheetStatus.Brouillon);
+                                            var selected = _sel == (r.Id, d);
+                                            <td class="@(selected ? "sel" : "")">
+                                                <button type="button" class="cal-code @CalKinds.Css(main) @(draft ? "draft" : "")"
+                                                        title="@string.Join("\n", cell.Select(e => e.Describe(NameOf(e.Line.ReplacesEmployeeId))))"
+                                                        @onclick="() => _sel = selected ? null : (r.Id, d)">
+                                                    @Code(cell)
+                                                </button>
+                                            </td>
+                                        }
+                                        <td class="cal-sum">@r.Entries.Count(e => e.Kinds.Contains(CalKind.Present))</td>
+                                        <td class="cal-sum">@r.Entries.Count(e => e.Kinds.Contains(CalKind.Retard))</td>
+                                        <td class="cal-sum">@r.Entries.Count(e => e.Kinds.Contains(CalKind.A) || e.Kinds.Contains(CalKind.M) || e.Kinds.Contains(CalKind.AT))</td>
+                                        <td class="cal-sum">@r.Entries.Count(e => e.Kinds.Contains(CalKind.C))</td>
+                                        <td class="cal-sum">@Fmt.Num(r.Entries.Sum(e => e.WorkedHours))</td>
+                                    </tr>
+                                    @if (_sel is { } sel && sel.Id == r.Id)
+                                    {
+                                        <tr class="cal-detail">
+                                            <td colspan="@(days.Count + 6)">
+                                                @foreach (var e in r.Entries.Where(e => e.Date == sel.Day).OrderBy(e => e.Sheet.ShiftId))
+                                                {
+                                                    <div><b>@r.Name</b> · @e.Describe(NameOf(e.Line.ReplacesEmployeeId))</div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+        }
+    }
+</RequireAccess>
+
+@code {
+    private enum CalView { Mois, Semaine, Tableau }
+
+    private const int MonthMax = 4;
+    private CalView _view = CalView.Mois;
+    private DateTime _anchor;
+    private DateTime? _day;
+
+    private DateTime Today => Shifts.ProductionDate(Now);
+
+    private static DateTime Monday(DateTime d) => d.Date.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+
+    private string RangeLabel() => _view == CalView.Semaine
+        ? $"du {_from:dd/MM} au {_to:dd/MM/yyyy}"
+        : Fmt.French.TextInfo.ToTitleCase(_anchor.ToString("MMMM yyyy", Fmt.French));
+
+    private async Task SetViewAsync(CalView v)
+    {
+        _view = v;
+        await LoadAsync();
+    }
+
+    private async Task MoveAsync(int step)
+    {
+        _anchor = _view == CalView.Semaine ? _anchor.AddDays(7 * step) : _anchor.AddMonths(step);
+        _day = null;
+        await LoadAsync();
+    }
+
+    private async Task TodayAsync()
+    {
+        _anchor = Today;
+        _day = null;
+        await LoadAsync();
+    }
+
+    // What the month and week views list by name (the presences are counted).
+    private bool IsEvent(CalEntry e) => e.Kinds.Any(k => k != CalKind.Present) || !string.IsNullOrWhiteSpace(_person);
+
+    // "TAHRI Mahdi" -> "TAHRI M."
+    private static string Short(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length < 2 ? name : string.Join(' ', parts[..^1]) + " " + parts[^1][0] + ".";
+    }
+
+    private string EventDetail(CalEntry e)
+    {
+        var l = e.Line;
+        if (l.Status == LineStatus.Absent) return l.Absence is { } a ? AbsenceCodes.Label(a) : "";
+        if (l.Status == LineStatus.AConfirmer) return "à confirmer";
+        var bits = new List<string>();
+        if (e.LateMinutes > 0) bits.Add($"arrivé {l.EntryAt:HH:mm}");
+        if (e.EarlyMinutes > 0) bits.Add($"parti {l.ExitAt:HH:mm}");
+        if (e.OvertimeMinutes > 0) bits.Add($"+{e.OvertimeMinutes:0} min");
+        if (l.IsRenfort) bits.Add($"de {l.HomeTeam}");
+        if (l.IsActing) bits.Add($"sur {l.ActingMachineId ?? "ligne"} pour {NameOf(l.ReplacesEmployeeId)}");
+        if (bits.Count == 0) bits.Add($"{l.EntryAt:HH:mm}–{l.ExitAt:HH:mm}");
+        return string.Join(" · ", bits);
+    }
+
+    private string? _team;
+    private int _shift;
+    private string _person = "";
+    private string _function = "";
+    private readonly HashSet<CalKind> _kinds = new();
+    private List<CalEntry>? _entries;
+    private Dictionary<int, string> _names = new();
+    private (int Id, DateTime Day)? _sel;
+    // Row order inside each team: 0 = name (default: by function then name),
+    // 1..5 = the totals on the right; descending first for the totals.
+    private int? _sortCol;
+    private bool _sortDesc;
+
+    private void SortBy(int col)
+    {
+        if (_sortCol != col)
+            (_sortCol, _sortDesc) = (col, col != 0);
+        else if (_sortDesc == (col != 0))
+            _sortDesc = !_sortDesc;
+        else
+            _sortCol = null;
+    }
+
+    private string Mark(int col) => _sortCol == col ? (_sortDesc ? " ▼" : " ▲") : "";
+
+    private static readonly IComparer<object> SortComparer = Comparer<object>.Create((a, b) =>
+        a is string sa && b is string sb ? string.Compare(sa, sb, StringComparison.CurrentCultureIgnoreCase) : Comparer<object>.Default.Compare(a, b));
+
+    private object SortKey(string name, StaffFunction function, List<CalEntry> e)
+    {
+        double sign = _sortDesc ? -1 : 1;
+        return _sortCol switch
+        {
+            0 => _sortDesc ? (object)new string(name.ToLowerInvariant().Select(c => (char)(char.MaxValue - c)).ToArray()) : name,
+            1 => sign * e.Count(x => x.Kinds.Contains(CalKind.Present)),
+            2 => sign * e.Count(x => x.Kinds.Contains(CalKind.Retard)),
+            3 => sign * e.Count(x => x.Kinds.Contains(CalKind.A) || x.Kinds.Contains(CalKind.M) || x.Kinds.Contains(CalKind.AT)),
+            4 => sign * e.Count(x => x.Kinds.Contains(CalKind.C)),
+            5 => sign * e.Sum(x => x.WorkedHours),
+            _ => $"{9 - StaffFunctions.Rank(function)} {name}",
+        };
+    }
+
+    private DateTime _from;
+    private DateTime _to;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _anchor = Today;
+        await Task.Yield();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.View(Modules.RhNominatif)))
+            return;
+        _entries = null;
+        _sel = null;
+        // Semaine: Monday to Sunday; Mois and Tableau: the month.
+        if (_view == CalView.Semaine)
+            (_from, _to) = (Monday(_anchor), Monday(_anchor).AddDays(6));
+        else
+            (_from, _to) = (new DateTime(_anchor.Year, _anchor.Month, 1), new DateTime(_anchor.Year, _anchor.Month, 1).AddMonths(1).AddDays(-1));
+        await Run(async () =>
+        {
+            var sheets = await Attendance.SheetsAsync(Actor, Perm.View(Modules.RhNominatif), _from, _to);
+            _names = sheets.SelectMany(s => s.Lines).GroupBy(l => l.EmployeeId).ToDictionary(g => g.Key, g => g.First().FullName);
+            _entries = PresenceCalendar.Entries(sheets);
+        });
+    }
+
+    private List<DateTime> Days()
+    {
+        var list = new List<DateTime>();
+        for (var d = _from; d <= _to; d = d.AddDays(1))
+            list.Add(d);
+        return list;
+    }
+
+    private IEnumerable<string> Teams() => _entries?.Select(e => e.Line.HomeTeam).Distinct().OrderBy(t => t) ?? Enumerable.Empty<string>();
+
+    private IEnumerable<string> People() => _entries?.Select(e => e.Line.FullName).Distinct().OrderBy(n => n) ?? Enumerable.Empty<string>();
+
+    private string? NameOf(int? id) => id is { } i ? _names.GetValueOrDefault(i) : null;
+
+    private void ToggleKind(CalKind k)
+    {
+        if (!_kinds.Remove(k))
+            _kinds.Add(k);
+    }
+
+    // Team = the person's own team (a renfort stays in his team's rows);
+    // the kinds keep the people having at least one such event, and only
+    // those events.
+    private IEnumerable<CalEntry> Filtered()
+    {
+        var list = _entries!.Where(e => (_team == null || e.Line.HomeTeam == _team)
+                                         && (_shift == 0 || e.Sheet.ShiftId == _shift)
+                                         && (_function == "" || e.Line.Function.ToString() == _function)
+                                         && (string.IsNullOrWhiteSpace(_person) || e.Line.FullName.Contains(_person.Trim(), StringComparison.CurrentCultureIgnoreCase)));
+        return _kinds.Count == 0 ? list : list.Where(e => e.Kinds.Overlaps(_kinds));
+    }
+
+    // "R", "A", "✓/⇄" (two postes the same day).
+    private static string Code(List<CalEntry> cell)
+        => string.Join("/", cell.Select(e =>
+        {
+            var main = PresenceCalendar.Main(new[] { e });
+            return main == CalKind.Present && e.Kinds.Contains(CalKind.HeuresSup) ? "✓+" : CalKinds.Code(main);
+        }));
+
+    private async Task ExportAsync()
+    {
+        if (_entries == null)
+            return;
+        var filters = new List<string> { $"du {_from:dd/MM/yyyy} au {_to:dd/MM/yyyy}" };
+        if (_team != null) filters.Add(_team);
+        if (_shift != 0) filters.Add("poste " + Shifts.Label(_shift));
+        if (_function != "" && Enum.TryParse<StaffFunction>(_function, out var f)) filters.Add(StaffFunctions.Label(f));
+        if (!string.IsNullOrWhiteSpace(_person)) filters.Add("personne « " + _person.Trim() + " »");
+        if (_kinds.Count > 0) filters.Add(string.Join(", ", _kinds.Select(CalKinds.Label)));
+        var bytes = PresenceCalendar.Csv(Filtered(), NameOf, "Calendrier des présences · " + string.Join(" · ", filters));
+        await JS.InvokeVoidAsync("spigaDownload", $"presences_{_from:yyyyMMdd}-{_to:yyyyMMdd}.csv", "text/csv", Convert.ToBase64String(bytes));
+    }
+}

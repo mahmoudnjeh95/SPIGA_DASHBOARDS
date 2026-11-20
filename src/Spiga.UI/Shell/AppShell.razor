@@ -8,9 +8,16 @@
 @inject IDesktopBridge Desktop
 @inject UiState Ui
 
-<ActivityZone Class="@(RailOnly ? "app rail-only" : "app")">
+<ActivityZone Class="@(RailOnly ? "app rail-only" : Ui.RailMini ? "app rail-mini" : "app")">
     <aside class="rail">
         <Brand />
+        @if (!RailOnly)
+        {
+            <button type="button" class="rail-toggle" @onclick="() => Ui.RailMini = !Ui.RailMini"
+                    title="@(Ui.RailMini ? "Agrandir le menu" : "Réduire le menu")" aria-label="@(Ui.RailMini ? "Agrandir le menu" : "Réduire le menu")">
+                @(Ui.RailMini ? "»" : "«")
+            </button>
+        }
         <nav class="navwrap" aria-label="Modules">
             @foreach (var group in VisibleGroups())
             {
@@ -20,7 +27,7 @@
                 }
                 @foreach (var item in group)
                 {
-                    <NavLink class="nav" ActiveClass="active" href="@item.Route" Match="@(item.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                    <NavLink class="nav" ActiveClass="active" href="@item.Route" title="@item.Label" Match="@(item.Route == "" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
                         <span class="nav-ic">@Icons.Svg(item.Key)</span>
                         <span>@item.Label</span>
                         @if (!item.Ready)

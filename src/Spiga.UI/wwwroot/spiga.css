@@ -941,3 +941,219 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .done-check circle { fill: none; stroke: var(--ok); stroke-width: 3; stroke-dasharray: 151; stroke-dashoffset: 151; animation: sp-done-ring .6s var(--ease) forwards; }
 .done-check path { fill: none; stroke: var(--ok); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: sp-done-ring .4s .5s var(--ease) forwards; }
 @keyframes sp-done-ring { to { stroke-dashoffset: 0; } }
+
+/* ---------- Pointage ---------- */
+.pt td { font-size: 14px; }
+.pt tr.pt-aconfirmer td:first-child { box-shadow: inset 4px 0 0 0 var(--warn); }
+.pt tr.pt-present td:first-child { box-shadow: inset 4px 0 0 0 var(--ok); }
+.pt tr.pt-absent td:first-child { box-shadow: inset 4px 0 0 0 var(--bad); }
+.pt tr.pt-absent td { background: color-mix(in srgb, var(--bad) 5%, transparent); }
+.pt tr.pt-ailleurs td { opacity: .7; }
+.pt tr.pt-bad td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.pt-ok, .pt-abs {
+    min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--btn); color: var(--fg);
+    font: inherit; font-weight: 700; cursor: pointer; margin-right: 6px; transition: background .2s var(--ease), color .2s var(--ease);
+}
+.pt-ok:hover, .pt-abs:hover { background: var(--hover); }
+.pt-ok.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.pt-abs.on { background: var(--bad); border-color: var(--bad); color: #fff; }
+.pt-abs option { color: var(--fg); background: var(--tile); }
+.pt-machine, .pt-assign select, .tp select {
+    min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--tile); color: var(--fg); font: inherit; font-weight: 700; padding: 0 6px;
+}
+.tp { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.tp select { min-width: 54px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.tp.is-off select { opacity: .8; }
+.pt td small.warn-t, .warn-t { color: var(--warn); font-weight: 700; }
+.pt td small.bad-t { color: var(--bad); font-weight: 700; }
+.pt-warn { margin-top: 6px; color: var(--warn); font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pt-acting { margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pt-assign {
+    margin-top: 8px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft);
+    display: flex; flex-direction: column; gap: 8px; font-size: 13px; max-width: 420px;
+}
+.pt-add { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.pt-add select { min-height: 38px; min-width: 280px; }
+.pt-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pt-todo { display: flex; flex-direction: column; gap: 2px; color: var(--warn); font-size: 13px; }
+.pt-todo small { color: var(--fg2); }
+.pt-confirm { font-size: 15px; }
+.pe-sub { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg2); margin: 16px 0 8px; }
+
+/* The paper pointage form (Feuille papier), on screen and printed. */
+.paper { background: #fff; color: #111; padding: 18px; border-radius: 8px; box-shadow: var(--shadow); }
+.paper-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 15px; margin-bottom: 10px; }
+.paper-day { color: #C0392B; }
+.paper-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0; }
+.paper-t { width: 100%; border-collapse: collapse; font-size: 12px; }
+.paper-t th, .paper-t td { border: 1px solid #333; padding: 2px 5px; height: 20px; }
+.paper-t th { background: #f2f2f2; text-align: left; }
+.paper-t th small { display: block; font-weight: 400; color: #555; }
+.paper-t td:nth-child(2), .paper-t td:nth-child(3) { width: 52px; text-align: center; }
+.paper-t tr.paper-sep td { border-top: 2px solid #000; }
+.paper-t tr.paper-chefconditionnement td:first-child { font-weight: 800; }
+.paper-t tr.paper-chefligne td:first-child { color: #B03A2E; }
+.paper-t tr.paper-emballage td:first-child { color: #1F618D; }
+.paper-t tr.paper-nettoyage td:first-child { color: #1E8449; }
+.paper-foot { font-size: 11px; margin-top: 10px; color: #222; }
+
+@media print {
+    @page { size: A4 landscape; margin: 8mm; }
+    .spiga-root::before, .rail, .ctx, .no-print, #blazor-error-ui { display: none !important; }
+    .spiga-root, .app, .main, .view { display: block !important; background: #fff !important; padding: 0 !important; margin: 0 !important; min-height: 0 !important; }
+    .paper { box-shadow: none; padding: 0; }
+    .card { box-shadow: none !important; break-inside: avoid; }
+}
+.pt td.pt-away { color: var(--accent); }
+.pt td.pt-away > * { margin-right: 18px; font-weight: 600; }
+.pt td.pt-away b { font-weight: 800; }
+.pt td small.pt-away-note { color: var(--accent); font-weight: 600; }
+.form .f .check input, .f .check input { min-height: 0; min-width: 0; width: 18px; height: 18px; padding: 0; }
+.paper-t small.paper-renfort { display: block; font-size: 10px; font-weight: 700; color: #6C3483; }
+.paper-t td.paper-away { text-align: center; font-style: italic; color: #6C3483; }
+/* Compact sheet: one line per person, hours as text until touched. */
+.pt td { padding-top: 5px; padding-bottom: 5px; }
+.pt .pt-ok, .pt .pt-abs { min-height: 34px; padding: 0 10px; }
+.pt .pt-abs { max-width: 150px; }
+.pt tr.pt-group td { background: var(--soft); padding: 7px 8px; border-top: 2px solid var(--line); box-shadow: none !important; }
+.pt tr.pt-group td b { margin-right: 8px; }
+.pt tr.pt-group td small { display: inline; margin-right: 10px; }
+.pt .pt-all { min-height: 30px; margin-left: 6px; background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.pt-hours { min-height: 34px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--line); background: transparent; color: var(--fg); font: inherit; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+.pt-hours:hover { border-style: solid; border-color: var(--accent); }
+.pt-hours span { color: var(--fg3); margin-left: 4px; }
+.pt-hours.chg, .pt-hours-ro.chg { color: var(--warn); }
+.pt-hours-ro { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pt-times { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pt-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 6px 0 8px; }
+.pt-todo button.link { font-size: 12px; }
+
+/* Menu folded to its icons (« / » at the top of the rail). */
+.rail { position: relative; }
+.rail-toggle {
+    position: absolute; top: 18px; right: -13px; z-index: 5; width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--tile); color: var(--fg2); font-weight: 800; cursor: pointer; box-shadow: var(--shadow-sm);
+}
+.rail-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.spiga-root .app.rail-mini .rail { width: 74px; min-width: 74px; padding-left: 8px; padding-right: 8px; }
+.spiga-root .app.rail-mini .brand div,
+.spiga-root .app.rail-mini .grp,
+.spiga-root .app.rail-mini .nav > span:not(.nav-ic),
+.spiga-root .app.rail-mini .me small,
+.spiga-root .app.rail-mini .me b { display: none; }
+.spiga-root .app.rail-mini .brand { justify-content: center; padding: 0 0 10px; }
+.spiga-root .app.rail-mini .brand img { height: 34px; }
+.spiga-root .app.rail-mini .nav { justify-content: center; padding-left: 0; padding-right: 0; }
+.spiga-root .app.rail-mini .navwrap > :not(.nav) { display: none; }
+
+/* Presence calendar: person x day grid. */
+.cal-wrap { overflow: auto; max-height: calc(100vh - 260px); }
+table.cal { border-collapse: separate; border-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.cal th, .cal td { padding: 2px; text-align: center; border-bottom: 1px solid var(--line); min-width: 30px; }
+.cal thead th { position: sticky; top: 0; z-index: 2; background: var(--tile); font-weight: 700; color: var(--fg2); }
+.cal thead th small { display: block; font-weight: 400; color: var(--fg3); }
+.cal th.sun, .cal td.sun { background: color-mix(in srgb, var(--fg3) 7%, transparent); }
+.cal .cal-name { position: sticky; left: 0; z-index: 1; background: var(--tile); text-align: left; min-width: 190px; padding: 4px 8px; font-weight: 700; font-size: 13px; }
+.cal thead .cal-name { z-index: 3; }
+.cal .cal-name small { display: block; font-weight: 400; color: var(--fg3); font-size: 11px; }
+.cal tr.cal-team td { background: var(--soft); font-weight: 800; }
+.cal tr.cal-team td small { display: inline; margin-left: 6px; }
+.cal .cal-sum { font-weight: 700; color: var(--fg2); min-width: 34px; border-left: 1px solid var(--line); }
+.cal td.sel { background: var(--accent-soft); }
+.cal tr.cal-detail td { text-align: left; padding: 8px 12px; background: var(--accent-soft); font-size: 13px; }
+.cal-code {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; padding: 0 4px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--tile); color: var(--fg3); font: inherit; font-weight: 800; font-size: 12px; cursor: pointer;
+}
+.cal-code.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.cal-code.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.cal-code.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.cal-code.acc { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.cal-code.leave { background: color-mix(in srgb, #8E44AD 16%, transparent); color: #8E44AD; border-color: transparent; }
+.cal-code.draft { border: 1px dashed var(--fg3); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--fg2); margin-bottom: 10px; }
+.cal-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.seg.cal-k { display: inline-flex; align-items: center; gap: 6px; }
+.seg.cal-k .cal-code { min-width: 22px; height: 20px; cursor: inherit; }
+.pt-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pt-missing .chip { cursor: pointer; border: 0; font: inherit; font-size: 12px; font-weight: 700; }
+.seg.on .cal-code { background: #fff; }
+/* The fold button: in the rail, under the logo, not over it. */
+.rail-toggle { position: static; align-self: flex-end; margin: -4px 0 2px; width: 28px; height: 22px; border-radius: 6px; }
+.spiga-root .app.rail-mini .rail-toggle { align-self: center; }
+/* Folded by the user: it opens over the page while the pointer is on it,
+   and folds back when the pointer leaves (the page does not move). */
+.spiga-root .app.rail-mini .rail { transition: width .18s var(--ease), margin .18s var(--ease), box-shadow .18s var(--ease); z-index: 20; }
+.spiga-root .app.rail-mini .rail:hover { width: 248px; min-width: 248px; margin-right: -174px; padding-left: 12px; padding-right: 12px; box-shadow: var(--shadow-lg); background: var(--tile); }
+.spiga-root .app.rail-mini .rail:hover .brand div,
+.spiga-root .app.rail-mini .rail:hover .grp,
+.spiga-root .app.rail-mini .rail:hover .nav > span:not(.nav-ic),
+.spiga-root .app.rail-mini .rail:hover .me small,
+.spiga-root .app.rail-mini .rail:hover .me b { display: revert; }
+.spiga-root .app.rail-mini .rail:hover .navwrap > :not(.nav) { display: revert; }
+.spiga-root .app.rail-mini .rail:hover .brand { justify-content: flex-start; padding: 0 6px 10px; }
+.spiga-root .app.rail-mini .rail:hover .nav { justify-content: flex-start; padding: 0 10px; }
+.spiga-root .app.rail-mini .rail:hover .rail-toggle { align-self: flex-end; }
+
+/* ---------- Tables: frozen header, sort, filters (GridTable) ---------- */
+/* Every table keeps its titles in view while the page scrolls (under the
+   context bar). On a wide screen the horizontal scroll box is not needed,
+   and it would stop the titles from sticking. */
+@media (min-width: 1100px) { .spiga-root .scroll { overflow-x: visible; } }
+.spiga-root .t thead th { position: sticky; top: 58px; z-index: 1; background: var(--tile); }
+.spiga-root .grid-wrap { overflow: auto; }
+.spiga-root .grid-wrap .t thead th { top: 0; }
+.spiga-root .grid-wrap .t thead tr.grid-filter th { top: 29px; padding-top: 0; padding-bottom: 6px; }
+.grid th.sortable { cursor: pointer; user-select: none; }
+.grid th.sortable:hover { color: var(--accent); }
+.grid .sort-mark { color: var(--accent); font-size: 10px; }
+.grid tr.grid-filter input { width: 100%; min-width: 60px; height: 26px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; background: var(--bg); color: var(--fg); font: inherit; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.grid tr.grid-filter input:focus { outline: none; border-color: var(--accent); }
+.grid tr.clickable { cursor: pointer; }
+.grid tr.grid-detail td { background: var(--accent-soft); }
+.grid-count { font-size: 12px; margin-top: 4px; }
+/* The page title already says where we are: the domain line above it
+   repeats the breadcrumb of the top bar. */
+.spiga-root .head .pre { display: none; }
+.cal th.sortable { cursor: pointer; user-select: none; }
+.cal th.sortable:hover { color: var(--accent); }
+/* Six tiles fit on one line of a 1366 px screen (no tile alone on a row). */
+.kpi { flex-basis: 140px; }
+
+/* Calendar, agenda views (Mois / Semaine). */
+.cal-nav { display: flex; align-items: center; gap: 6px; }
+.cal-nav b { min-width: 150px; text-align: center; }
+.cal-dow { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--fg3); padding-bottom: 6px; }
+.cal-dow div { padding: 0 6px; }
+.cal-weeks { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.cal-day { min-height: 116px; padding: 5px 6px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; cursor: pointer; min-width: 0; }
+.cal-day:hover { background: var(--hover); }
+.cal-day.out { background: color-mix(in srgb, var(--fg3) 6%, transparent); cursor: default; }
+.cal-day.out .cal-day-head b { color: var(--fg3); font-weight: 400; }
+.cal-day.sun, .cal-week td.sun, .cal-week th.sun { background: color-mix(in srgb, var(--fg3) 5%, transparent); }
+.cal-day.today .cal-day-head b { background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; }
+.cal-day.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-day-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.cal-present { font-size: 11px; font-weight: 700; color: var(--ok); background: var(--ok-soft); border-radius: 6px; padding: 0 6px; white-space: nowrap; }
+.cal-ev { font-size: 11px; line-height: 1.35; border-radius: 5px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--hover); color: var(--fg); }
+.cal-ev b { margin-right: 2px; }
+.cal-ev small { color: var(--fg3); margin-left: 3px; }
+.cal-ev.ok { background: var(--ok-soft); } .cal-ev.ok b { color: var(--ok); }
+.cal-ev.warn { background: var(--warn-soft); } .cal-ev.warn b { color: var(--warn); }
+.cal-ev.bad { background: var(--bad-soft); } .cal-ev.bad b { color: var(--bad); }
+.cal-ev.acc { background: var(--accent-soft); } .cal-ev.acc b { color: var(--accent); }
+.cal-ev.leave { background: color-mix(in srgb, #8E44AD 14%, transparent); } .cal-ev.leave b { color: #8E44AD; }
+.cal-ev.draft { outline: 1px dashed var(--fg3); }
+.cal-more { font-size: 11px; color: var(--accent); font-weight: 700; padding-left: 4px; }
+table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.cal-week th, .cal-week td { border: 1px solid var(--line); vertical-align: top; padding: 5px; }
+.cal-week thead th { position: sticky; top: 0; z-index: 2; background: var(--tile); font-size: 12px; font-weight: 600; text-transform: capitalize; color: var(--fg2); text-align: left; }
+.cal-week thead th.today { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.cal-week th.cal-shift { width: 92px; text-align: left; font-size: 13px; }
+.cal-week th.cal-shift small { display: block; font-weight: 400; color: var(--fg3); }
+.cal-week th:first-child { width: 92px; }
+.cal-slot { display: flex; flex-direction: column; gap: 2px; }
+.cal-slot-head { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 2px; }
+.cal-week .cal-ev { white-space: normal; }
+.cal-dayline { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.cal-dayline > b { min-width: 170px; }

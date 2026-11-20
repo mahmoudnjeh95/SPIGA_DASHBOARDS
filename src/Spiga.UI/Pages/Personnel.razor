@@ -1,0 +1,480 @@
+@page "/admin/personnel"
+@inherits SpigaPage
+@inject StaffService Staff
+@inject PlantData Plant
+
+@* Référentiels › Personnel et lignes: who works in which team, with which
+   function and post; the lignes of the chefs de ligne. A change of team,
+   function or machine is a new assignment from a date: past sheets keep
+   what they recorded. *@
+<RequireAccess Module="@Modules.Referentiels">
+    <div class="head">
+        <div>
+            <span class="pre">Administration</span><h1>Personnel et lignes</h1>
+            <p>
+                Les employés du conditionnement : équipe, fonction (chef de conditionnement, chef de ligne, conducteur, emballage, nettoyage)
+                et poste (machine, ou ligne pour un chef de ligne). Une mutation ou une promotion s'enregistre comme une nouvelle affectation
+                avec sa date d'effet : les pointages passés ne changent pas.
+            </p>
+        </div>
+    </div>
+
+    <div class="tabrow" role="tablist">
+        <button type="button" role="tab" class="tab @(_tab == 0 ? "on" : "")" @onclick="() => _tab = 0">Employés <small>@_employees.Count(e => e.IsActive)</small></button>
+        <button type="button" role="tab" class="tab @(_tab == 1 ? "on" : "")" @onclick="() => _tab = 1">Lignes <small>@_lines.Count</small></button>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_tab == 0)
+    {
+        <div class="filters">
+            <div class="f">
+                <span>Afficher</span>
+                <label class="check"><input type="checkbox" @bind="_showInactive" /> les inactifs</label>
+            </div>
+            <span class="sp"></span>
+            <span class="n">Triez en cliquant un titre de colonne, filtrez avec les cases sous les titres.</span>
+        </div>
+
+        @if (Staff.CanEdit(Actor))
+        {
+            <section class="card">
+                <div class="card-head">
+                    <h2>@(_edit == null ? "Ajouter un employé" : $"Modifier {_edit.FullName}")</h2>
+                    @if (_edit != null)
+                    {
+                        <span class="sp"></span>
+                        <button type="button" class="link" @onclick="NewEmployee">Nouvel employé</button>
+                    }
+                </div>
+                <div class="form">
+                    <div class="f">
+                        <label for="pe-name">Nom et prénom</label>
+                        <input id="pe-name" maxlength="80" placeholder="ex. BEN SAAD Med" @bind="_name" />
+                    </div>
+                    <div class="f">
+                        <label for="pe-mat">Matricule (facultatif)</label>
+                        <input id="pe-mat" maxlength="20" size="10" @bind="_matricule" />
+                    </div>
+                    @if (_edit != null)
+                    {
+                        <div class="f">
+                            <span>État</span>
+                            <label class="check"><input type="checkbox" @bind="_active" /> actif</label>
+                        </div>
+                        <button type="button" class="bar" @onclick="SaveIdentityAsync">Enregistrer</button>
+                    }
+                </div>
+
+                <h3 class="pe-sub">@(_edit == null ? "Affectation" : "Nouvelle affectation (mutation, promotion, autre machine)")</h3>
+                <div class="form">
+                    <div class="f">
+                        <label for="pe-team">Équipe</label>
+                        <select id="pe-team" @bind="_pTeam">
+                            <option value="">Choisir…</option>
+                            @foreach (var t in Plant.Teams)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f">
+                        <label for="pe-fn">Fonction</label>
+                        <select id="pe-fn" @bind="_pFunction">
+                            @foreach (var f in StaffFunctions.All)
+                            {
+                                <option value="@f">@StaffFunctions.Label(f)</option>
+                            }
+                        </select>
+                    </div>
+                    @if (StaffFunctions.HoldsMachine(_pFunction))
+                    {
+                        <div class="f">
+                            <label for="pe-machine">Machine</label>
+                            <select id="pe-machine" @bind="_pMachine">
+                                <option value="">Choisir…</option>
+                                @foreach (var m in _machines)
+                                {
+                                    <option value="@m.Id">@m.Id · @Sectors.Label(m.Sector)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    else if (StaffFunctions.HoldsLine(_pFunction))
+                    {
+                        <div class="f">
+                            <label for="pe-line">Ligne</label>
+                            <select id="pe-line" @bind="_pLine">
+                                <option value="0">Choisir…</option>
+                                @foreach (var l in _lines.Where(l => l.IsActive))
+                                {
+                                    <option value="@l.Id">@l.Name (@string.Join(", ", l.Machines))</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="f">
+                        <label for="pe-from">Date d'effet</label>
+                        <input id="pe-from" type="date" @bind="_pFrom" />
+                    </div>
+                    @if (_edit == null)
+                    {
+                        <button type="button" class="bar acc" @onclick="AddAsync">Ajouter l'employé</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="bar acc" @onclick="AddPostingAsync">Enregistrer l'affectation</button>
+                    }
+                </div>
+
+                @if (_edit != null)
+                {
+                    <h3 class="pe-sub">Historique des affectations</h3>
+                    <table class="t">
+                        <thead><tr><th>Dès le</th><th>Équipe</th><th>Fonction</th><th>Poste</th><th>Par</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var p in _edit.Postings.OrderByDescending(p => p.ValidFrom))
+                            {
+                                <tr>
+                                    <td class="nowrap">@p.ValidFrom.ToString("dd/MM/yyyy")</td>
+                                    <td>@p.Team</td>
+                                    <td class="n">@StaffFunctions.Label(p.Function)</td>
+                                    <td class="n">@Post(p)</td>
+                                    <td class="n">@p.CreatedBy<small>@Fmt.Date(p.CreatedAt)</small></td>
+                                    <td><button type="button" class="link danger" @onclick="() => DeletePostingAsync(p)">Supprimer</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+        }
+
+        @if (Staff.CanEdit(Actor))
+        {
+            <section class="card">
+                <div class="card-head">
+                    <h2>Importer une liste <small>copiée depuis Excel</small></h2>
+                    <span class="sp"></span>
+                    <button type="button" class="link" @onclick="() => _importOpen = !_importOpen">@(_importOpen ? "Fermer" : "Ouvrir")</button>
+                </div>
+                @if (_importOpen)
+                {
+                    <p class="n">
+                        Dans Excel, sélectionnez les lignes (colonnes dans cet ordre : <b>Nom et prénom · Matricule · Équipe · Fonction · Machine ou ligne</b>),
+                        copiez, puis collez ici. Équipe : « D » ou « Equipe D ». Fonction : chef de conditionnement, chef de ligne, conducteur, emballage, nettoyage.
+                        Machine pour un conducteur ou l'emballage, nom de la ligne pour un chef de ligne.
+                    </p>
+                    <div class="form">
+                        <div class="f grow" style="flex:1 1 100%">
+                            <label for="pe-import">Lignes à importer</label>
+                            <textarea id="pe-import" rows="6" placeholder="BEN SAAD Med	1024	B	Emballage	CC01" @bind="_importText" @bind:event="oninput"></textarea>
+                        </div>
+                        <div class="f">
+                            <label for="pe-import-from">Date d'effet</label>
+                            <input id="pe-import-from" type="date" @bind="_importFrom" />
+                        </div>
+                        <button type="button" class="bar" disabled="@string.IsNullOrWhiteSpace(_importText)" @onclick="PreviewImportAsync">Vérifier</button>
+                        @if (_import != null && _import.Any(r => r.Ok))
+                        {
+                            <button type="button" class="bar acc" @onclick="ImportAsync">Importer @_import.Count(r => r.Ok) employé(s)</button>
+                        }
+                    </div>
+                    @if (_import != null)
+                    {
+                        <div class="scroll" style="margin-top:10px">
+                            <table class="t">
+                                <thead><tr><th>Ligne</th><th>Nom</th><th>Équipe</th><th>Fonction</th><th>Poste</th><th>Résultat</th></tr></thead>
+                                <tbody>
+                                    @foreach (var r in _import)
+                                    {
+                                        <tr>
+                                            <td class="n">@r.LineNo</td>
+                                            <td>@(r.Employee?.FullName ?? r.Raw.Split('	', ';')[0])</td>
+                                            <td class="n">@r.Posting?.Team</td>
+                                            <td class="n">@(r.Posting is { } pd ? StaffFunctions.Label(pd.Function) : "")</td>
+                                            <td class="n">@(r.Posting?.MachineId ?? (r.Posting?.LineId is { } li ? _lines.FirstOrDefault(l => l.Id == li)?.Name : ""))</td>
+                                            <td>@if (r.Ok) { <span class="chip ok">OK</span> } else { <span class="chip bad">@r.Error</span> }</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            </section>
+        }
+
+        <section class="card">
+            <div class="card-head"><h2>Employés</h2></div>
+            <GridTable TItem="Employee" Items="@_employees.Where(e => _showInactive || e.IsActive).ToList()" Columns="EmployeeColumns"
+                       RowClass="@(e => (_edit?.Id == e.Id ? "sel " : "") + (e.IsActive ? "" : "cancelled"))"
+                       Empty="@($"Aucun employé. {(Staff.CanEdit(Actor) ? "Ajoutez-les avec le formulaire ci-dessus." : "")}")" />
+        </section>
+    }
+    else
+    {
+        @if (Staff.CanEdit(Actor))
+        {
+            <section class="card">
+                <div class="card-head">
+                    <h2>@(_lineId == 0 ? "Nouvelle ligne" : $"Modifier la ligne {_lineName}") <small>les machines dont un chef de ligne a la charge</small></h2>
+                    @if (_lineId != 0)
+                    {
+                        <span class="sp"></span>
+                        <button type="button" class="link" @onclick="NewLine">Nouvelle ligne</button>
+                    }
+                </div>
+                <div class="form">
+                    <div class="f">
+                        <label for="pl-name">Nom</label>
+                        <input id="pl-name" maxlength="40" placeholder="ex. Pâte courte 1" @bind="_lineName" />
+                    </div>
+                    <div class="f">
+                        <span>État</span>
+                        <label class="check"><input type="checkbox" @bind="_lineActive" /> active</label>
+                    </div>
+                </div>
+                @foreach (var sector in _machines.GroupBy(m => m.Sector))
+                {
+                    <div class="f" style="margin-top:10px">
+                        <span>@Sectors.Label(sector.Key)</span>
+                        <div class="checks">
+                            @foreach (var m in sector)
+                            {
+                                var taken = _lines.FirstOrDefault(l => l.Id != _lineId && l.IsActive && l.Machines.Contains(m.Id));
+                                <label class="check" title="@(taken == null ? m.Name : $"Déjà dans la ligne {taken.Name}")">
+                                    <input type="checkbox" disabled="@(taken != null)" checked="@_lineMachines.Contains(m.Id)"
+                                           @onchange="e => Toggle(m.Id, e.Value is true)" />
+                                    @m.Id @if (taken != null) { <small>(@taken.Name)</small> }
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                <div class="form" style="margin-top:12px">
+                    <button type="button" class="bar acc" @onclick="SaveLineAsync">Enregistrer la ligne</button>
+                    @if (_lineId != 0)
+                    {
+                        <button type="button" class="link danger" @onclick="DeleteLineAsync">Supprimer</button>
+                    }
+                </div>
+            </section>
+        }
+        <section class="card">
+            <div class="card-head"><h2>Lignes</h2></div>
+            @if (_lines.Count == 0)
+            {
+                <p class="empty">Aucune ligne. Une ligne regroupe les machines d'un chef de ligne.</p>
+            }
+            else
+            {
+                var today = Shifts.ProductionDate(Now);
+                <table class="t">
+                    <thead><tr><th>Ligne</th><th>Machines</th><th>Chefs de ligne</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var l in _lines)
+                        {
+                            <tr class="@(l.IsActive ? "" : "cancelled")">
+                                <td>@l.Name @if (!l.IsActive) { <small>inactive</small> }</td>
+                                <td class="n">@string.Join(", ", l.Machines)</td>
+                                <td class="n">@string.Join(", ", _employees.Where(e => e.IsActive && e.Current(today)?.LineId == l.Id).Select(e => $"{e.FullName} ({e.Current(today)!.Team})"))</td>
+                                <td>
+                                    @if (Staff.CanEdit(Actor))
+                                    {
+                                        <button type="button" class="link" @onclick="() => EditLine(l)">Modifier</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    }
+</RequireAccess>
+
+@code {
+    private int _tab;
+    private bool _showInactive;
+    private IReadOnlyList<Employee> _employees = Array.Empty<Employee>();
+    private IReadOnlyList<ProductionLine> _lines = Array.Empty<ProductionLine>();
+    private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
+
+    private Employee? _edit;
+    private string _name = "";
+    private string _matricule = "";
+    private bool _active = true;
+    private string _pTeam = "";
+    private StaffFunction _pFunction = StaffFunction.Conducteur;
+    private string _pMachine = "";
+    private int _pLine;
+    private DateTime _pFrom;
+
+    private bool _importOpen;
+    private string _importText = "";
+    private DateTime _importFrom = DateTime.Today;
+    private IReadOnlyList<StaffService.ImportRow>? _import;
+
+    private async Task PreviewImportAsync()
+        => await Run(async () => _import = await Staff.ParseImportAsync(_importText, _importFrom));
+
+    private async Task ImportAsync()
+    {
+        if (_import == null)
+            return;
+        var added = 0;
+        if (await Run(async () => added = await Staff.ImportAsync(Actor, _import), null))
+        {
+            var errors = _import.Count(r => !r.Ok);
+            _import = null;
+            _importText = "";
+            await LoadAsync();
+            Info = $"{added} employé(s) importé(s)." + (errors > 0 ? $" {errors} ligne(s) en erreur non importée(s)." : "");
+        }
+    }
+
+    private DateTime Today => Shifts.ProductionDate(Now);
+
+    private IReadOnlyList<GridColumn<Employee>> EmployeeColumns => new[]
+    {
+        new GridColumn<Employee>("Nom et prénom", e => e.FullName + (e.IsActive ? "" : " (inactif)")),
+        new GridColumn<Employee>("Matricule", e => e.Matricule, css: "n"),
+        new GridColumn<Employee>("Équipe", e => e.Current(Today)?.Team ?? ""),
+        new GridColumn<Employee>("Fonction", e => e.Current(Today) is { } p ? StaffFunctions.Label(p.Function) : "",
+            e => e.Current(Today) is { } p ? -StaffFunctions.Rank(p.Function) : 9, css: "n"),
+        new GridColumn<Employee>("Poste", e => e.Current(Today) is { } p ? Post(p) : "", css: "n"),
+        new GridColumn<Employee>("Depuis", e => (e.Current(Today)?.ValidFrom.ToString("dd/MM/yyyy") ?? "")
+                + (e.Postings.Any(x => x.ValidFrom.Date > Today) ? " · changement prévu" : ""),
+            e => e.Current(Today)?.ValidFrom, css: "n nowrap"),
+        new GridColumn<Employee>("", e => "", filter: false, sortable: false,
+            cell: e => @<span>@if (Staff.CanEdit(Actor)) { <button type="button" class="link" @onclick="() => Edit(e)">Modifier</button> }</span>),
+    };
+
+    private int _lineId;
+    private string _lineName = "";
+    private bool _lineActive = true;
+    private HashSet<string> _lineMachines = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pFrom = Shifts.ProductionDate(Now);
+        if (Session.Can(Perm.View(Modules.Referentiels)))
+            await LoadAsync();
+    }
+
+    // Keeps the message of the action that triggered the reload.
+    private async Task LoadAsync()
+    {
+        var info = Info;
+        await Run(async () =>
+        {
+            _employees = await Staff.EmployeesAsync(Actor);
+            _lines = await Staff.LinesAsync(Actor);
+            _machines = await Plant.GetMachinesAsync();
+            if (_edit != null)
+                _edit = _employees.FirstOrDefault(e => e.Id == _edit.Id);
+        });
+        Info ??= info;
+    }
+
+    private string Post(EmployeePosting p)
+        => p.MachineId ?? (p.LineId is { } id ? "Ligne " + (_lines.FirstOrDefault(l => l.Id == id)?.Name ?? "?") : "—");
+
+    private void NewEmployee()
+    {
+        _edit = null;
+        _name = _matricule = "";
+        _active = true;
+        _pFrom = Shifts.ProductionDate(Now);
+    }
+
+    private void Edit(Employee e)
+    {
+        _edit = e;
+        _name = e.FullName;
+        _matricule = e.Matricule;
+        _active = e.IsActive;
+        var p = e.Current(Shifts.ProductionDate(Now));
+        _pTeam = p?.Team ?? "";
+        _pFunction = p?.Function ?? StaffFunction.Conducteur;
+        _pMachine = p?.MachineId ?? "";
+        _pLine = p?.LineId ?? 0;
+        _pFrom = Shifts.ProductionDate(Now);
+    }
+
+    private PostingDraft Draft() => new(_pFrom, _pTeam, _pFunction,
+        StaffFunctions.HoldsMachine(_pFunction) ? _pMachine : null, StaffFunctions.HoldsLine(_pFunction) && _pLine != 0 ? _pLine : null);
+
+    private async Task AddAsync()
+    {
+        if (await Run(() => Staff.AddEmployeeAsync(Actor, new EmployeeDraft(_name, _matricule), Draft()), $"{_name} ajouté."))
+        {
+            _name = _matricule = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task SaveIdentityAsync()
+    {
+        if (_edit != null && await Run(() => Staff.UpdateEmployeeAsync(Actor, _edit.Id, new EmployeeDraft(_name, _matricule), _active), "Employé enregistré."))
+            await LoadAsync();
+    }
+
+    private async Task AddPostingAsync()
+    {
+        if (_edit != null && await Run(() => Staff.SavePostingAsync(Actor, _edit.Id, Draft()), $"Affectation enregistrée à partir du {_pFrom:dd/MM/yyyy}."))
+            await LoadAsync();
+    }
+
+    private async Task DeletePostingAsync(EmployeePosting p)
+    {
+        if (_edit != null && await Run(() => Staff.DeletePostingAsync(Actor, _edit.Id, p.Id), "Affectation supprimée."))
+            await LoadAsync();
+    }
+
+    private void NewLine()
+    {
+        _lineId = 0;
+        _lineName = "";
+        _lineActive = true;
+        _lineMachines = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void EditLine(ProductionLine l)
+    {
+        _lineId = l.Id;
+        _lineName = l.Name;
+        _lineActive = l.IsActive;
+        _lineMachines = new(l.Machines, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private void Toggle(string machine, bool on)
+    {
+        if (on)
+            _lineMachines.Add(machine);
+        else
+            _lineMachines.Remove(machine);
+    }
+
+    private async Task SaveLineAsync()
+    {
+        ProductionLine? saved = null;
+        if (await Run(async () => saved = await Staff.SaveLineAsync(Actor, _lineId, _lineName, _lineMachines, _lineActive), "Ligne enregistrée."))
+        {
+            await LoadAsync();
+            if (saved != null)
+                EditLine(saved);
+        }
+    }
+
+    private async Task DeleteLineAsync()
+    {
+        if (await Run(() => Staff.DeleteLineAsync(Actor, _lineId), "Ligne supprimée."))
+        {
+            NewLine();
+            await LoadAsync();
+        }
+    }
+}

@@ -1,0 +1,80 @@
+@* An hour and a minute picked from lists: only the times between Min and
+   Max, on 5-minute steps, can be chosen (no typing, nothing invalid). The
+   hours may cross midnight (night poste): each option is a full date. *@
+
+<span class="tp @(Disabled ? "is-off" : "")">
+    <select aria-label="@($"{Label} : heure")" disabled="@Disabled" value="@HourKey" @onchange="OnHour">
+        @if (Value == null)
+        {
+            <option value="">--</option>
+        }
+        @foreach (var h in Hours())
+        {
+            <option value="@h.ToString("yyyyMMddHH")">@h.ToString("HH")</option>
+        }
+    </select>
+    <b>:</b>
+    <select aria-label="@($"{Label} : minutes")" disabled="@(Disabled || Value == null)" value="@MinuteKey" @onchange="OnMinute">
+        @if (Value == null)
+        {
+            <option value="">--</option>
+        }
+        @foreach (var m in Minutes())
+        {
+            <option value="@m">@m.ToString("00")</option>
+        }
+    </select>
+</span>
+
+@code {
+    [Parameter] public DateTime? Value { get; set; }
+    [Parameter] public EventCallback<DateTime> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public DateTime Min { get; set; }
+    [Parameter, EditorRequired] public DateTime Max { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string Label { get; set; } = "Heure";
+
+    private const int Step = AttendanceService.StepMinutes;
+
+    private static DateTime Hour(DateTime t) => new(t.Year, t.Month, t.Day, t.Hour, 0, 0);
+
+    private string HourKey => Value is { } v ? Hour(v).ToString("yyyyMMddHH") : "";
+
+    private string MinuteKey => Value is { } v ? v.Minute.ToString() : "";
+
+    private IEnumerable<DateTime> Hours()
+    {
+        for (var h = Hour(Min); h <= Max; h = h.AddHours(1))
+            yield return h;
+    }
+
+    private IEnumerable<int> Minutes()
+    {
+        if (Value is not { } v)
+            yield break;
+        var hour = Hour(v);
+        for (var m = 0; m < 60; m += Step)
+        {
+            var t = hour.AddMinutes(m);
+            if (t >= Min && t <= Max)
+                yield return m;
+        }
+    }
+
+    private Task OnHour(ChangeEventArgs e)
+    {
+        if (!DateTime.TryParseExact(e.Value?.ToString(), "yyyyMMddHH", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hour))
+            return Task.CompletedTask;
+        var t = hour.AddMinutes(Value?.Minute ?? 0);
+        if (t < Min) t = Min;
+        if (t > Max) t = Max;
+        return ValueChanged.InvokeAsync(t);
+    }
+
+    private Task OnMinute(ChangeEventArgs e)
+    {
+        if (Value is not { } v || !int.TryParse(e.Value?.ToString(), out var minute))
+            return Task.CompletedTask;
+        return ValueChanged.InvokeAsync(Hour(v).AddMinutes(minute));
+    }
+}

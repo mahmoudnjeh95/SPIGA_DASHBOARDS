@@ -1,6 +1,7 @@
 using Spiga.Core.Audit;
 using Spiga.Core.Plant;
 using Spiga.Core.Security;
+using Spiga.Core.Staff;
 using Spiga.Core.Waste;
 using Spiga.Data;
 
@@ -49,6 +50,10 @@ public sealed class TestApp : IDisposable
         Auth = new AuthService(Users, Roles, Settings, Audit, Clock, client);
         Admin = new AccessAdminService(Users, Roles, Platforms, Settings, Audit, Clock, client);
         WasteService = new WasteService(Waste, new FakePlant(), Settings, Audit, Clock, client);
+        StaffStore = new StaffStore(Db);
+        AttendanceStore = new AttendanceStore(Db);
+        Staff = new StaffService(StaffStore, new FakePlant(), Audit, Clock, client);
+        Attendance = new AttendanceService(AttendanceStore, StaffStore, new FakePlant(), Audit, Clock, client);
     }
 
     public FixedClock Clock { get; } = new(new DateTime(2026, 11, 17, 10, 0, 0));
@@ -66,6 +71,10 @@ public sealed class TestApp : IDisposable
     public AuthService Auth { get; }
     public AccessAdminService Admin { get; }
     public WasteService WasteService { get; }
+    public StaffStore StaffStore { get; }
+    public AttendanceStore AttendanceStore { get; }
+    public StaffService Staff { get; }
+    public AttendanceService Attendance { get; }
 
     public const string AdminPassword = "Admin2026secure";
 

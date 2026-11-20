@@ -48,7 +48,6 @@
             <KpiTile Label="Déchet produit" Value="@(_snap.ProductEntries == 0 ? "—" : Fmt.Kg(_snap.ProductWasteKg))" Css="@(_snap.ProductWasteKg > 0 ? "" : "nd")"
                      Sub="@(_snap.ProductEntries == 0 ? "aucune saisie sur la période"
                             : string.Join(" · ", _snap.Sectors.Where(s => s.ProductWasteKg > 0).Select(s => $"{Sectors.Label(s.Sector)} {Fmt.Kg(s.ProductWasteKg)}")))" />
-            <KpiTile Label="Rendement usine" Value="Non disponible" Missing="true" Sub="Saisie des quantités : module à venir" />
         </div>
 
         <div class="row">
@@ -101,15 +100,6 @@
                         </tbody>
                     </table>
                 </div>
-                @if (_otherDomains.Count > 0)
-                {
-                    <div class="row" style="border-top:1px solid var(--line);padding-top:10px;gap:10px 28px">
-                        @foreach (var (label, source) in _otherDomains)
-                        {
-                            <div class="mini"><span class="l">@label</span><span class="v nd">N/D</span><span class="s">@source</span></div>
-                        }
-                    </div>
-                }
             </section>
         </div>
     }
@@ -123,7 +113,6 @@
     private Period _period = default!;
     private PlantSnapshot? _snap;
     private List<Alert> _alerts = new();
-    private List<(string Label, string Source)> _otherDomains = new();
 
     private sealed record Alert(string Css, string Title, string Detail, string? Href, string Action);
 
@@ -163,16 +152,6 @@
             _snap = await Queries.LoadAsync(Actor, Perm.View(Modules.VueEnsemble), from, to, null, null);
             _alerts = await BuildAlertsAsync(_snap, from, to);
         });
-        _otherDomains = new List<(string, string, string)>
-            {
-                (Modules.Energie, "Électricité (kWh / t)", "Compteurs non connectés"),
-                (Modules.Qualite, "Humidité moyenne", "Base Qualité non connectée"),
-                (Modules.Maintenance, "Préventif réalisé", "GMAO non connectée"),
-                (Modules.Rh, "Absentéisme", "Base RH non connectée"),
-            }
-            .Where(x => Session.Can(x.Item1, AppAction.Voir))
-            .Select(x => (x.Item2, x.Item3))
-            .ToList();
     }
 
     private string Subtitle()
@@ -181,8 +160,8 @@
             return "";
         var running = _snap.Machines.Count(m => m.State?.Running == true);
         return _snap.IsLive
-            ? $" · production {Fmt.Mass(t.ProductionKg)} · {running} machine(s) en marche sur {_snap.Machines.Count}"
-            : $" · production {Fmt.Mass(t.ProductionKg)}";
+            ? $" · {running} machine(s) en marche sur {_snap.Machines.Count}"
+            : "";
     }
 
     private string SectorHref(string sector)
@@ -210,11 +189,18 @@
             ongoing = new Dictionary<string, OngoingStop>();
         }
 
-        foreach (var m in snap.Machines.Where(m => m.State != null))
+        // Disconnected machines: one line for all of them (the server PC
+        // off stops them all at once).
+        var offline = snap.Machines.Where(m => m.State is { Connected: false }).ToList();
+        if (offline.Count == 1)
+            alerts.Add(new("off", $"{offline[0].Machine.Id} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(offline[0].State!.LastData, Now)}", packaging, "Voir"));
+        else if (offline.Count > 1)
+            alerts.Add(new("off", $"{offline.Count} machines déconnectées",
+                $"{string.Join(", ", offline.Select(m => m.Machine.Id))} · dernière donnée {Fmt.Ago(offline.Max(m => m.State!.LastData), Now)}", packaging, "Voir"));
+
+        foreach (var m in snap.Machines.Where(m => m.State is { Connected: true }))
         {
-            if (!m.State!.Connected)
-                alerts.Add(new("off", $"{m.Machine.Id} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(m.State.LastData, Now)}", packaging, "Voir"));
-            else if (!m.State.Running)
+            if (!m.State!.Running)
             {
                 var product = m.State.Product ?? "production en cours";
                 if (ongoing.TryGetValue(m.Machine.Id, out var stop))
@@ -257,9 +243,6 @@
                     "saisie/dechets-produit", "Saisir"));
         }
 
-        if (Session.Can(Modules.Sources, AppAction.Voir))
-            alerts.Add(new("off", "5 sources de données non connectées", "Banderoleuse, Qualité, GMAO, RH, énergie : indicateurs non disponibles",
-                "admin/sources", "Voir"));
         return alerts;
     }
 }
