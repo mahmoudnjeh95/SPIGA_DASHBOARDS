@@ -3,7 +3,6 @@
 @inject StopQualificationService Qual
 @inject UiState Ui
 @inject ClientInfo Client
-@inject IDesktopBridge Desktop
 @implements IDisposable
 
 @* Qualification des arrêts: was the Pannes tab of the WPF planning window
@@ -197,8 +196,8 @@ else
     private QualRow? Selected => _board?.All.FirstOrDefault(r => r.Key == _selected);
     private List<QualRow> Checked => _board?.All.Where(r => _checked.Contains(r.Key)).ToList() ?? new();
     private bool IsBulk => _checked.Count > 0;
-    // The preventive form is on the planning board, a page of the desktop application for now.
-    private bool CanPlan => Desktop.IsAvailable && NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
+    // The preventive rule form of the planning board.
+    private bool CanPlan => NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
 
     protected override async Task OnInitializedAsync()
     {
@@ -449,7 +448,7 @@ else
     {
         var machineId = _manual ? _manualMachine : Selected?.MachineId;
         if (machineId != null)
-            Desktop.PlanPreventive(NativePages.Access(Actor, NativePage.StopPlanning), machineId, _component.Trim());
+            Nav.NavigateTo(NativePages.PreventiveRoute(machineId, _component.Trim()));
     }
 
     // ---------- display ----------

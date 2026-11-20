@@ -135,11 +135,14 @@ public class WebMigrationTests
     {
         Assert.False(NativePages.IsWpf(NativePage.Stops));
         Assert.False(NativePages.IsWpf(NativePage.StopQualification));
+        Assert.False(NativePages.IsWpf(NativePage.StopPlanning));
+        Assert.True(NativePages.IsWpf(NativePage.Dashboard));
+        Assert.Equal("maintenance/planification?ligne=PC01&composant=Mo%C3%A2teur", NativePages.PreventiveRoute("PC01", "Moâteur"));
         Assert.False(NativePages.IsWpf(NativePage.StopStatistics));
         Assert.False(NativePages.IsWpf(NativePage.Settings));
-        Assert.True(NativePages.IsWpf(NativePage.StopPlanning));
         Assert.DoesNotContain(ModuleCatalog.Navigation,
-            n => n.Route is "maintenance/arrets" or "maintenance/qualification-arrets" or "maintenance/statistiques-arrets" or "admin/parametres"
+            n => n.Route is "maintenance/arrets" or "maintenance/qualification-arrets" or "maintenance/statistiques-arrets"
+                     or "maintenance/planification" or "admin/parametres"
                  && n.DesktopOnly);
     }
 
@@ -348,5 +351,137 @@ public class WebMigrationTests
         Assert.Equal("", StopQualificationService.RepeatWarning(board, "PC01", "Peseuse PC01", "MECA", "Capteur", 1));
         Assert.Equal(day.AddHours(6), StopQualificationService.ReadExpected(day, ""));
         Assert.Null(StopQualificationService.ReadExpected(null, "10:00"));
+    }
+
+    // ---------- Planification des arrêts ----------
+
+    [Fact]
+    public void Board_periods_slots_and_drags_snap_as_in_a_calendar()
+    {
+        var thu = new DateTime(2026, 11, 19, 10, 0, 0);
+        var week = PlanningBoard.StartOf(thu, PlanRange.Week);
+        Assert.Equal(new DateTime(2026, 11, 16, 6, 0, 0), week);
+        Assert.Equal(new DateTime(2026, 11, 1, 6, 0, 0), PlanningBoard.StartOf(thu, PlanRange.Month));
+        // The Nuit after midnight belongs to the day before.
+        Assert.Equal(new DateTime(2026, 11, 18, 6, 0, 0), PlanningBoard.StartOf(new DateTime(2026, 11, 19, 3, 0, 0), PlanRange.Day));
+        Assert.Equal(new DateTime(2026, 11, 19, 6, 0, 0), PlanningBoard.Rescope(week, PlanRange.Week, PlanRange.Day, thu));
+        Assert.Equal(week.AddDays(-7), PlanningBoard.Step(week, PlanRange.Week, -1));
+
+        // A click on a week picks its poste; a drag snaps to postes.
+        var at = (DateTime t) => (t - week).TotalHours / (7 * 24);
+        Assert.Equal((week.AddHours(32), week.AddHours(40)), PlanningBoard.PickSlot(week, PlanRange.Week, at(week.AddHours(35)), at(week.AddHours(35))));
+        Assert.Equal((week.AddHours(8), week.AddHours(32)), PlanningBoard.PickSlot(week, PlanRange.Week, at(week.AddHours(30)), at(week.AddHours(9))));
+        // On a day: an hour for a click.
+        var day = PlanningBoard.StartOf(thu, PlanRange.Day);
+        Assert.Equal((day.AddHours(4), day.AddHours(5)), PlanningBoard.PickSlot(day, PlanRange.Day, 4.4 / 24, 4.4 / 24));
+
+        var e = new MaintenanceEvent { MachineId = "PC01", PlannedStart = week.AddHours(8), DurationMinutes = 120 };
+        Assert.Equal((week.AddHours(16), week.AddHours(18)), PlanningBoard.Moved(e, PlanRange.Week, week, PlanDrag.Move, 7.0 / 168));
+        Assert.Equal((week.AddHours(8), week.AddHours(16)), PlanningBoard.Moved(e, PlanRange.Week, week, PlanDrag.End, 5.0 / 168));
+        // Never shorter than a step.
+        Assert.Equal((week.AddHours(2), week.AddHours(10)), PlanningBoard.Moved(e, PlanRange.Week, week, PlanDrag.Start, 6.0 / 168));
+
+        Assert.Equal(new DateTime(2026, 11, 19, 14, 30, 0), PlanningBoard.At(thu, "14h30"));
+        Assert.Null(PlanningBoard.At(thu, "25:00"));
+        Assert.Equal(new DateTime(2026, 11, 20, 6, 0, 0), PlanningBoard.PosteEnd(new DateTime(2026, 11, 19, 22, 0, 0), 3));
+        Assert.Throws<RuleViolationException>(() => PlanningBoard.Span(thu, "10:00", thu, "09:00"));
+    }
+
+    [Fact]
+    public void Board_shows_slots_pannes_rules_and_alerts()
+    {
+        var now = new DateTime(2026, 11, 19, 10, 0, 0);
+        var start = PlanningBoard.StartOf(now, PlanRange.Week);
+        var machines = new List<Machine>
+        {
+            new() { MachineId = "PC01", MachineName = "Peseuse PC01", Sector = "Pate courte", IsActive = true },
+            new() { MachineId = "CC01", MachineName = "Controle CC01", Sector = "Couscous", IsActive = true },
+        };
+        var rule = new MaintenancePlan { Id = 7, MachineId = "PC01", Task = "Graissage", Kind = MaintenanceKind.Calendar, IntervalDays = 7, LastDoneAt = now.AddDays(-9) };
+        var data = new PlanData
+        {
+            Now = now, Range = PlanRange.Week, Start = start, End = PlanningBoard.EndOf(start, PlanRange.Week), Machines = machines, Shown = machines,
+            Events = new()
+            {
+                new() { Id = 1, MachineId = "PC01", Task = "Pas de commande", Kind = SlotKind.PlannedStop, PlannedStart = now.AddHours(-1), DurationMinutes = 480 },
+                new() { Id = 2, MachineId = "CC01", Task = "Vidange", PlannedStart = now.AddDays(-2), DurationMinutes = 60 },
+                new() { Id = 3, MachineId = "CC01", Task = "Courroie", PlannedStart = now.AddDays(-1), DurationMinutes = 60, Status = PlanStatus.Done, DoneAt = now.AddDays(-1).AddMinutes(30) },
+            },
+            Pannes = new() { new() { Id = 9, MachineId = "PC01", CauseCode = "MECA", StopStart = now.AddHours(-5), StopEnd = now.AddHours(-4) } },
+            Plans = new() { rule },
+        };
+
+        var view = PlanningBoard.Build(data);
+
+        Assert.Equal(7, view.Columns.Count);
+        Assert.Equal(new[] { "Pâte courte", "Couscous" }, view.Sectors.Select(s => s.Name));
+        var pc = view.Sectors[0].Rows.Single();
+        Assert.Equal(("Arrêt planifié", "stop"), (pc.StateText, pc.StateCss));
+        Assert.Equal(new[] { PlanBlockKind.PlannedStop, PlanBlockKind.Panne }, pc.Blocks.Select(b => b.Kind));
+        var cc = view.Sectors[1].Rows.Single().Blocks;
+        Assert.Equal(new[] { PlanBlockKind.MaintenanceDone, PlanBlockKind.MaintenanceLate }, cc.Select(b => b.Kind));
+        Assert.True(cc[1].Draggable);
+        Assert.False(cc[0].Draggable);
+        Assert.Equal(("1", "8 h 00 d'arrêt prévu · 1 en cours"), (view.Stops.Value, view.Stops.Sub));
+        Assert.Equal(("2", "1 préventif en retard"), (view.Maintenances.Value, view.Maintenances.Sub));
+        var r = Assert.Single(view.Rules);
+        Assert.Equal(("En retard de 2 j", "bad"), (r.StatusText, r.StatusCss));
+        Assert.Equal(2, view.Alerts.Count);
+        Assert.Contains(view.Alerts, a => a.Text.Contains("Graissage"));
+        Assert.Contains(view.Alerts, a => a.Text.Contains("« Vidange »") && a.Machine == "Controle CC01");
+
+        var late = PlanningBoard.Detail(data, cc[1], canValidate: false);
+        Assert.Equal(("Non validée", false, true), (late.Status, late.CanClose, late.CanEdit));
+        Assert.Equal("Valider", PlanningBoard.Detail(data, cc[1], canValidate: true).CloseText);
+        var stop = PlanningBoard.Detail(data, pc.Blocks[0], canValidate: false);
+        Assert.Equal(("En cours", true, "Terminer"), (stop.Status, stop.CanClose, stop.CloseText));
+    }
+
+    [Fact]
+    public async Task Board_writes_slots_and_rules_within_the_account_lines()
+    {
+        using var app = new TestApp();
+        using var live = new LiveDb();
+        var admin = await app.SetupAdminAsync();
+        var chef = await app.UserAsync(admin, "maint.cc",
+            TestApp.As(await app.RoleAsync("resp-maintenance"), new DataScope(new[] { Sectors.Couscous }, TestApp.DefaultTeam, Array.Empty<string>())));
+        var settings = new AppSettings();
+        var service = new PlanningBoardService(live.Factory, app.Options, settings, app.Clock);
+        var author = new ChangeAuthor("maint.cc", "Maintenance", "PC-TEST");
+        var machines = await service.MachinesAsync(chef);
+        Assert.Equal(new[] { "CC01" }, machines.Select(m => m.MachineId));
+        var day = app.Clock.Now.Date; // 17/11 10:00
+
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.SaveEventAsync(chef, author, machines,
+            new EventForm(SlotKind.Maintenance, "PC01", "Graissage", day, "14:00", day, "15:00"), null, null));
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.SaveEventAsync(chef, author, machines,
+            new EventForm(SlotKind.Maintenance, "CC01", "Graissage", day, "14:00", day, "13:00"), null, null));
+        var rule = await service.SavePlanAsync(chef, author, machines, new PlanForm("CC01", "Graissage", MaintenanceKind.Calendar, "14", "60", day.AddDays(-20)), null);
+        var e = await service.SaveEventAsync(chef, author, machines,
+            new EventForm(SlotKind.Maintenance, "CC01", " Graissage ", day, "08h", day, "09:30", "Karim"), null, rule.Id);
+        Assert.Equal(("Graissage", 90, "Karim"), (e.Task, e.DurationMinutes, e.Technician));
+        var stop = await service.SaveEventAsync(chef, author, machines,
+            new EventForm(SlotKind.PlannedStop, "CC01", "Jour férié", day.AddDays(1), "06:00", day.AddDays(2), "06:00", "ignoré"), null, null);
+        Assert.Null(stop.Technician);
+
+        var start = PlanningBoard.StartOf(day, PlanRange.Week);
+        var data = await service.LoadAsync(chef, machines, new[] { "CC01" }, PlanRange.Week, start);
+        Assert.Equal(2, data.Events.Count);
+        Assert.Single(data.Plans);
+
+        // Moved, then validated (without the right: refused; with it, the rule starts again).
+        await service.MoveEventAsync(chef, author, e, day.AddHours(10), day.AddHours(11));
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.CloseAsync(chef, author, data, e, canValidate: false));
+        await service.CloseAsync(chef, author, data, e, canValidate: true);
+        Assert.Equal(PlanStatus.Done, e.Status);
+        Assert.Equal(app.Clock.Now, data.Plans.Single().LastDoneAt);
+        // Deleted: cancelled, off the board.
+        await service.DeleteAsync(chef, author, stop);
+        data = await service.LoadAsync(chef, machines, new[] { "CC01" }, PlanRange.Week, start);
+        Assert.Equal(new[] { e.Id }, data.Events.Select(x => x.Id));
+
+        await Assert.ThrowsAsync<RuleViolationException>(() => service.MarkPlanDoneAsync(chef, author, rule, canValidate: false));
+        await service.DeletePlanAsync(chef, author, rule);
+        Assert.Empty((await service.LoadAsync(chef, machines, new[] { "CC01" }, PlanRange.Week, start)).Plans);
     }
 }

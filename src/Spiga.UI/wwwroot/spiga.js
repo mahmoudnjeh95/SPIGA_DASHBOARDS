@@ -155,3 +155,98 @@ window.spigaDownload = function (name, mime, base64) {
     setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1000);
 };
 window.spigaPrint = function () { window.print(); };
+
+// ---------- planning board (Planification des arrêts) ----------
+// On a line's track: a click or a drag on an empty part picks a slot (the
+// page asks what to plan in it); a click on a block shows its detail; a
+// drag on a planned slot moves it, or its edge moves its start / end. The
+// gesture is drawn here and sent to the page once, on release.
+window.spigaBoard = {
+    attach: function (root, page) {
+        if (!root || root.__spBoard) return;
+        var state = null;
+        function frac(track, x) {
+            var r = track.getBoundingClientRect();
+            return r.width > 0 ? Math.min(1, Math.max(0, (x - r.left) / r.width)) : 0;
+        }
+        function down(e) {
+            if (e.button !== 0) return;
+            var block = e.target.closest(".pb-block");
+            var track = e.target.closest(".pb-track");
+            if (!track) return;
+            if (block) {
+                var r = block.getBoundingClientRect();
+                var mode = !block.hasAttribute("data-drag") ? "click"
+                    : e.clientX - r.left < 8 ? "Start" : r.right - e.clientX < 8 ? "End" : "Move";
+                state = { kind: "block", block: block, track: track, mode: mode, x: e.clientX,
+                    left: parseFloat(block.style.left), width: parseFloat(block.style.width), moved: false };
+            } else {
+                var a = frac(track, e.clientX);
+                var pick = document.createElement("div");
+                pick.className = "pb-picking";
+                track.appendChild(pick);
+                state = { kind: "slot", track: track, a: a, b: a, pick: pick };
+                draw();
+            }
+            track.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        }
+        function draw() {
+            var lo = Math.min(state.a, state.b), hi = Math.max(state.a, state.b);
+            state.pick.style.left = (lo * 100) + "%";
+            state.pick.style.width = Math.max(0.4, (hi - lo) * 100) + "%";
+        }
+        function move(e) {
+            if (!state) return;
+            if (state.kind === "slot") {
+                state.b = frac(state.track, e.clientX);
+                draw();
+                return;
+            }
+            var dx = e.clientX - state.x;
+            if (Math.abs(dx) > 4) state.moved = true;
+            if (!state.moved || state.mode === "click") return;
+            var d = dx / state.track.getBoundingClientRect().width * 100;
+            var s = state.block.style;
+            if (state.mode === "Move") s.left = (state.left + d) + "%";
+            else if (state.mode === "Start") { s.left = (state.left + d) + "%"; s.width = Math.max(0.5, state.width - d) + "%"; }
+            else s.width = Math.max(0.5, state.width + d) + "%";
+            state.block.classList.add("dragging");
+        }
+        function up(e) {
+            if (!state) return;
+            var s = state;
+            state = null;
+            try { s.track.releasePointerCapture(e.pointerId); } catch (_) { }
+            var machine = s.track.getAttribute("data-machine");
+            if (s.kind === "slot") {
+                s.pick.remove();
+                page.invokeMethodAsync("SlotPicked", machine, s.a, s.b);
+            } else if (!s.moved || s.mode === "click") {
+                page.invokeMethodAsync("BlockClicked", s.block.getAttribute("data-key"));
+            } else {
+                var delta = (e.clientX - s.x) / s.track.getBoundingClientRect().width;
+                page.invokeMethodAsync("BlockMoved", s.block.getAttribute("data-key"), s.mode, delta);
+            }
+        }
+        function cancel() {
+            if (!state) return;
+            if (state.pick) state.pick.remove();
+            if (state.block) { state.block.style.left = state.left + "%"; state.block.style.width = state.width + "%"; state.block.classList.remove("dragging"); }
+            state = null;
+        }
+        root.addEventListener("pointerdown", down);
+        root.addEventListener("pointermove", move);
+        root.addEventListener("pointerup", up);
+        root.addEventListener("pointercancel", cancel);
+        root.__spBoard = function () {
+            root.removeEventListener("pointerdown", down);
+            root.removeEventListener("pointermove", move);
+            root.removeEventListener("pointerup", up);
+            root.removeEventListener("pointercancel", cancel);
+        };
+    },
+    detach: function (root) {
+        if (root && root.__spBoard) { root.__spBoard(); root.__spBoard = null; }
+    }
+};

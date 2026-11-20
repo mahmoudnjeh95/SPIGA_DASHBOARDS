@@ -51,7 +51,11 @@ public static class NativePages
 
     // Still a WPF page (the desktop application shows it beside the menu, a
     // browser a placeholder). The others are Razor pages, in both hosts.
-    public static bool IsWpf(NativePage page) => page is not (NativePage.Stops or NativePage.StopQualification or NativePage.StopStatistics or NativePage.Settings);
+    public static bool IsWpf(NativePage page) => page == NativePage.Dashboard;
+
+    // The preventive rule form of the planning board, for a line and a component.
+    public static string PreventiveRoute(string machineId, string component)
+        => $"{Route(NativePage.StopPlanning)}?ligne={Uri.EscapeDataString(machineId)}&composant={Uri.EscapeDataString(component)}";
 
     public static NativePage? FromRoute(string path)
         => Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(p => Route(p!.Value) == path);
@@ -264,6 +268,7 @@ public static class SpigaServices
         services.AddScoped<StopStatsService>();
         services.AddScoped<StopListService>();
         services.AddScoped<StopQualificationService>();
+        services.AddScoped<PlanningBoardService>();
         services.AddScoped<StationSettingsEditor>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();
@@ -285,6 +290,9 @@ public sealed class UiState
     public StatsFilter? StopStats { get; set; }
     public StopsFilter? Stops { get; set; }
     public QualFilter? Qualification { get; set; }
+    public (PlanRange Range, DateTime Start)? Planning { get; set; }
+    // Lines left off the planning board (Lignes), for the session.
+    public HashSet<string> PlanningHidden { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // Menu: the screens planned for a later version ("à venir") are folded
     // away unless the user opens them.

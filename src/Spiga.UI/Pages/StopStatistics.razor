@@ -2,7 +2,6 @@
 @inherits SpigaPage
 @inject StopStatsService Stats
 @inject UiState Ui
-@inject IDesktopBridge Desktop
 
 @* Statistiques des arrêts: was a WPF page of the desktop application
    (StatsViewModel) until the web migration; the same figures, in both hosts. *@
@@ -236,8 +235,8 @@ else
 
     private string? Team => StopStatsService.TeamFor(Actor, _team);
 
-    // The preventive form is on the planning board, a page of the desktop application for now.
-    private bool CanPlan => Desktop.IsAvailable && NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
+    // The preventive rule form of the planning board.
+    private bool CanPlan => NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning);
 
     protected override async Task OnInitializedAsync()
     {
@@ -329,7 +328,7 @@ else
     }
 
     private void PlanPreventive(RepeatFailure r)
-        => Desktop.PlanPreventive(NativePages.Access(Actor, NativePage.StopPlanning), r.MachineId, r.Component);
+        => Nav.NavigateTo(NativePages.PreventiveRoute(r.MachineId, r.Component));
 
     private string MachineName(string id) => _machines.FirstOrDefault(m => m.MachineId == id)?.MachineName ?? id;
 

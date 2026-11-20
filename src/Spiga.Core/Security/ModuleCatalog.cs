@@ -95,7 +95,7 @@ public static class ModuleCatalog
             Permission: "maintenance:saisir"),
         new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true),
         new NavItem("planification", "Planification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/planification", true,
-            Permission: "maintenance:saisir", DesktopOnly: true),
+            Permission: "maintenance:saisir"),
         new NavItem("couts", "Pièces et consommables", "Maintenance", Modules.Maintenance, "module/couts", false,
             "Coût et consommation des pièces de rechange et consommables par machine, cumul comparé à l'objectif.",
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),

@@ -1,3 +1,976 @@
 @page "/maintenance/planification"
+@inherits SpigaPage
+@inject PlanningBoardService Board
+@inject UiState Ui
+@inject ClientInfo Client
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
-<NativePagePlaceholder Page="NativePage.StopPlanning" Group="Maintenance" Title="Planification des arrêts" />
+@* Planification des arrêts: was the planning board of the WPF planning
+   window (BoardViewModel) until the web migration; the same board, in both
+   hosts. ?ligne=PC01&composant=Capteur opens the preventive rule form (from
+   Statistiques / Qualification des arrêts). *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(PlanningBoardService.Permission) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Maintenance</span><h1>Planification des arrêts</h1>
+            <p>@(_view?.RangeLabel ?? "")</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Période</span>
+            <div class="pb-nav">
+                <button type="button" class="bar small" @onclick="TodayAsync">Aujourd'hui</button>
+                <button type="button" class="bar small" title="Précédent" aria-label="Précédent" @onclick="() => StepAsync(-1)">‹</button>
+                <button type="button" class="bar small" title="Suivant" aria-label="Suivant" @onclick="() => StepAsync(1)">›</button>
+            </div>
+        </div>
+        <div class="f">
+            <span>Vue</span>
+            <div class="segs" role="group" aria-label="Vue">
+                @foreach (var (range, label) in Ranges)
+                {
+                    <button type="button" class="seg @(_range == range ? "on" : "")" aria-pressed="@(_range == range)" @onclick="() => SetRangeAsync(range)">@label</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Lignes</span>
+            <details class="pb-lines">
+                <summary class="bar small">Lignes (@(_machines.Count - Hidden.Count(id => _machines.Any(m => m.MachineId == id)))/@_machines.Count) ▾</summary>
+                <div class="pb-lines-pop card">
+                    <div class="pb-lines-all">
+                        <button type="button" class="link" @onclick="() => ShowAllAsync(true)">Toutes</button> ·
+                        <button type="button" class="link" @onclick="() => ShowAllAsync(false)">Aucune</button>
+                    </div>
+                    @foreach (var sector in _machines.GroupBy(m => m.Sector))
+                    {
+                        <span class="lbl">@Machine.SectorLabel(sector.Key)</span>
+                        @foreach (var m in sector)
+                        {
+                            <label class="check"><input type="checkbox" checked="@(!Hidden.Contains(m.MachineId))" @onchange="e => ShowLineAsync(m.MachineId, e.Value is true)" /> @m.MachineName</label>
+                        }
+                    }
+                </div>
+            </details>
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar small" title="Ordres de fabrication : non disponible dans cette version" @onclick="OrdersUnavailable">+ Ordre de fab.</button>
+        <button type="button" class="bar small" title="Planifier une maintenance" @onclick="() => NewEvent(SlotKind.Maintenance)" disabled="@(_data == null)">+ Maintenance</button>
+        <button type="button" class="bar small" title="Planifier un arrêt (pas de commande, jour férié…)" @onclick="() => NewEvent(SlotKind.PlannedStop)" disabled="@(_data == null)">+ Arrêt planifié</button>
+        <button type="button" class="bar small acc" @onclick="() => NewPlan(null, string.Empty)" disabled="@(_data == null)">+ Règle préventive</button>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_data == null || _view == null)
+    {
+        @if (_loading)
+        {
+            <Loader Text="Chargement du planning…" />
+        }
+    }
+    else
+    {
+        var data = _data;
+        var view = _view;
+        @if (data.ProductionError is { } down)
+        {
+            <div class="notice warn" role="status">@down</div>
+        }
+        <div class="stats-body @(_loading ? "stale" : "")" aria-busy="@_loading">
+            <div class="row">
+                <KpiTile Label="@($"Arrêts planifiés {view.PeriodSuffix}")" Value="@view.Stops.Value" Sub="@view.Stops.Sub" />
+                <KpiTile Label="@($"Maintenances {view.PeriodSuffix}")" Value="@view.Maintenances.Value" Sub="@view.Maintenances.Sub" />
+                <KpiTile Label="@($"Pannes {view.PeriodSuffix}")" Value="@view.Pannes.Value" Sub="@view.Pannes.Sub" />
+            </div>
+
+            <div class="pb-grid">
+                <section class="card pb-card">
+                    @if (data.Shown.Count == 0)
+                    {
+                        <p class="empty">Aucune ligne affichée : les choisir avec le bouton Lignes.</p>
+                    }
+                    else
+                    {
+                        <div class="pb-board pb-@(_range.ToString().ToLowerInvariant())" @ref="_boardRef" style="--cols:@view.Columns.Count">
+                            <div class="pb-head">
+                                <div class="pb-corner">Ligne</div>
+                                <div class="pb-cols">
+                                    @foreach (var c in view.Columns)
+                                    {
+                                        <div class="pb-col @(c.IsToday ? "today" : "")">
+                                            <b>@c.Name</b>
+                                            <div class="pb-ticks">@foreach (var t in c.Ticks) { <span class="@(t.First ? "first" : "")">@t.Label</span> }</div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            @foreach (var sector in view.Sectors)
+                            {
+                                <div class="pb-sector @sector.Key"><span>@sector.Name</span> <small>@sector.Rows.Count ligne@(sector.Rows.Count > 1 ? "s" : "")</small></div>
+                                @foreach (var row in sector.Rows)
+                                {
+                                    <div class="pb-row @sector.Key">
+                                        <div class="pb-label">
+                                            <b>@row.MachineName</b>
+                                            <small><span class="pb-state @row.StateCss"></span>@row.StateText</small>
+                                        </div>
+                                        <div class="pb-track" data-machine="@row.MachineId">
+                                            @if (view.NowFrac is >= 0 and <= 1)
+                                            {
+                                                <div class="pb-now" style="left:@Pct(view.NowFrac)" title="Maintenant"></div>
+                                            }
+                                            @foreach (var b in row.Blocks)
+                                            {
+                                                <div class="pb-block @KindCss(b.Kind) @(b.Key == _selected ? "sel" : "")" data-key="@b.Key" data-drag="@(b.Draggable && _editor == Editor.None ? "1" : null)"
+                                                     style="left:@Pct(b.StartFrac);width:@Pct(Math.Max(0.003, b.EndFrac - b.StartFrac))" title="@b.Tooltip">
+                                                    @if (b.HasProgress)
+                                                    {
+                                                        <i class="pb-progress" style="width:@Pct(b.Progress)"></i>
+                                                    }
+                                                    @if (b.ShowLabel)
+                                                    {
+                                                        <span class="pb-text"><b>@b.Label</b> <small>@b.Sub</small></span>
+                                                    }
+                                                    else if (b.Icon.Length > 0)
+                                                    {
+                                                        <span class="pb-icon">@b.Icon</span>
+                                                    }
+                                                </div>
+                                            }
+                                            @if (Slot is { } slot && slot.MachineId == row.MachineId && slot.End > data.Start && slot.Start < data.End)
+                                            {
+                                                <div class="pb-slot" style="left:@Pct(data.Frac(slot.Start));width:@Pct(Math.Max(0.003, data.Frac(slot.End) - data.Frac(slot.Start)))">
+                                                    <span>@PlanningBoard.ShortSpan(slot.Start, slot.End)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                        <p class="nd pb-help">Cliquez sur un bloc pour voir son détail. Glissez un créneau planifié pour le déplacer, ou son bord pour changer son début / sa fin.
+                            Cliquez ou glissez sur une partie vide d'une ligne pour y planifier une maintenance ou un arrêt.</p>
+                        <div class="pb-legend">
+                            <span><i class="pb-key order"></i>Ordre de fabrication</span><span><i class="pb-key maint"></i>Maintenance</span>
+                            <span><i class="pb-key done"></i>Maintenance réalisée</span><span><i class="pb-key late"></i>Non validée</span>
+                            <span><i class="pb-key stop"></i>Arrêt planifié (hors TRS)</span><span><i class="pb-key panne"></i>Panne</span>
+                        </div>
+                    }
+                </section>
+
+                <section class="card pb-side" aria-live="polite">
+                    @SidePanel(data)
+                </section>
+            </div>
+
+            <div class="row">
+                <section class="card" style="flex:3 1 520px">
+                    <div class="card-head"><h2>Maintenance préventive <small>calendrier + usage</small></h2></div>
+                    @if (view.Rules.Count == 0)
+                    {
+                        <p class="empty">Aucune règle : cliquez sur « + Règle préventive » pour en créer une.</p>
+                    }
+                    else
+                    {
+                        <ul class="pb-rules">
+                            @foreach (var r in view.Rules)
+                            {
+                                <li>
+                                    <div class="pb-rule-what">
+                                        <b>@r.Plan.Task</b>
+                                        <small>@r.MachineName · @r.Rule</small>
+                                        @if (r.HasGauge)
+                                        {
+                                            <div class="pb-gauge @r.StatusCss"><i style="width:@Pct(r.Gauge)"></i></div>
+                                        }
+                                    </div>
+                                    <span class="chip @r.StatusCss">@r.StatusText</span>
+                                    <span class="pb-rule-actions">
+                                        @if (!r.HasOpenSlot)
+                                        {
+                                            <button type="button" class="bar small" @onclick="() => PlanFromRule(r)">Planifier</button>
+                                        }
+                                        <button type="button" class="bar small" disabled="@(!CanValidate)" title="@(CanValidate ? "Réalisée maintenant : l'échéance repart" : PlanningBoardService.NoValidation)"
+                                                @onclick="() => AskPlanDone(r.Plan)">Fait</button>
+                                        <button type="button" class="link" title="Modifier la règle" @onclick="() => EditPlan(r.Plan)">Modifier</button>
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+                <section class="card" style="flex:2 1 360px">
+                    <div class="card-head"><h2>Alertes de planification</h2></div>
+                    @if (view.Alerts.Count == 0)
+                    {
+                        <p class="empty">Rien à signaler sur la période affichée.</p>
+                    }
+                    else
+                    {
+                        <ul class="pb-alerts">
+                            @foreach (var a in view.Alerts)
+                            {
+                                <li class="@a.Css"><b>@a.Machine</b> — @a.Text</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "ligne")] public string? RuleMachine { get; set; }
+    [SupplyParameterFromQuery(Name = "composant")] public string? RuleComponent { get; set; }
+
+    private static readonly (PlanRange Range, string Label)[] Ranges = { (PlanRange.Day, "Jour"), (PlanRange.Week, "Semaine"), (PlanRange.Month, "Mois") };
+
+    private enum Editor { None, Event, Plan }
+
+    private PlanRange _range = PlanRange.Week;
+    private DateTime _start;
+    private bool _loading;
+    private int _version;
+    private CancellationTokenSource? _reading;
+    private List<Machine> _machines = new();
+    private PlanData? _data;
+    private PlanBoardView? _view;
+
+    // Side panel: a block's detail, a picked slot, an open form, or a question.
+    private string? _selected;
+    private Editor _editor;
+    private (string MachineId, DateTime Start, DateTime End)? _picked;
+    private string _confirmText = "";
+    private string _confirmYes = "";
+    private Func<Task>? _confirmed;
+
+    // Maintenance / planned stop form.
+    private MaintenanceEvent? _editingEvent;
+    private int? _rulePlanId;
+    private SlotKind _eventKind;
+    private string _formTitle = "";
+    private string _eventMachine = "";
+    private string _eventTask = "";
+    private string _eventTechnician = "";
+    private DateTime? _eventDate;
+    private string _eventTime = "";
+    private DateTime? _eventEndDate;
+    private string _eventEndTime = "";
+
+    // Preventive rule form.
+    private MaintenancePlan? _editingPlan;
+    private string _planMachine = "";
+    private string _planTask = "";
+    private MaintenanceKind _planKind;
+    private string _planInterval = "14";
+    private string _planDuration = "60";
+    private DateTime? _planLastDone;
+
+    private bool _saving;
+    private ElementReference _boardRef;
+    private bool _attached;
+    private DotNetObjectReference<StopPlanning>? _self;
+
+    private SpigaDashboards.App.Data.ChangeAuthor Author => new(Actor.Login, Actor.DisplayName, Client.Workstation);
+    private bool CanValidate => NativePages.Access(Actor, NativePage.StopPlanning).CanValidate;
+    private HashSet<string> Hidden => Ui.PlanningHidden;
+
+    // Where the open form will put its slot (drawn on the board), or the slot picked.
+    private (string MachineId, DateTime Start, DateTime End)? Slot
+    {
+        get
+        {
+            if (_editor == Editor.Event && PlanningBoard.At(_eventDate, _eventTime) is { } s && PlanningBoard.At(_eventEndDate, _eventEndTime) is { } e && e > s)
+                return (_eventMachine, s, e);
+            return _editor == Editor.None ? _picked : null;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!NativePages.IsAllowed(Session.Actor, NativePage.StopPlanning))
+            return;
+        if (Ui.Planning is { } kept)
+            (_range, _start) = kept;
+        else
+            _start = PlanningBoard.StartOf(Board.Now, _range);
+        await Run(async () => _machines = await Board.MachinesAsync(Actor));
+        await LoadAsync();
+        // From Statistiques / Qualification des arrêts: "Planifier un préventif".
+        if (RuleMachine is { Length: > 0 } machine && _machines.Any(m => m.MachineId == machine))
+            NewPlan(machine, RuleComponent ?? "");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attached || _view == null || _data?.Shown.Count is null or 0)
+            return;
+        _self ??= DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("spigaBoard.attach", _boardRef, _self);
+            _attached = true;
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _reading?.Cancel();
+        _reading?.Dispose();
+        try
+        {
+            if (_attached)
+                await JS.InvokeVoidAsync("spigaBoard.detach", _boardRef);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _self?.Dispose();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        Ui.Planning = (_range, _start);
+        _reading?.Cancel();
+        _reading?.Dispose();
+        var cancel = (_reading = new CancellationTokenSource()).Token;
+        _loading = true;
+        try
+        {
+            PlanData? data = null;
+            var (actor, machines, shown, range, start) = (Actor, _machines, _machines.Select(m => m.MachineId).Where(id => !Hidden.Contains(id)).ToHashSet(), _range, _start);
+            var ok = await Run(async () => data = await Task.Run(() => Board.LoadAsync(actor, machines, shown, range, start, cancel), cancel));
+            if (version != _version || !ok || data == null)
+                return;
+            // The board element is new when the lines come back after "Aucune".
+            if (_data?.Shown.Count is null or 0 && data.Shown.Count > 0)
+                _attached = false;
+            _data = data;
+            _view = PlanningBoard.Build(data);
+            if (_selected != null && Find(_selected) == null)
+                _selected = null;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (version == _version)
+            {
+                SpigaDashboards.App.Services.AppLogger.Log("Planification : " + ex);
+                Error = "Planning indisponible : " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (version == _version)
+                _loading = false;
+        }
+    }
+
+    private PlanBlock? Find(string key) => _view?.Sectors.SelectMany(s => s.Rows).SelectMany(r => r.Blocks).FirstOrDefault(b => b.Key == key);
+
+    // ---------- period and lines ----------
+
+    private Task TodayAsync()
+    {
+        _start = PlanningBoard.StartOf(Board.Now, _range);
+        return LoadAsync();
+    }
+
+    private Task StepAsync(int count)
+    {
+        _start = PlanningBoard.Step(_start, _range, count);
+        return LoadAsync();
+    }
+
+    private Task SetRangeAsync(PlanRange range)
+    {
+        _start = PlanningBoard.Rescope(_start, _range, range, Board.Now);
+        _range = range;
+        _picked = null;
+        return LoadAsync();
+    }
+
+    private Task ShowLineAsync(string machineId, bool shown)
+    {
+        if (shown)
+            Hidden.Remove(machineId);
+        else
+            Hidden.Add(machineId);
+        return LoadAsync();
+    }
+
+    private Task ShowAllAsync(bool shown)
+    {
+        Hidden.Clear();
+        if (!shown)
+            Hidden.UnionWith(_machines.Select(m => m.MachineId));
+        return LoadAsync();
+    }
+
+    // ---------- gestures on the board (spigaBoard) ----------
+
+    [JSInvokable]
+    public Task BlockClicked(string key) => InvokeAsync(() =>
+    {
+        if (Find(key) == null)
+            return;
+        _editor = Editor.None;
+        _picked = null;
+        _confirmText = "";
+        _selected = key;
+        Error = Info = null;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task SlotPicked(string machineId, double a, double b) => InvokeAsync(() =>
+    {
+        if (_data == null || _data.Shown.All(m => m.MachineId != machineId))
+            return;
+        var (start, end) = PlanningBoard.PickSlot(_data.Start, _data.Range, a, b);
+        _selected = null;
+        _confirmText = "";
+        Error = Info = null;
+        if (_editor == Editor.Event)
+        {
+            // A form open: the slot fills it.
+            _eventMachine = machineId;
+            FillEventTimes(start, end);
+        }
+        else
+        {
+            _editor = Editor.None;
+            _picked = (machineId, start, end);
+        }
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task BlockMoved(string key, string mode, double deltaFrac) => InvokeAsync(async () =>
+    {
+        if (_data == null || Find(key)?.Source is not MaintenanceEvent e || !Enum.TryParse<PlanDrag>(mode, out var drag))
+            return;
+        var (start, end) = PlanningBoard.Moved(e, _data.Range, _data.Start, drag, deltaFrac);
+        if (start == e.PlannedStart && end == e.PlannedEnd)
+        {
+            StateHasChanged();
+            return;
+        }
+        if (await Run(() => Board.MoveEventAsync(Actor, Author, e, start, end)))
+        {
+            _selected = key;
+            await LoadAsync();
+            Info = $"« {e.Task} » replanifié : {PlanningBoard.Span(e.PlannedStart, e.PlannedEnd)} ({PlanningBoard.Duration(e.DurationMinutes)}).";
+        }
+        StateHasChanged();
+    });
+
+    // ---------- forms ----------
+
+    private void OrdersUnavailable()
+    {
+        Error = null;
+        Info = PlanningBoardService.OrdersUnavailableText;
+    }
+
+    private string? SelectedMachineId() => _selected is { } key ? Find(key)?.Source switch
+    {
+        ProductionOrder o => o.MachineId,
+        MaintenanceEvent e => e.MachineId,
+        SpigaDashboards.App.Models.StopQualification q => q.MachineId,
+        _ => null,
+    } : null;
+
+    // A maintenance lasts an hour by default, a planned stop a poste.
+    private void NewEvent(SlotKind kind, string? machineId = null, DateTime? start = null, DateTime? end = null)
+    {
+        _editingEvent = null;
+        _rulePlanId = null;
+        _eventKind = kind;
+        _formTitle = kind == SlotKind.PlannedStop ? "Planifier un arrêt" : "Planifier une maintenance";
+        _eventMachine = machineId ?? SelectedMachineId() ?? _data?.Shown.FirstOrDefault()?.MachineId ?? _machines.FirstOrDefault()?.MachineId ?? "";
+        _eventTask = "";
+        _eventTechnician = "";
+        _selected = null;
+        _picked = null;
+        _confirmText = "";
+        Error = Info = null;
+        _editor = Editor.Event;
+        var next = Postes.NextStart(Board.Now);
+        FillEventTimes(start ?? next, end ?? next.AddHours(kind == SlotKind.PlannedStop ? 8 : 1));
+    }
+
+    private void EditEvent(MaintenanceEvent e)
+    {
+        _editingEvent = e;
+        _rulePlanId = e.PlanId;
+        _eventKind = e.Kind;
+        _formTitle = e.IsStop ? "Modifier l'arrêt planifié" : "Modifier la maintenance";
+        _eventMachine = e.MachineId;
+        _eventTask = e.Task;
+        _eventTechnician = e.Technician ?? "";
+        _editor = Editor.Event;
+        FillEventTimes(e.PlannedStart, e.PlannedEnd);
+    }
+
+    private void FillEventTimes(DateTime start, DateTime end)
+    {
+        (_eventDate, _eventTime) = (start.Date, start.ToString("HH:mm"));
+        (_eventEndDate, _eventEndTime) = (end.Date, end.ToString("HH:mm"));
+    }
+
+    // The end keeps its distance to the start, as in a calendar.
+    private void MoveStart(DateTime? date, string time)
+    {
+        var old = PlanningBoard.At(_eventDate, _eventTime);
+        var end = PlanningBoard.At(_eventEndDate, _eventEndTime);
+        (_eventDate, _eventTime) = (date, time);
+        if (old is { } o && PlanningBoard.At(date, time) is { } s && end is { } e && s != o)
+            (_eventEndDate, _eventEndTime) = ((e + (s - o)).Date, (e + (s - o)).ToString("HH:mm"));
+    }
+
+    private void PickPosteStart(string time) => MoveStart(_eventDate, time);
+
+    private void PickPosteEnd(int poste)
+    {
+        if (PlanningBoard.At(_eventDate, _eventTime) is not { } s)
+            return;
+        var end = PlanningBoard.PosteEnd(s, poste);
+        (_eventEndDate, _eventEndTime) = (end.Date, end.ToString("HH:mm"));
+    }
+
+    private async Task SaveEventAsync()
+    {
+        if (_saving)
+            return;
+        _saving = true;
+        try
+        {
+            var form = new EventForm(_eventKind, _eventMachine, _eventTask, _eventDate, _eventTime, _eventEndDate, _eventEndTime, _eventTechnician);
+            MaintenanceEvent? saved = null;
+            if (await Run(async () => saved = await Board.SaveEventAsync(Actor, Author, _machines, form, _editingEvent, _rulePlanId)) && saved != null)
+            {
+                _editor = Editor.None;
+                // To the period of the slot, the slot shown.
+                if (saved.PlannedStart < _start || saved.PlannedStart >= PlanningBoard.EndOf(_start, _range))
+                    _start = PlanningBoard.StartOf(saved.PlannedStart, _range);
+                if (Hidden.Remove(saved.MachineId))
+                    _attached = _attached && _data?.Shown.Count > 0;
+                await LoadAsync();
+                _selected = "E" + saved.Id;
+                Info = $"{(saved.IsStop ? "Arrêt planifié enregistré" : "Maintenance enregistrée")} : {NameOf(saved.MachineId)} · {PlanningBoard.Span(saved.PlannedStart, saved.PlannedEnd)}.";
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void NewPlan(string? machineId, string component)
+    {
+        _editingPlan = null;
+        _formTitle = "Nouvelle règle de maintenance préventive";
+        _planMachine = machineId ?? SelectedMachineId() ?? _machines.FirstOrDefault()?.MachineId ?? "";
+        _planTask = component.Length > 0 ? "Contrôle " + component.ToLowerInvariant() : "";
+        _planKind = MaintenanceKind.Calendar;
+        _planInterval = "14";
+        _planDuration = "60";
+        _planLastDone = Board.Now.Date;
+        _selected = null;
+        _picked = null;
+        _confirmText = "";
+        Error = Info = null;
+        _editor = Editor.Plan;
+    }
+
+    private void EditPlan(MaintenancePlan p)
+    {
+        _editingPlan = p;
+        _formTitle = "Modifier la règle";
+        _planMachine = p.MachineId;
+        _planTask = p.Task;
+        _planKind = p.Kind;
+        _planInterval = (p.Kind == MaintenanceKind.Calendar ? p.IntervalDays : p.IntervalBags).ToString(CultureInfo.InvariantCulture);
+        _planDuration = p.DurationMinutes.ToString(CultureInfo.InvariantCulture);
+        _planLastDone = p.LastDoneAt?.Date;
+        _selected = null;
+        _picked = null;
+        _confirmText = "";
+        Error = Info = null;
+        _editor = Editor.Plan;
+    }
+
+    private async Task SavePlanAsync()
+    {
+        if (_saving)
+            return;
+        _saving = true;
+        try
+        {
+            var form = new PlanForm(_planMachine, _planTask, _planKind, _planInterval, _planDuration, _planLastDone);
+            MaintenancePlan? saved = null;
+            if (await Run(async () => saved = await Board.SavePlanAsync(Actor, Author, _machines, form, _editingPlan)) && saved != null)
+            {
+                _editor = Editor.None;
+                await LoadAsync();
+                Info = $"Règle enregistrée : {saved.Task} sur {NameOf(saved.MachineId)}.";
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDeletePlan()
+    {
+        if (_editingPlan is not { } p)
+        {
+            _editor = Editor.None;
+            return;
+        }
+        Confirm($"Supprimer la règle « {p.Task} » ({NameOf(p.MachineId)}) ?", "Supprimer", async () =>
+        {
+            if (await Run(() => Board.DeletePlanAsync(Actor, Author, p)))
+            {
+                _editor = Editor.None;
+                await LoadAsync();
+                Info = "Règle supprimée.";
+            }
+        });
+    }
+
+    // Opens the maintenance form filled from the rule, on the next poste if it
+    // is due (or overdue), else the poste of its due date.
+    private void PlanFromRule(PlanRule r)
+    {
+        var now = Board.Now;
+        var start = Postes.NextStart(r.Due > now ? r.Due : now);
+        NewEvent(SlotKind.Maintenance, r.Plan.MachineId, start, start.AddMinutes(r.Plan.DurationMinutes));
+        _rulePlanId = r.Plan.Id;
+        _formTitle = "Planifier le préventif";
+        _eventTask = r.Plan.Task;
+    }
+
+    private void AskPlanDone(MaintenancePlan p)
+        => Confirm($"« {p.Task} » ({NameOf(p.MachineId)}) réalisée maintenant ? L'échéance repart d'aujourd'hui.", "Réalisée", async () =>
+        {
+            if (await Run(() => Board.MarkPlanDoneAsync(Actor, Author, p, CanValidate)))
+            {
+                await LoadAsync();
+                Info = $"« {p.Task} » réalisée : prochaine échéance recalculée.";
+            }
+        });
+
+    // ---------- detail panel actions ----------
+
+    private async Task CloseSelectedAsync(PlanBlock block)
+    {
+        if (_data == null)
+            return;
+        if (await Run(() => Board.CloseAsync(Actor, Author, _data, block.Source, CanValidate)))
+        {
+            await LoadAsync();
+            Info = block.Source is MaintenanceEvent { IsStop: false } ? "Maintenance validée." : "Terminé.";
+        }
+    }
+
+    private void AskDelete(PlanBlock block)
+    {
+        var what = block.Source switch
+        {
+            ProductionOrder o => $"l'ordre {o.OrderNo}",
+            MaintenanceEvent { IsStop: true } e => $"l'arrêt planifié « {e.Task} » ({NameOf(e.MachineId)}, {PlanningBoard.Span(e.PlannedStart, e.PlannedEnd)})",
+            MaintenanceEvent e => $"la maintenance « {e.Task} » ({NameOf(e.MachineId)}, {PlanningBoard.Span(e.PlannedStart, e.PlannedEnd)})",
+            _ => null,
+        };
+        if (what != null)
+            Confirm($"Supprimer {what} ?", "Supprimer", async () =>
+            {
+                if (await Run(() => Board.DeleteAsync(Actor, Author, block.Source)))
+                {
+                    _selected = null;
+                    await LoadAsync();
+                    Info = "Supprimé.";
+                }
+            });
+    }
+
+    private void Confirm(string text, string yes, Func<Task> action)
+    {
+        _confirmed = action;
+        _confirmYes = yes;
+        _confirmText = text;
+    }
+
+    private async Task ConfirmYesAsync()
+    {
+        var action = _confirmed;
+        _confirmed = null;
+        _confirmText = "";
+        if (action != null)
+            await action();
+    }
+
+    private void ConfirmNo()
+    {
+        _confirmed = null;
+        _confirmText = "";
+    }
+
+    private void CancelEditor()
+    {
+        _editor = Editor.None;
+        Error = null;
+    }
+
+    // ---------- display ----------
+
+    private RenderFragment SidePanel(PlanData data) => __builder =>
+    {
+        if (_confirmText.Length > 0)
+        {
+            <span class="lbl">Confirmation</span>
+            <p class="pb-confirm">@_confirmText</p>
+            <div class="q-actions">
+                <button type="button" class="bar danger" @onclick="ConfirmYesAsync">@_confirmYes</button>
+                <button type="button" class="bar" @onclick="ConfirmNo">Non, garder</button>
+            </div>
+            return;
+        }
+        if (_editor == Editor.Event)
+        {
+            @EventEditor(data)
+            return;
+        }
+        if (_editor == Editor.Plan)
+        {
+            @PlanEditor()
+            return;
+        }
+        if (_picked is { } slot)
+        {
+            var busy = PlanningBoard.Busy(data, slot.MachineId, slot.Start, slot.End);
+            <span class="lbl">Nouveau créneau</span>
+            <h2 class="pb-title">@NameOf(slot.MachineId)</h2>
+            <p class="nd">@PlanningBoard.Span(slot.Start, slot.End) · @PlanningBoard.Duration((slot.End - slot.Start).TotalMinutes)</p>
+            @if (busy.Count > 0)
+            {
+                <div class="notice warn">Déjà occupé : @string.Join(", ", busy)</div>
+            }
+            <div class="pb-choices">
+                <button type="button" class="bar acc" @onclick="() => NewEvent(SlotKind.Maintenance, slot.MachineId, slot.Start, slot.End)">Planifier une maintenance</button>
+                <button type="button" class="bar" @onclick="() => NewEvent(SlotKind.PlannedStop, slot.MachineId, slot.Start, slot.End)">Planifier un arrêt</button>
+                <button type="button" class="bar" title="Non disponible dans cette version" @onclick="OrdersUnavailable">+ Ordre de fabrication</button>
+                <button type="button" class="link" @onclick="() => _picked = null">Annuler</button>
+            </div>
+            return;
+        }
+        if (_selected is { } key && Find(key) is { } block)
+        {
+            var d = PlanningBoard.Detail(data, block, CanValidate);
+            <span class="chip pb-kind @d.KindCss">@d.Kind</span>
+            <h2 class="pb-title">@d.Title</h2>
+            <p class="nd">@d.Sub</p>
+            <span class="chip @d.StatusCss" style="align-self:flex-start">@d.Status</span>
+            <dl class="kv">
+                @foreach (var (k, v) in d.Rows)
+                {
+                    <dt>@k</dt><dd>@v</dd>
+                }
+            </dl>
+            @if (d.HasProgress)
+            {
+                <span class="lbl">Avancement réel (compteur)</span>
+                <div class="pb-progress-bar"><i style="width:@Pct(d.Progress)"></i><b style="left:@Pct(d.Expected)" title="Avancement attendu maintenant"></b></div>
+                <small class="nd">@d.ProgressText</small>
+            }
+            @if (d.Note.Length > 0)
+            {
+                <div class="notice @NoteCss(d.NoteCss)">@d.Note</div>
+            }
+            <div class="q-actions">
+                @if (d.CanEdit && block.Source is MaintenanceEvent edited)
+                {
+                    <button type="button" class="bar" @onclick="() => EditEvent(edited)">Modifier</button>
+                }
+                @if (d.CanClose)
+                {
+                    <button type="button" class="bar acc" @onclick="() => CloseSelectedAsync(block)">@d.CloseText</button>
+                }
+                @if (d.CanDelete)
+                {
+                    <button type="button" class="bar danger" @onclick="() => AskDelete(block)">Supprimer</button>
+                }
+            </div>
+            return;
+        }
+        <p class="empty">Cliquez sur un bloc pour voir son détail, ou sur une partie vide d'une ligne pour y planifier une maintenance ou un arrêt.</p>
+    };
+
+    private RenderFragment EventEditor(PlanData data) => __builder =>
+    {
+        var stop = _eventKind == SlotKind.PlannedStop;
+        var start = PlanningBoard.At(_eventDate, _eventTime);
+        var end = PlanningBoard.At(_eventEndDate, _eventEndTime);
+        var error = PlanningBoard.SpanError(start, end);
+        <span class="chip pb-kind @(stop ? "stop" : "maint")">@(stop ? "Arrêt planifié" : "Maintenance")</span>
+        <h2 class="pb-title">@_formTitle</h2>
+        <div class="pb-form">
+            <div class="f">
+                <label for="pb-e-line">Ligne</label>
+                <select id="pb-e-line" @bind="_eventMachine">
+                    @foreach (var m in _machines)
+                    {
+                        <option value="@m.MachineId">@m.MachineName</option>
+                    }
+                </select>
+            </div>
+            <div class="f">
+                <label for="pb-e-task">@(stop ? "Motif" : "Tâche")</label>
+                <input id="pb-e-task" maxlength="120" @bind="_eventTask" @bind:event="oninput" placeholder="@(stop ? "ex. Pas de commande" : "ex. Graissage")" />
+                @if (stop)
+                {
+                    <div class="q-sugg">@foreach (var r in StopCauses.PlannedStopReasons) { <button type="button" class="chip" @onclick="() => _eventTask = r">@r</button> }</div>
+                }
+            </div>
+            <div class="f">
+                <label for="pb-e-date">Début</label>
+                <div class="q-inline">
+                    <input id="pb-e-date" type="date" value="@(_eventDate?.ToString("yyyy-MM-dd") ?? "")"
+                           @onchange="e => MoveStart(DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null, _eventTime)" />
+                    <input type="time" aria-label="Heure de début" value="@_eventTime" @onchange="e => MoveStart(_eventDate, e.Value?.ToString() ?? string.Empty)" />
+                </div>
+                <div class="q-sugg">
+                    <button type="button" class="chip" @onclick='() => PickPosteStart("06:00")'>Matin · 06:00</button>
+                    <button type="button" class="chip" @onclick='() => PickPosteStart("14:00")'>Après-midi · 14:00</button>
+                    <button type="button" class="chip" @onclick='() => PickPosteStart("22:00")'>Nuit · 22:00</button>
+                </div>
+            </div>
+            <div class="f">
+                <label for="pb-e-end">Fin</label>
+                <div class="q-inline">
+                    <input id="pb-e-end" type="date" value="@(_eventEndDate?.ToString("yyyy-MM-dd") ?? "")"
+                           @onchange="e => _eventEndDate = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null" />
+                    <input type="time" aria-label="Heure de fin" value="@_eventEndTime" @onchange="e => _eventEndTime = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                <div class="q-sugg">
+                    <button type="button" class="chip" @onclick="() => PickPosteEnd(1)">Fin Matin · 14:00</button>
+                    <button type="button" class="chip" @onclick="() => PickPosteEnd(2)">Fin Après-midi · 22:00</button>
+                    <button type="button" class="chip" @onclick="() => PickPosteEnd(3)">Fin Nuit · 06:00</button>
+                </div>
+            </div>
+            @if (!stop)
+            {
+                <div class="f">
+                    <label for="pb-e-tech">Intervenant</label>
+                    <input id="pb-e-tech" maxlength="100" @bind="_eventTechnician" @bind:event="oninput" />
+                </div>
+            }
+            <p class="nd @(error != null ? "bad-t" : "")">@(error ?? PlanningBoard.Length(start!.Value, end!.Value))</p>
+            @if (error == null && PlanningBoard.Busy(data, _eventMachine, start!.Value, end!.Value).Where(b => _editingEvent == null || b != $"« {_editingEvent.Task} »").ToList() is { Count: > 0 } busy)
+            {
+                <div class="notice warn">Déjà occupé : @string.Join(", ", busy)</div>
+            }
+            @if (stop)
+            {
+                <p class="nd">Hors TRS : le temps d'arrêt planifié n'est pas compté dans le temps requis de la ligne.</p>
+            }
+        </div>
+        <div class="q-actions">
+            <button type="button" class="bar acc" @onclick="SaveEventAsync" disabled="@(_saving || error != null)">Enregistrer</button>
+            <button type="button" class="bar" title="Fermer le formulaire sans enregistrer" @onclick="CancelEditor">Annuler</button>
+        </div>
+    };
+
+    private RenderFragment PlanEditor() => __builder =>
+    {
+        <span class="chip pb-kind maint">Maintenance préventive</span>
+        <h2 class="pb-title">@_formTitle</h2>
+        <div class="pb-form">
+            <div class="f">
+                <label for="pb-p-line">Ligne</label>
+                <select id="pb-p-line" @bind="_planMachine">
+                    @foreach (var m in _machines)
+                    {
+                        <option value="@m.MachineId">@m.MachineName</option>
+                    }
+                </select>
+            </div>
+            <div class="f">
+                <label for="pb-p-task">Tâche</label>
+                <input id="pb-p-task" maxlength="120" @bind="_planTask" @bind:event="oninput" placeholder="ex. Graissage des chaînes" />
+            </div>
+            <div class="f">
+                <span>Déclenchement</span>
+                <div class="segs" role="group" aria-label="Déclenchement">
+                    <button type="button" class="seg @(_planKind == MaintenanceKind.Calendar ? "on" : "")" @onclick="() => _planKind = MaintenanceKind.Calendar">Calendaire (jours)</button>
+                    <button type="button" class="seg @(_planKind == MaintenanceKind.Usage ? "on" : "")" @onclick="() => _planKind = MaintenanceKind.Usage">Usage (sacs produits)</button>
+                </div>
+            </div>
+            <div class="q-fields">
+                <div class="f">
+                    <label for="pb-p-int">@(_planKind == MaintenanceKind.Calendar ? "Tous les (jours)" : "Tous les (sacs)")</label>
+                    <input id="pb-p-int" inputmode="numeric" @bind="_planInterval" @bind:event="oninput" />
+                </div>
+                <div class="f">
+                    <label for="pb-p-dur">Durée (min)</label>
+                    <input id="pb-p-dur" inputmode="numeric" @bind="_planDuration" @bind:event="oninput" />
+                </div>
+            </div>
+            <div class="f">
+                <label for="pb-p-last">Dernière réalisation</label>
+                <input id="pb-p-last" type="date" value="@(_planLastDone?.ToString("yyyy-MM-dd") ?? "")"
+                       @onchange="e => _planLastDone = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null" />
+            </div>
+            @if (_planKind == MaintenanceKind.Usage)
+            {
+                <p class="nd">Usage : l'échéance avance avec les sacs comptés sur la ligne depuis la dernière réalisation.</p>
+            }
+        </div>
+        <div class="q-actions">
+            <button type="button" class="bar acc" @onclick="SavePlanAsync" disabled="@_saving">Enregistrer</button>
+            <button type="button" class="bar" @onclick="CancelEditor">Annuler</button>
+            @if (_editingPlan != null)
+            {
+                <button type="button" class="bar danger" @onclick="AskDeletePlan">Supprimer la règle</button>
+            }
+        </div>
+    };
+
+    private string NameOf(string machineId) => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;
+
+    private static string Pct(double f) => (f * 100).ToString("0.###", CultureInfo.InvariantCulture) + "%";
+
+    private static string NoteCss(string css) => css switch { "bad" => "error", "ok" => "ok", "orange" => "warn", _ => "info" };
+
+    private static string KindCss(PlanBlockKind kind) => kind switch
+    {
+        PlanBlockKind.Order => "order",
+        PlanBlockKind.Maintenance => "maint",
+        PlanBlockKind.MaintenanceDone => "done",
+        PlanBlockKind.MaintenanceLate => "late",
+        PlanBlockKind.Panne => "panne",
+        _ => "stop",
+    };
+}
