@@ -299,6 +299,10 @@ public sealed class UiState
     // Menu folded to its icons (more room for the sheets).
     public bool RailMini { get; set; }
 
+    // The figures of the dashboard tiles last shown, by slide scope and
+    // metric (TileFlash): the change since then glows on the tile.
+    public Dictionary<string, double> TileValues { get; } = new();
+
     // How the user set up each chart (SpigaChart), by chart key.
     public Dictionary<string, ChartView> Charts { get; } = new();
 }
@@ -327,6 +331,26 @@ public static class OpenModes
         if (dashboard && actor.CanEverywhere(Perm.EcranTv))
             modes.Add(SpigaMode.Tv);
         return modes;
+    }
+}
+
+// The change flash of the dashboard tiles (kiosk: TileFx): the figure moved
+// by at least minDelta since this tile (same machine, period, filters, poste)
+// was last on screen. better: +1 rising is good, -1 falling is good, 0
+// closer to zero is good.
+public static class TileFlash
+{
+    public static (string? Text, bool Good) Of(UiState ui, string key, double? value, double minDelta, int better, Func<double, string> format)
+    {
+        if (value is not { } now)
+            return (null, false);
+        var seen = ui.TileValues.TryGetValue(key, out var before);
+        ui.TileValues[key] = now;
+        var delta = now - before;
+        if (!seen || Math.Abs(delta) < minDelta)
+            return (null, false);
+        var good = better == 0 ? Math.Abs(now) < Math.Abs(before) : Math.Sign(delta) == better;
+        return ((delta > 0 ? "▲ " : "▼ ") + format(delta), good);
     }
 }
 

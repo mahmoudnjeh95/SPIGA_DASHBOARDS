@@ -64,7 +64,7 @@
     <div class="main">
         <header class="ctx">
             <span class="crumb">@((MarkupString)Crumb())</span>
-            <span class="pill" title="Équipe en poste selon le roulement"><span class="dot"></span>@_shift</span>
+            <span class="pill @(_shiftChanges > 0 ? "announce" : "")" @key="_shiftChanges" title="Équipe en poste selon le roulement"><span class="dot"></span>@_shift</span>
             <span class="sp"></span>
             @if (Desktop.IsAvailable && Session.Actor?.CanEverywhere(Perm.EcranTv) == true)
             {
@@ -82,6 +82,9 @@
 
 @code {
     private string _shift = "";
+
+    // A shift change while the screen is open: the chip announces it.
+    private int _shiftChanges;
 
     // The last Razor screen, where "Fermer" on a WPF page comes back to.
     private string _lastWebRoute = "";
@@ -150,7 +153,10 @@
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
         if (path == "compte")
             return "Usine › <b>Mon compte</b>";
-        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path);
+        // A tab of a screen (saisie/dechets/produit) belongs to its menu entry.
+        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path)
+                   ?? ModuleCatalog.Navigation.Where(n => n.Route.Length > 0 && path.StartsWith(n.Route + "/"))
+                                              .MaxBy(n => n.Route.Length);
         if (item == null)
             return "Usine";
         var label = System.Net.WebUtility.HtmlEncode(item.Label);
@@ -158,6 +164,14 @@
     }
 
     private void UpdateShift()
+    {
+        var before = _shift;
+        UpdateShiftLabel();
+        if (before.Length > 0 && before != _shift)
+            _shiftChanges++;
+    }
+
+    private void UpdateShiftLabel()
     {
         try
         {

@@ -1,0 +1,21 @@
+@* The one "Saisie des déchets" entry of the menu: emballage, produit and the
+   entries to validate are tabs of the same screen. A tab shows only when the
+   role can use it. *@
+@inject UserSession Session
+
+<nav class="tabrow waste-tabs" role="tablist" aria-label="Saisie des déchets">
+    <a class="tab @(Current == 0 ? "on" : "")" role="tab" aria-selected="@(Current == 0)" href="saisie/dechets/emballage">Déchets emballage</a>
+    @if (Session.Can(Perm.DechetsProduit) || Session.Can(Perm.DechetsValider))
+    {
+        <a class="tab @(Current == 1 ? "on" : "")" role="tab" aria-selected="@(Current == 1)" href="saisie/dechets/produit">Déchets produit</a>
+    }
+    @if (Session.Can(Perm.DechetsValider))
+    {
+        <a class="tab @(Current == 2 ? "on" : "")" role="tab" aria-selected="@(Current == 2)" href="saisie/dechets/a-valider">Saisies à valider</a>
+    }
+</nav>
+
+@code {
+    // 0 = emballage, 1 = produit, 2 = à valider.
+    [Parameter] public int Current { get; set; }
+}

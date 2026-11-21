@@ -7,6 +7,7 @@
 @inject PlantData Plant
 
 <RequireAccess Module="@Modules.SaisieDechets">
+    <WasteTabs Current="@(Kind == WasteKind.Emballage ? 0 : 1)" />
     @if (Kind == WasteKind.Produit && !Waste.CanEnter(Actor, Kind) && !Session.Can(Perm.DechetsValider))
     {
         <div class="card" style="max-width:640px">

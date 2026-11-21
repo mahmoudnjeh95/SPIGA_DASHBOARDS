@@ -1,10 +1,12 @@
 @page "/saisie/a-valider"
+@page "/saisie/dechets/a-valider"
 @inherits SpigaPage
 @inject WasteService Waste
 
 @* Every open waste entry in the validator's scope, whatever its date, poste
    or kind: to validate, waiting for someone else, sent back to its author. *@
 <RequireAccess Module="@Modules.SaisieDechets" Action="AppAction.Valider">
+    <WasteTabs Current="2" />
     <div class="head">
         <div>
             <span class="pre">Saisie</span><h1>Saisies à valider</h1>

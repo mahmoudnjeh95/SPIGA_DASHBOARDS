@@ -35,7 +35,7 @@
     {
         <div class="notice warn" role="status">
             <span>@_returned.Count de vos saisies renvoyée(s) par un validateur : « @_returned[0].ReturnComment »</span>
-            <a class="link" style="margin-left:auto" href="saisie/dechets-emballage">Corriger</a>
+            <a class="link" style="margin-left:auto" href="saisie/dechets/emballage">Corriger</a>
         </div>
     }
 
@@ -134,7 +134,7 @@
         <section class="card">
             <div class="card-head">
                 <h2>Mes saisies du poste <small>@_mine.Count saisie(s) · total @Fmt.Kg(_mine.Where(e => e.Counts).Sum(e => e.QuantityKg))</small></h2>
-                <a class="link" href="saisie/dechets-emballage">Saisie détaillée</a>
+                <a class="link" href="saisie/dechets/emballage">Saisie détaillée</a>
             </div>
             <WasteEntryTable Entries="_mine" OnEdit="EditDetailed" OnChanged="LoadAsync" Empty="Aucune saisie pour ce poste : utilisez « Déclarer un déchet » sur une machine." />
         </section>

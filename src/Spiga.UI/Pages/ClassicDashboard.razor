@@ -3,6 +3,7 @@
 @inject DashboardDeckService Deck
 @inject IDesktopBridge Desktop
 @inject ClientInfo Client
+@inject PlantData Plant
 @implements IDisposable
 @using SpigaDashboards.App.ViewModels
 @using SpigaDashboards.App.ViewModels.Slides
@@ -139,6 +140,10 @@ else
         <div class="tv-bar">
             <div class="dk-timer"><i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i></div>
             <span class="tv-title">@(_slides.Count == 0 ? "" : SlideDeck.Label(_slides[_index], NameOf))</span>
+            @if (_shiftLabel.Length > 0)
+            {
+                <span class="tv-shift @(_shiftChanges > 0 ? "announce" : "")" @key="_shiftChanges"><span class="dot"></span>@_shiftLabel</span>
+            }
             <span class="tv-clock">@Deck.Now.ToString("dd/MM/yyyy  HH:mm")</span>
             <button type="button" class="bar small" onclick="spigaTv.fullscreen()">Plein écran</button>
             @if (InKiosk && OnLeave.HasDelegate)
@@ -279,6 +284,27 @@ else
     private readonly HashSet<string> _alerted = new();
     private int _sideTicks;
 
+    // The team on shift (TV bar); a change is announced (the chip pops and glows).
+    private string _shiftLabel = "";
+    private int _shiftChanges;
+
+    private void ReadShift()
+    {
+        string label;
+        try
+        {
+            var (team, shift) = Plant.CurrentShift();
+            label = $"{team} - Poste {Shifts.Label(shift)}";
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        if (_shiftLabel.Length > 0 && label != _shiftLabel)
+            _shiftChanges++;
+        _shiftLabel = label;
+    }
+
     private List<Machine> _machines = new();
     private List<SlideDescriptor> _slides = new();
     private int _index;
@@ -368,6 +394,8 @@ else
                 {
                     if (_alert != null && Deck.Now - _alertSince >= AlertShown)
                         DismissAlert();
+                    if (Tv)
+                        ReadShift();
                     if (++_sideTicks >= 60)
                     {
                         _sideTicks = 0;

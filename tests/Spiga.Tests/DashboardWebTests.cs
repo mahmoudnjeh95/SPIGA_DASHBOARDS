@@ -102,4 +102,21 @@ public class DashboardWebTests
         var dashboard = RoleTemplates.All.Single(t => t.Code == "ecran-dashboard");
         Assert.Equal(new[] { SpigaMode.Dashboard }, OpenModes.For(Account(dashboard.Permissions)));
     }
+
+    [Fact]
+    public void A_tile_flashes_only_a_real_change_since_it_was_last_shown()
+    {
+        var ui = new UiState();
+        string F(double d) => d.ToString("+0.0;-0.0");
+        Assert.Null(TileFlash.Of(ui, "CC01|trs", 70, 0.5, 1, F).Text);          // first time: nothing to compare
+        Assert.Null(TileFlash.Of(ui, "CC01|trs", 70.3, 0.5, 1, F).Text);        // under the threshold
+        var up = TileFlash.Of(ui, "CC01|trs", 72, 0.5, 1, F);
+        Assert.Equal("▲ +1.7", up.Text?.Replace(',', '.'));
+        Assert.True(up.Good);
+        var away = TileFlash.Of(ui, "CC01|dev", -0.2, 0.05, 0, F);
+        Assert.Null(away.Text);
+        var worse = TileFlash.Of(ui, "CC01|dev", -0.6, 0.05, 0, F);
+        Assert.False(worse.Good);                                                // further from zero: red
+        Assert.Null(TileFlash.Of(ui, "CC02|trs", 72, 0.5, 1, F).Text);          // another machine: its own memory
+    }
 }

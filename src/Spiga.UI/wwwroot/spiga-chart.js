@@ -117,9 +117,19 @@ window.spigaChart = (function () {
         };
     }
 
+    // A new chart grows from its baseline; the same chart with new values
+    // (data refresh, same series) moves its bars and points to them.
     function draw(el) {
-        var chart = echarts.getInstanceByDom(el) || echarts.init(el, null, { renderer: "svg" });
-        chart.setOption(option(el, el.__spSpec), true);
+        var existing = echarts.getInstanceByDom(el);
+        var chart = existing || echarts.init(el, null, { renderer: "svg" });
+        var opt = option(el, el.__spSpec);
+        var names = el.__spSpec.series.map(function (s) { return s.name + "|" + s.kind; }).join(";");
+        opt.series.forEach(function (s, i) { s.id = s.name + "#" + i; });
+        if (existing && el.__spNames === names)
+            chart.setOption(opt, { replaceMerge: ["series", "xAxis", "yAxis", "dataZoom"] });
+        else
+            chart.setOption(opt, true);
+        el.__spNames = names;
     }
 
     // The theme is a data-theme attribute on .spiga-root.
