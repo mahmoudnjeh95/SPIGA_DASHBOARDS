@@ -96,15 +96,17 @@ public partial class App : Application
         if (appDbError == null)
             Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
 
-        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
-        // as a screen (KIOSK=1, see StartMode), open the web dashboard
-        // without sign-in (« Se connecter » for the rest). Without WebView2
-        // or the application database: the WPF dashboard, as before.
-        var kiosk = StartMode.IsKiosk(e.Args);
+        // The three shortcuts (StartMode): the application (sign-in), SPIGA
+        // Dashboard (--kiosk: the web dashboard without sign-in, « Se
+        // connecter » for the rest) and the TV kiosk (--tv: the slides alone,
+        // full screen). Screen PCs installed with KIOSK=1 / 2 open theirs
+        // without an argument. Without WebView2 or the application database,
+        // both screens fall back to the WPF dashboard, as before.
+        var start = StartMode.Of(e.Args);
         var webView2 = StartMode.WebView2Version();
-        if (kiosk && (webView2 == null || appDbError != null))
+        if (start != AppStart.App && (webView2 == null || appDbError != null))
         {
-            AppLogger.Log("Démarrage en mode écran (kiosque), tableau de bord WPF : "
+            AppLogger.Log($"Démarrage en mode écran ({start}), tableau de bord WPF : "
                           + (webView2 == null ? "WebView2 introuvable" : "base applicative injoignable"));
             ShowWindow(new KioskWindow(CreateDashboard()));
             return;
@@ -153,9 +155,15 @@ public partial class App : Application
         services.AddSingleton<IDesktopBridge>(bridge);
         var provider = services.BuildServiceProvider();
         bridge.Services = provider;
-        if (kiosk)
-            AppLogger.Log("Démarrage en mode écran (kiosque)");
-        var shell = new ShellWindow(provider, kiosk ? "kiosk" : null);
+        if (start == AppStart.Tv)
+        {
+            AppLogger.Log("Démarrage en écran TV (kiosque TV)");
+            ShowWindow(new WebTvWindow(provider, settings, settingsService, main: true));
+            return;
+        }
+        if (start == AppStart.Kiosk)
+            AppLogger.Log("Démarrage en mode écran (SPIGA Dashboard)");
+        var shell = new ShellWindow(provider, start == AppStart.Kiosk ? "kiosk" : null);
         bridge.Attach(shell);
         ShowWindow(shell);
     }

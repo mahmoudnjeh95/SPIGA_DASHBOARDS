@@ -14,8 +14,14 @@ public partial class WebTvWindow : Window
     private readonly SettingsService _settingsService;
     private bool _closingForShutdown;
 
-    public WebTvWindow(IServiceProvider services, AppSettings settings, SettingsService settingsService)
+    // main: the TV kiosk (--tv), the application's only window: always full
+    // screen at start, and it does not change whether the TV window of the
+    // other modes reopens.
+    private readonly bool _main;
+
+    public WebTvWindow(IServiceProvider services, AppSettings settings, SettingsService settingsService, bool main = false)
     {
+        _main = main;
         InitializeComponent();
         _settings = settings;
         _settingsService = settingsService;
@@ -31,8 +37,8 @@ public partial class WebTvWindow : Window
         };
         // Maximize only once the window exists at its saved place, so it fills
         // that screen (the TV) and not the primary one.
-        SourceInitialized += (_, _) => { if (_settings.TvScreen.FullScreen) SetFullScreen(true, save: false); };
-        Closing += (_, _) => SavePlacement(isOpen: _closingForShutdown);
+        SourceInitialized += (_, _) => { if (_main || _settings.TvScreen.FullScreen) SetFullScreen(true, save: false); };
+        Closing += (_, _) => SavePlacement(isOpen: _main ? _settings.TvScreen.IsOpen : _closingForShutdown);
     }
 
     // App closing (main window closed): keep IsOpen so the TV comes back next start.
@@ -55,7 +61,7 @@ public partial class WebTvWindow : Window
         WindowState = fullScreen ? WindowState.Maximized : WindowState.Normal;
         Topmost = fullScreen;
         if (save)
-            SavePlacement(isOpen: true);
+            SavePlacement(isOpen: _main ? _settings.TvScreen.IsOpen : true);
     }
 
     private void PlaceFromSettings()

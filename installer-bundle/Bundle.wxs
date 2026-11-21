@@ -15,8 +15,8 @@
                                               LogoFile="..\src\SpigaDashboards.App\Assets\spiga-logo.png" />
     </BootstrapperApplication>
 
-    <!-- Screen PC (TV, hall): "SpigaDashboards-<version>-Setup.exe KIOSK=1"
-         (see installer\Package.wxs). -->
+    <!-- Screen PC: "SpigaDashboards-<version>-Setup.exe KIOSK=1" (SPIGA
+         Dashboard) or KIOSK=2 (SPIGA TV), see installer\Package.wxs. -->
     <Variable Name="KIOSK" Value="0" bal:Overridable="yes" />
 
     <Chain>
