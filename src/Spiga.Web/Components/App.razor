@@ -16,7 +16,7 @@
             <span>Démarrage de SPIGA Suivi Production…</span>
         </div>
     </div>
-    <Routes @rendermode="Interactive" Workstation="@HttpContext?.Connection.RemoteIpAddress?.ToString()" />
+    <Routes @rendermode="Interactive" Workstation="@HttpContext?.Connection.RemoteIpAddress?.ToString()" Screen="@DevScreen" />
     <script src="_content/Spiga.UI/lib/echarts/echarts.min.js"></script>
     <script src="_content/Spiga.UI/spiga.js"></script>
     <script src="_content/Spiga.UI/spiga-chart.js"></script>
@@ -29,4 +29,13 @@
     private static readonly IComponentRenderMode Interactive = new InteractiveServerRenderMode(prerender: false);
 
     [CascadingParameter] public HttpContext? HttpContext { get; set; }
+
+    [Inject] private IWebHostEnvironment Env { get; set; } = default!;
+
+    // Development only: ?ecran=kiosk or ?ecran=tv shows the screen modes of
+    // the desktop application (no sign-in) to test them in a browser. Never
+    // on the plant server: a browser always signs in there.
+    private string? DevScreen => Env.IsDevelopment() && HttpContext?.Request.Query["ecran"].ToString() is "kiosk" or "tv"
+        ? HttpContext!.Request.Query["ecran"].ToString()
+        : null;
 }

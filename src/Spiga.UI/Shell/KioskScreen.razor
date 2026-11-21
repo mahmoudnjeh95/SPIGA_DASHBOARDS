@@ -1,0 +1,62 @@
+@* A hall screen of the desktop application, without sign-in (Routes,
+   Screen = "kiosk" or "tv"; ScreenAccount):
+   - tv: the dashboard slides alone, full screen (the TV window);
+   - kiosk: the same, with Historique and Arrêts of the whole plant, the
+     TV window, and « Se connecter » for anything that writes (note,
+     Paramètres...): the full application under one's own account, back to
+     the screen at sign-out or after the inactivity time. *@
+@using Spiga.UI.Pages
+@inject IJSRuntime JS
+@inject IDesktopBridge Desktop
+
+<main class="tv-view view @(Kiosk ? "kiosk" : "")">
+    @if (Kiosk)
+    {
+        <nav class="kiosk-bar" aria-label="Écran du poste">
+            <Brand />
+            <span class="sp"></span>
+            <button type="button" class="bar small @(_view == View.Dashboard ? "acc" : "")" @onclick="() => _view = View.Dashboard">@Icons.Svg("tableau")Tableau de bord</button>
+            <button type="button" class="bar small @(_view == View.History ? "acc" : "")" @onclick="() => _view = View.History">@Icons.Svg("clock")Historique</button>
+            <button type="button" class="bar small @(_view == View.Stops ? "acc" : "")" @onclick="() => _view = View.Stops">@Icons.Svg("arrets")Arrêts</button>
+            @if (Desktop.IsAvailable)
+            {
+                <button type="button" class="bar small" @onclick="() => Desktop.OpenTvScreen()">@Icons.Svg("tv")Écran TV</button>
+            }
+            <button type="button" class="bar small" @onclick="OnSignIn">@Icons.Svg("user")Se connecter</button>
+        </nav>
+    }
+    @switch (_view)
+    {
+        case View.History:
+            <ProductionHistory />
+            break;
+        case View.Stops:
+            <Stops />
+            break;
+        default:
+            <ClassicDashboard Tv="true" />
+            break;
+    }
+</main>
+
+@code {
+    private enum View { Dashboard, History, Stops }
+
+    [Parameter] public bool Kiosk { get; set; }
+    [Parameter] public EventCallback OnSignIn { get; set; }
+
+    private View _view = View.Dashboard;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        try
+        {
+            await JS.InvokeVoidAsync("spigaTv.enable");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

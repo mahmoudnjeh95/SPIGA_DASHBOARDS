@@ -1,3 +1,4 @@
+using Spiga.Core.Security;
 using Spiga.UI.Services;
 using SpigaDashboards.App.Models;
 using Xunit;
@@ -57,4 +58,17 @@ public class DashboardWebTests
     [Fact]
     public void The_dashboard_is_a_razor_page_in_both_hosts()
         => Assert.False(NativePages.IsWpf(NativePage.Dashboard));
+
+    [Fact]
+    public void A_hall_screen_reads_the_whole_plant_and_writes_nothing()
+    {
+        var screen = ScreenAccount.Create(new AppSettings());
+        Assert.True(NativePages.IsAllowed(screen, NativePage.Dashboard));
+        Assert.True(NativePages.IsAllowed(screen, NativePage.Stops));
+        Assert.True(screen.CanEverywhere(Perm.EcranTv));
+        Assert.False(DashboardDeckService.CanEditNote(screen));
+        Assert.False(NativePages.IsAllowed(screen, NativePage.Settings));
+        Assert.False(NativePages.IsAllowed(screen, NativePage.StopQualification));
+        Assert.False(screen.Can(Perm.ComptesGerer));
+    }
 }

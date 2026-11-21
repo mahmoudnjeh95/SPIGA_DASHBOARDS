@@ -1,11 +1,14 @@
 @* Root component of both hosts. Nothing of the application is reachable
    before the gate: first installation, sign-in, forced password change,
-   inactivity lock. *@
+   inactivity lock. Screen (desktop application only): "kiosk" (hall PC:
+   the dashboard without sign-in, « Se connecter » for the rest) or "tv"
+   (the TV window: the slides alone), see KioskScreen. *@
 @implements IDisposable
 @inject UserSession Session
 @inject AuthService Auth
 @inject ClientInfo Client
 @inject IDesktopBridge Desktop
+@inject SpigaDashboards.App.Models.AppSettings StationSettings
 
 <div class="spiga-root" data-theme="@Session.Theme">
     @if (_error != null)
@@ -19,6 +22,15 @@
     else if (_needsSetup)
     {
         <Setup OnDone="() => _needsSetup = false" />
+    }
+    else if (Session.IsScreen)
+    {
+        <KioskScreen Kiosk="@(Screen == "kiosk")" OnSignIn="SignInFromScreen" />
+    }
+    else if (Screen == "kiosk" && Session.Actor == null)
+    {
+        <Login />
+        <div class="kiosk-back"><button type="button" class="bar" @onclick="BackToScreen">‹ Retour à l'écran</button></div>
     }
     else if (Session.Actor == null && !_welcomed)
     {
@@ -64,6 +76,11 @@
     // desktop host leaves it null (the PC name is used).
     [Parameter] public string? Workstation { get; set; }
 
+    [Parameter] public string? Screen { get; set; }
+
+    // Kiosk: the sign-in form was asked for ("Se connecter").
+    private bool _signingIn;
+
     private bool _ready;
     // The welcome screen comes before the sign-in form, at start-up and
     // again after each sign-out (the next person at the PC).
@@ -83,6 +100,8 @@
             if (!_needsSetup && Session.Actor == null)
                 await Session.TryResumeAsync();
             _hadActor = Session.Actor != null;
+            if (!_needsSetup && Screen is "kiosk" or "tv" && Session.Actor == null)
+                Session.EnterScreen(ScreenAccount.Create(StationSettings));
             _ready = true;
         }
         catch (Exception ex)
@@ -96,7 +115,39 @@
         if (_hadActor && Session.Actor == null)
             _welcomed = false;
         _hadActor = Session.Actor != null;
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(async () =>
+        {
+            if (Screen is "kiosk" or "tv")
+            {
+                // A kiosk is never left locked: the person who signed in has
+                // gone, the screen comes back.
+                if (Session.IsLocked)
+                {
+                    await Session.SignOutAsync();
+                    return;
+                }
+                if (Session.Actor != null)
+                    _signingIn = false;
+                else if (!_signingIn)
+                {
+                    Session.EnterScreen(ScreenAccount.Create(StationSettings));
+                    return;
+                }
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void SignInFromScreen()
+    {
+        _signingIn = true;
+        Session.LeaveScreen();
+    }
+
+    private void BackToScreen()
+    {
+        _signingIn = false;
+        Session.EnterScreen(ScreenAccount.Create(StationSettings));
     }
 
     // Sign-in, lock, first setup: no WPF page beside the rail (AppShell shows

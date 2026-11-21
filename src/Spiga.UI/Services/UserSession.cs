@@ -23,6 +23,29 @@ public sealed class UserSession : IDisposable
 
     public Actor? Actor { get; private set; }
     public bool IsLocked { get; private set; }
+
+    // A hall screen (kiosk PC, TV window): the dashboard shown without
+    // sign-in, under ScreenAccount (read only, whole plant). Never locked,
+    // never written to the tab's store or the sign-in journal.
+    public bool IsScreen { get; private set; }
+
+    public void EnterScreen(Actor screen)
+    {
+        Actor = screen;
+        IsScreen = true;
+        IsLocked = false;
+        Notify();
+    }
+
+    // "Se connecter" on a kiosk: the sign-in form instead of the screen.
+    public void LeaveScreen()
+    {
+        if (!IsScreen)
+            return;
+        Actor = null;
+        IsScreen = false;
+        Notify();
+    }
     public SecurityPolicy Policy { get; private set; } = new();
 
     // Shown before sign-in (login page); the user's own choice afterwards.
@@ -39,6 +62,7 @@ public sealed class UserSession : IDisposable
     public async Task SignInAsync(Actor actor)
     {
         Actor = actor;
+        IsScreen = false;
         IsLocked = false;
         Policy = await _auth.GetPolicyAsync();
         Touch();
@@ -68,8 +92,9 @@ public sealed class UserSession : IDisposable
 
     public async Task SignOutAsync()
     {
-        if (Actor != null)
+        if (Actor != null && !IsScreen)
             await _auth.LogoutAsync(Actor);
+        IsScreen = false;
         Actor = null;
         IsLocked = false;
         await _store.ClearAsync();
@@ -96,7 +121,7 @@ public sealed class UserSession : IDisposable
     // Picks up changes an administrator made to this account or its role.
     public async Task RefreshAsync()
     {
-        if (Actor == null || IsLocked)
+        if (Actor == null || IsLocked || IsScreen)
             return;
         var fresh = await _auth.RefreshAsync(Actor);
         if (fresh == null)
@@ -116,7 +141,7 @@ public sealed class UserSession : IDisposable
 
     public async Task ToggleThemeAsync()
     {
-        if (Actor == null)
+        if (Actor == null || IsScreen)
             return;
         await _auth.SetThemeAsync(Actor, Actor.User.Theme == "dark" ? "light" : "dark");
         Notify();
@@ -129,7 +154,7 @@ public sealed class UserSession : IDisposable
     // takes the session back).
     public async Task KeepAwakeAsync()
     {
-        if (Actor == null || IsLocked)
+        if (Actor == null || IsLocked || IsScreen)
             return;
         Touch();
         await _store.SaveAsync(Actor.User.Id, _lastActivity);
@@ -139,7 +164,7 @@ public sealed class UserSession : IDisposable
 
     private void CheckIdle()
     {
-        if (Actor == null || IsLocked || Policy.SessionTimeoutMinutes <= 0)
+        if (Actor == null || IsLocked || IsScreen || Policy.SessionTimeoutMinutes <= 0)
             return;
         if (Now - _lastActivity < TimeSpan.FromMinutes(Policy.SessionTimeoutMinutes))
             return;

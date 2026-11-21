@@ -1403,8 +1403,15 @@ table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .tv-bar .dk-timer { flex: 1 1 200px; }
 .tv-title { font-weight: 700; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
 .spiga-tv #components-reconnect-modal { display: none !important; }
+.tv-clock { font-weight: 700; color: var(--fg2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* kiosk (hall PC without sign-in) */
+.kiosk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.kiosk-bar .brand { margin: 0; }
+.kiosk-back { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 30; }
 /* sticky note: the same yellow in both themes (kiosk note bar) */
-.dk-note { display: flex; align-items: center; gap: 10px; background: #F1C40F; color: #1B1F26; border-radius: 12px; padding: 8px 14px; box-shadow: var(--shadow-sm); }
+.dk-note { position: sticky; bottom: 0; z-index: 20; margin-top: auto; display: flex; align-items: center; gap: 10px; background: #F1C40F; color: #1B1F26;
+    border-radius: 12px 12px 0 0; padding: 10px 16px; box-shadow: 0 -4px 16px rgba(16, 24, 40, .12); }
+.dk-note ~ .dk-alert { bottom: 84px; }
 .dk-note p { margin: 0; font-size: 16px; font-weight: 600; white-space: pre-wrap; }
 .dk-note textarea { flex: 1; min-width: 0; resize: vertical; border: 0; background: transparent; color: #1B1F26; font: inherit; font-size: 16px; font-weight: 600; padding: 4px 0; }
 .dk-note textarea::placeholder { color: rgba(27, 31, 38, .55); }

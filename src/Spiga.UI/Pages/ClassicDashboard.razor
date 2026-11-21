@@ -139,34 +139,17 @@ else
         <div class="tv-bar">
             <div class="dk-timer"><i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i></div>
             <span class="tv-title">@(_slides.Count == 0 ? "" : SlideDeck.Label(_slides[_index], NameOf))</span>
+            <span class="tv-clock">@Deck.Now.ToString("dd/MM/yyyy  HH:mm")</span>
             <button type="button" class="bar small" onclick="spigaTv.fullscreen()">Plein écran</button>
-            <a class="bar small" href="production/tableau-de-bord">Quitter l'écran TV</a>
+            @if (!Session.IsScreen)
+            {
+                <a class="bar small" href="production/tableau-de-bord">Quitter l'écran TV</a>
+            }
         </div>
     }
 
     <Flash Error="@Error" Info="@Info" />
 
-    @* The note of the screens (kiosk: the yellow sticky note bar): the same
-       text on every dashboard and TV screen, never rotated away. *@
-    @if (_canEditNote && !Tv || !string.IsNullOrWhiteSpace(_note))
-    {
-        <div class="dk-note" role="note">
-            @if (_canEditNote && !Tv)
-            {
-                <textarea id="dk-note" rows="1" maxlength="1000" aria-label="Note des écrans" placeholder="Note pour tous les écrans (consigne, information…)"
-                          value="@_noteDraft" @oninput="NoteTyped"></textarea>
-                @if (_noteStatus.Length > 0)
-                {
-                    <span class="dk-note-status">@_noteStatus</span>
-                }
-                <button type="button" class="bar small" disabled="@(!_noteEditing || _noteDraft == _note)" @onclick="SaveNoteAsync">Enregistrer</button>
-            }
-            else
-            {
-                <p>@_note</p>
-            }
-        </div>
-    }
 
     @if (_slides.Count == 0 && !_loading)
     {
@@ -196,6 +179,29 @@ else
                 case RunStateSlide runState:
                     <RunStateSlideView Slide="runState" />
                     break;
+            }
+        </div>
+    }
+
+    @* The note of the screens (kiosk: the yellow sticky note bar): the same
+       text on every dashboard and TV screen, never rotated away, held at
+       the bottom of the screen as on the kiosk. *@
+    @if (_canEditNote && !Tv || !string.IsNullOrWhiteSpace(_note))
+    {
+        <div class="dk-note" role="note">
+            @if (_canEditNote && !Tv)
+            {
+                <textarea id="dk-note" rows="1" maxlength="1000" aria-label="Note des écrans" placeholder="Note pour tous les écrans (consigne, information…)"
+                          value="@_noteDraft" @oninput="NoteTyped"></textarea>
+                @if (_noteStatus.Length > 0)
+                {
+                    <span class="dk-note-status">@_noteStatus</span>
+                }
+                <button type="button" class="bar small" disabled="@(!_noteEditing || _noteDraft == _note)" @onclick="SaveNoteAsync">Enregistrer</button>
+            }
+            else
+            {
+                <p>@_note</p>
             }
         </div>
     }

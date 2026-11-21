@@ -125,9 +125,9 @@ public interface IDesktopBridge
     // Sign-out / lock: the pages are dropped (unsaved edits with them).
     void DiscardNativePages();
 
-    // The station's hall screen (WPF TV window): for NativeAccess.CanTv
-    // only, showing what the account may see on the dashboard (access).
-    void OpenTvScreen(NativeAccess access);
+    // The station's hall screen (TV window, the web Écran TV of the whole
+    // plant): for NativeAccess.CanTv only.
+    void OpenTvScreen();
 
     // "Planifier un préventif" (Statistiques des arrêts): the planning board
     // opens on the preventive rule form for this line and component.
@@ -168,7 +168,7 @@ public sealed class NoDesktop : IDesktopBridge
     public bool IsAvailable => false;
     public void ShowNative(NativePage? page, NativeAccess access) { }
     public void DiscardNativePages() { }
-    public void OpenTvScreen(NativeAccess access) { }
+    public void OpenTvScreen() { }
     public IStationHost? Station => null;
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }

@@ -276,6 +276,10 @@ window.spigaTv = {
             }
         }
         new MutationObserver(check).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+        // F11: full screen (in the desktop TV window too, where the keys go to the page).
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "F11") { e.preventDefault(); window.spigaTv.fullscreen(); }
+        });
     },
     fullscreen: function () {
         var el = document.documentElement;

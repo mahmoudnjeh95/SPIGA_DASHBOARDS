@@ -23,7 +23,10 @@ else
             <p>@(_report == null ? "Choisissez la période et les filtres, puis Rechercher." : $"{_report.PeriodText}{(_report.FilterLabel.Length > 0 ? " · " + _report.FilterLabel : "")}")</p>
         </div>
         <div class="head-tools">
-            <a class="bar" href="production/tableau-de-bord">‹ Tableau de bord</a>
+            @if (!Session.IsScreen)
+            {
+                <a class="bar" href="production/tableau-de-bord">‹ Tableau de bord</a>
+            }
             @if (_canExport)
             {
                 <button type="button" class="bar" disabled="@(_report is not { Detail.Count: > 0 } || _busy)" @onclick="() => ExportAsync(false)">@Icons.Svg("download")Excel</button>

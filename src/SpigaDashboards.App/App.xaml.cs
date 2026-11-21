@@ -58,15 +58,6 @@ public partial class App : Application
             return dashboard;
         }
 
-        // Signed-in shell: its own repository, showing no machine until the
-        // account opening it gives its scope (DesktopBridge, MachineAccess).
-        DashboardView CreateScopedDashboard()
-        {
-            var scoped = new ProductionRepository(activeFactory, appData, settings, MachineAccess.Nothing());
-            return new(new MainViewModel(scoped, settings, teamSchedule, sharedSettings),
-                settingsService, settings, activeFactory, appData, scoped, sharedSettings);
-        }
-
         // IT: the table changes of this version, with an administrator login.
         if (e.Args.Contains("--update-database", StringComparer.OrdinalIgnoreCase))
         {
@@ -100,26 +91,28 @@ public partial class App : Application
             AppLogger.Log("Base applicative SPIGA Suivi Production injoignable : " + ex);
         }
 
-        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
-        // as a screen (KIOSK=1, see StartMode), opens the dashboard directly,
-        // without sign-in, as before.
-        if (StartMode.IsKiosk(e.Args))
-        {
-            if (appDbError == null)
-                Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
-            AppLogger.Log("Démarrage en mode écran (kiosque)");
-            ShowWindow(new KioskWindow(CreateDashboard()));
-            return;
-        }
-
         // The site's shared settings (nominal rates, TRS targets, teams), as
         // the dashboard pulls them, so both compute with the same values.
         if (appDbError == null)
             Task.Run(() => sharedSettings.PullAsync()).GetAwaiter().GetResult();
 
+        // TV / kiosk PCs: "SpigaDashboards.App.exe --kiosk", or a PC installed
+        // as a screen (KIOSK=1, see StartMode), open the web dashboard
+        // without sign-in (« Se connecter » for the rest). Without WebView2
+        // or the application database: the WPF dashboard, as before.
+        var kiosk = StartMode.IsKiosk(e.Args);
+        var webView2 = StartMode.WebView2Version();
+        if (kiosk && (webView2 == null || appDbError != null))
+        {
+            AppLogger.Log("Démarrage en mode écran (kiosque), tableau de bord WPF : "
+                          + (webView2 == null ? "WebView2 introuvable" : "base applicative injoignable"));
+            ShowWindow(new KioskWindow(CreateDashboard()));
+            return;
+        }
+
         // The sign-in shell is drawn by Microsoft Edge WebView2 (present on
         // Windows 10 / 11). Missing: the dashboard alone, with the reason.
-        if (StartMode.WebView2Version() is not { } webView2)
+        if (webView2 == null)
         {
             AppLogger.Log("WebView2 introuvable : démarrage du tableau de bord seul");
             MessageBox.Show(
@@ -156,9 +149,13 @@ public partial class App : Application
         services.AddSingleton(settingsService);
         services.AddSingleton(sharedSettings);
         services.AddSpigaSuivi(appDb, activeFactory, settings);
-        var bridge = new DesktopBridge(CreateScopedDashboard, settings, activeFactory, appData, sharedSettings);
+        var bridge = new DesktopBridge(settings, settingsService, activeFactory, appData, sharedSettings);
         services.AddSingleton<IDesktopBridge>(bridge);
-        var shell = new ShellWindow(services.BuildServiceProvider());
+        var provider = services.BuildServiceProvider();
+        bridge.Services = provider;
+        if (kiosk)
+            AppLogger.Log("Démarrage en mode écran (kiosque)");
+        var shell = new ShellWindow(provider, kiosk ? "kiosk" : null);
         bridge.Attach(shell);
         ShowWindow(shell);
     }

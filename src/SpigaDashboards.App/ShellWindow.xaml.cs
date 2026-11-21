@@ -7,10 +7,17 @@ public partial class ShellWindow : Window
     // Width of the navigation rail of the Razor screens (.rail in spiga.css).
     private const double RailWidth = 236;
 
-    public ShellWindow(IServiceProvider services)
+    // screen: null = the signed-in application; "kiosk" = a hall PC, the
+    // dashboard without sign-in (Routes.Screen, KioskScreen).
+    public ShellWindow(IServiceProvider services, string? screen = null)
     {
         InitializeComponent();
         WebView.Services = services;
+        if (screen != null)
+        {
+            WebView.RootComponents[0].Parameters = new Dictionary<string, object?> { ["Screen"] = screen };
+            Title = "SPIGA Suivi Production - Écran";
+        }
         // Using a WPF page counts as activity for the inactivity lock.
         DashboardHost.PreviewMouseDown += (_, _) => NativeActivity?.Invoke();
         DashboardHost.PreviewKeyDown += (_, _) => NativeActivity?.Invoke();
