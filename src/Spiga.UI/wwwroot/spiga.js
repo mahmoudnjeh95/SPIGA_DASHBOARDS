@@ -297,8 +297,9 @@ window.spigaTv = {
                 if (h === 0 || getComputedStyle(kids[i]).position === "fixed") continue; // the stop pop-up floats
                 natural += h / current + (n++ > 0 ? 14 : 0);
             }
-            var target = Math.max(0.4, Math.min(1, window.innerHeight / natural));
-            if (Math.abs(target - current) > 0.02) view.style.zoom = target.toFixed(3);
+            var target = Math.max(0.4, Math.min(1, (window.innerHeight - 6) / natural));
+            // Down as soon as it overflows; back up only for a real gain (no hunting).
+            if (target < current - 0.003 || target > current + 0.02) view.style.zoom = target.toFixed(3);
         }, 1500);
         // F11: full screen (in the desktop TV window too, where the keys go to the page).
         document.addEventListener("keydown", function (e) {
