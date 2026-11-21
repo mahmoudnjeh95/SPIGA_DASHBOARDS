@@ -110,8 +110,13 @@ body { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; }
     display: flex; flex-direction: column; gap: 6px; padding: 16px 12px 14px; height: 100%;
     transition: background-color .45s var(--ease), border-color .45s var(--ease);
 }
-.brand { display: flex; align-items: center; gap: 11px; padding: 0 6px 10px; }
-.brand img { height: 40px; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .14)); animation: sp-float 6s ease-in-out infinite; transform-origin: 50% 80%; }
+/* The wide Spiga · Diari logo above the name; the square mark only in the folded rail. */
+.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0 6px 10px; }
+.brand img { display: block; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .14)); animation: sp-float 6s ease-in-out infinite; transform-origin: 50% 80%; }
+.brand .brand-logo { width: 100%; max-width: 210px; height: auto; }
+.brand .brand-mark { display: none; width: 50px; height: 50px; }
+.brand b, .brand span { display: inline; }
+.brand > div { display: flex; align-items: baseline; gap: 8px; }
 .brand b {
     display: block; font-size: 18px; font-weight: 800; line-height: 1.1; letter-spacing: .02em;
     background: linear-gradient(90deg, var(--brand-green), var(--brand-yellow), var(--brand-red), var(--brand-green));
@@ -561,8 +566,8 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 .gate-card > :nth-child(2) { animation-delay: 120ms; } .gate-card > :nth-child(3) { animation-delay: 180ms; }
 .gate-card > :nth-child(4) { animation-delay: 240ms; } .gate-card > :nth-child(5) { animation-delay: 300ms; }
 .gate-card > :nth-child(6) { animation-delay: 360ms; } .gate-card > :nth-child(n+7) { animation-delay: 420ms; }
-.gate-card .brand { padding: 0 0 4px; }
-.gate-card .brand img { height: 48px; }
+.gate-card .brand { padding: 0 0 4px; align-items: center; align-self: center; }
+.gate-card .brand .brand-logo { width: min(300px, 100%); max-width: none; }
 .gate-card .brand b { font-size: 21px; }
 .gate-card h1 { font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
 .gate-card p { color: var(--fg2); }
@@ -621,12 +626,12 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 /* Sized on the window height too, so it fits a 1366 x 768 screen without scrolling. */
 .wl-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: clamp(6px, 1.5vh, 14px); max-width: 640px; }
 
-/* The Diari · Spiga logo in 3D. Four nested layers, each with one job:
+/* The Spiga · Diari logo in 3D. Four nested layers, each with one job:
    .wl-stage     perspective + fade in
    .wl-logo3d    the entrance: flies in from deep, turned away, and settles
    .wl-tilt      leans toward the pointer (--px / --py from spiga.js)
    .wl-slab      the idle loop (16 s): sways, lifts, then turns a full circle
-   The slab is a real solid: the face, ten darker copies 1.4 px apart behind
+   The slab is a real solid: the face, eight darker copies 1 px apart behind
    it (the thickness you see on the turn) and a back face, so the logo reads
    the right way round when it shows its back. Nothing above .wl-slab may
    have filter / opacity / clip-path: they would flatten the 3D. */
@@ -671,8 +676,8 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 .wl-slab { animation: sp-logo-idle 16s 2s infinite; }
 .wl-slab img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .wl-face { transform: translateZ(0); backface-visibility: hidden; }
-.wl-edge { transform: translateZ(calc(var(--k) * -1.4px)); filter: brightness(calc(.78 - var(--k) * .035)) saturate(1.15); }
-.wl-back { transform: translateZ(-15.4px) rotateY(180deg); backface-visibility: hidden; filter: brightness(.92); }
+.wl-edge { transform: translateZ(calc(var(--k) * -1px)); backface-visibility: hidden; filter: brightness(calc(.9 - var(--k) * .03)) saturate(1.1); }
+.wl-back { transform: translateZ(-9px) rotateY(180deg); backface-visibility: hidden; filter: brightness(.92); }
 .wl-gloss { /* a light sweep over the face, cut to the logo's shape */
     position: absolute; inset: 0; overflow: hidden; pointer-events: none; transform: translateZ(.6px); backface-visibility: hidden;
     -webkit-mask: url("img/cds-logo.png") center / 100% 100% no-repeat; mask: url("img/cds-logo.png") center / 100% 100% no-repeat;
@@ -691,8 +696,8 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 .wl-rays { /* slow golden light rays behind the logo */
     position: absolute; left: 50%; top: 50%; width: 150%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; z-index: -1;
     background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--brand-yellow) 30%, transparent) 0deg 5deg, transparent 5deg 20deg);
-    -webkit-mask: radial-gradient(closest-side, #000 18%, transparent 72%); mask: radial-gradient(closest-side, #000 18%, transparent 72%);
-    transform: translate(-50%, -50%); opacity: .55; animation: sp-rays 60s linear infinite;
+    -webkit-mask: radial-gradient(closest-side, #000 12%, transparent 62%); mask: radial-gradient(closest-side, #000 12%, transparent 62%);
+    transform: translate(-50%, -50%); opacity: .4; animation: sp-rays 60s linear infinite;
 }
 
 .wl-title { display: flex; font-size: clamp(36px, min(7vw, 9vh), 76px); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
@@ -1092,8 +1097,9 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .spiga-root .app.rail-mini .nav > span:not(.nav-ic),
 .spiga-root .app.rail-mini .me small,
 .spiga-root .app.rail-mini .me b { display: none; }
-.spiga-root .app.rail-mini .brand { justify-content: center; padding: 0 0 10px; }
-.spiga-root .app.rail-mini .brand img { height: 34px; }
+.spiga-root .app.rail-mini .brand { justify-content: center; align-items: center; padding: 0 0 10px; }
+.spiga-root .app.rail-mini .brand .brand-logo { display: none; }
+.spiga-root .app.rail-mini .brand .brand-mark { display: block; }
 .spiga-root .app.rail-mini .nav { justify-content: center; padding-left: 0; padding-right: 0; }
 .spiga-root .app.rail-mini .navwrap > :not(.nav) { display: none; }
 
@@ -1142,7 +1148,9 @@ table.cal { border-collapse: separate; border-spacing: 0; font-size: 12px; font-
 .spiga-root .app.rail-mini .rail:hover .me small,
 .spiga-root .app.rail-mini .rail:hover .me b { display: revert; }
 .spiga-root .app.rail-mini .rail:hover .navwrap > :not(.nav) { display: revert; }
-.spiga-root .app.rail-mini .rail:hover .brand { justify-content: flex-start; padding: 0 6px 10px; }
+.spiga-root .app.rail-mini .rail:hover .brand { justify-content: flex-start; align-items: flex-start; padding: 0 6px 10px; }
+.spiga-root .app.rail-mini .rail:hover .brand .brand-logo { display: block; }
+.spiga-root .app.rail-mini .rail:hover .brand .brand-mark { display: none; }
 .spiga-root .app.rail-mini .rail:hover .nav { justify-content: flex-start; padding: 0 10px; }
 .spiga-root .app.rail-mini .rail:hover .rail-toggle { align-self: flex-end; }
 
@@ -1470,7 +1478,9 @@ table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .tv-clock { font-weight: 700; color: var(--fg2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* kiosk (hall PC without sign-in) */
 .kiosk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.kiosk-bar .brand { margin: 0; }
+.kiosk-bar .brand { margin: 0; flex-direction: row; align-items: center; gap: 12px; padding: 0; }
+.kiosk-bar .brand .brand-logo { width: auto; height: 44px; max-width: none; }
+.kiosk-bar .brand > div { flex-direction: column; gap: 0; }
 .mode-card { max-width: 760px; width: 100%; }
 .mode-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 8px 0 14px; }
 .mode-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 16px; border-radius: 14px;

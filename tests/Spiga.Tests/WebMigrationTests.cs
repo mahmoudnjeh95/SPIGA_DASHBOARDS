@@ -243,7 +243,7 @@ public class WebMigrationTests
         var pdf = StopSheetPdf.Build(stops, settings, day.AddHours(16));
 
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
-        Assert.NotNull(typeof(StopSheetPdf).Assembly.GetManifestResourceStream("spiga-logo.png"));
+        Assert.NotNull(typeof(StopSheetPdf).Assembly.GetManifestResourceStream("cds-logo.png"));
     }
 
     // ---------- Qualification des arrêts ----------

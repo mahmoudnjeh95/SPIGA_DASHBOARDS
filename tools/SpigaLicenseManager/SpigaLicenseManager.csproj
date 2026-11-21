@@ -9,13 +9,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>..\..\src\SpigaDashboards.App\Assets\spiga.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\src\SpigaDashboards.App\Assets\cds.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Same licence code as the dashboard, so a dongle accepted here works there. -->
   <ItemGroup>
     <Compile Include="..\..\src\SpigaDashboards.App\Licensing\*.cs" Link="Licensing\%(Filename)%(Extension)" />
-    <Resource Include="..\..\src\SpigaDashboards.App\Assets\spiga-logo.png" Link="spiga-logo.png" />
+    <Resource Include="..\..\src\SpigaDashboards.App\Assets\cds-logo.png" Link="cds-logo.png" />
+    <Resource Include="..\..\src\SpigaDashboards.App\Assets\cds-icon.png" Link="cds-icon.png" />
   </ItemGroup>
 
 </Project>

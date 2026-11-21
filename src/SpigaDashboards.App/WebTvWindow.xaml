@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
         xmlns:ui="clr-namespace:Spiga.UI;assembly=Spiga.UI"
-        Title="SPIGA Suivi Production - Écran TV" Icon="/Assets/spiga-logo.png"
+        Title="SPIGA Suivi Production - Écran TV" Icon="/Assets/cds-icon.png"
         Width="960" Height="540" MinWidth="480" MinHeight="270"
         WindowStartupLocation="Manual" Background="{DynamicResource WindowBackgroundBrush}">
     <!-- The hall TV: the web Écran TV (Razor, Routes with Screen = "tv"), the

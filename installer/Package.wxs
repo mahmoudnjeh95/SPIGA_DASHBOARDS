@@ -38,7 +38,7 @@
 
     <!-- Logo shown in "Apps & features" / Add-Remove Programs. Shortcuts take
          theirs from the exe, which embeds the same .ico via ApplicationIcon. -->
-    <Icon Id="SpigaIcon" SourceFile="..\src\SpigaDashboards.App\Assets\spiga.ico" />
+    <Icon Id="SpigaIcon" SourceFile="..\src\SpigaDashboards.App\Assets\cds.ico" />
     <Property Id="ARPPRODUCTICON" Value="SpigaIcon" />
 
     <!-- Per-user install under %LocalAppData%\Programs: no administrator

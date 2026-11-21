@@ -7,12 +7,12 @@
           Manufacturer="L2I - Leader de l'Innovation Industrielle"
           Version="$(var.ProductVersion)"
           UpgradeCode="7C4E2B91-3F5A-4D8E-9A61-0B2C7D8E4F15"
-          IconSourceFile="..\src\SpigaDashboards.App\Assets\spiga.ico">
+          IconSourceFile="..\src\SpigaDashboards.App\Assets\cds.ico">
 
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense"
                                               LicenseUrl=""
-                                              LogoFile="..\src\SpigaDashboards.App\Assets\spiga-logo.png" />
+                                              LogoFile="..\src\SpigaDashboards.App\Assets\cds-icon.png" />
     </BootstrapperApplication>
 
     <!-- Screen PC: "SpigaDashboards-<version>-Setup.exe KIOSK=1" (SPIGA

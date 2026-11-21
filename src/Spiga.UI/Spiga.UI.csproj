@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <!-- Logo of the printed stop sheet (StopSheetPdf). -->
-    <EmbeddedResource Include="wwwroot\img\spiga-logo.png" LogicalName="spiga-logo.png" />
+    <EmbeddedResource Include="wwwroot\img\cds-logo.png" LogicalName="cds-logo.png" />
   </ItemGroup>
 
   <ItemGroup>

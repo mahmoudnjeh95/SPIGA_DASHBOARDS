@@ -179,7 +179,7 @@ public static class StopSheetPdf
     {
         try
         {
-            using var stream = typeof(StopSheetPdf).Assembly.GetManifestResourceStream("spiga-logo.png");
+            using var stream = typeof(StopSheetPdf).Assembly.GetManifestResourceStream("cds-logo.png");
             if (stream == null)
                 return null;
             using var copy = new MemoryStream();

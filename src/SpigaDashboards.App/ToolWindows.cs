@@ -36,7 +36,7 @@ internal static class ToolWindow
     public static void Setup(Window window, string title, double width, double height)
     {
         window.Title = title;
-        window.Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/spiga-logo.png"));
+        window.Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/cds-icon.png"));
         window.Width = width;
         window.Height = height;
         window.WindowStartupLocation = WindowStartupLocation.CenterOwner;

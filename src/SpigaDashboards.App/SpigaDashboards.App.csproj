@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>Assets\spiga.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\cds.ico</ApplicationIcon>
     <!-- Version (shown in "A propos"): Directory.Build.props at the repo root. -->
   </PropertyGroup>
 
@@ -38,7 +38,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\spiga-logo.png" />
+    <Resource Include="Assets\cds-logo.png" />
+    <Resource Include="Assets\cds-icon.png" />
     <Resource Include="Assets\machine-running.png" />
     <Resource Include="Assets\machine-stopped.png" />
     <!-- Trend arrows (Flaticon: increase 4721635, decrease 6067145; attribution in À propos). -->

@@ -1,4 +1,4 @@
-@* Welcome screen, before the sign-in form: the Diari · Spiga logo flies in in 3D, the
+@* Welcome screen, before the sign-in form: the Spiga · Diari logo flies in in 3D, the
    word "Bienvenue" builds up letter by letter, then the greeting, the time
    and the three products. Any key, a click or a tap continues to the sign-in
    form (the screen leaves first, then the form rises). On a shared plant PC
@@ -34,7 +34,7 @@
                             <img class="wl-edge" src="@Logo" alt="" aria-hidden="true" style="--k:@i" />
                         }
                         <img class="wl-back" src="@Logo" alt="" aria-hidden="true" />
-                        <img class="wl-face" src="@Logo" alt="Diari · Spiga" />
+                        <img class="wl-face" src="@Logo" alt="Spiga · Diari" />
                         <i class="wl-gloss" aria-hidden="true"></i>
                     </div>
                 </div>
@@ -67,8 +67,8 @@
 
     private const string Word = "Bienvenue";
     private const string Logo = "_content/Spiga.UI/img/cds-logo.png";
-    // Layers of the logo's thickness (1.4 px apart, see .wl-edge).
-    private const int Depth = 10;
+    // Layers of the logo's thickness (1 px apart, see .wl-edge).
+    private const int Depth = 8;
     private static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
     // The screen leaves (ease-in) before the sign-in form comes up.
     private static readonly TimeSpan LeaveTime = TimeSpan.FromMilliseconds(420);
