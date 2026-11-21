@@ -310,6 +310,10 @@ public sealed class UiState
 
     // How the user set up each chart (SpigaChart), by chart key.
     public Dictionary<string, ChartView> Charts { get; } = new();
+
+    // The charts enlarged right now (SpigaChart): the slide rotation holds
+    // while one is open, and resumes from the same second when it closes.
+    public HashSet<object> Enlarged { get; } = new();
 }
 
 // Stacked: the bars of every series piled up (production per weight...).

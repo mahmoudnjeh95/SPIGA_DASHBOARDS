@@ -1471,10 +1471,11 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* Slide change (kiosk SlideMotion): the new slide slides in, its cards fade
    up one after the other; the cause pills of the run-state photos pop in. */
-.dk-slide { animation: dk-slide-in .6s var(--ease) both; }
+/* "backwards", not "both": a filled-forward transform makes the card a containing block, which would pin the enlarged chart (position: fixed) to the card. */
+.dk-slide { animation: dk-slide-in .6s var(--ease) backwards; }
 @keyframes dk-slide-in { from { opacity: 0; transform: translateX(40px); } }
 .dk-slide > *, .dk-slide .dk-kpis > .kpi, .dk-slide .dk-charts > .card, .dk-slide .dk-runstate > .card, .dk-slide .dk-lines > .card {
-    animation: sp-rise .55s var(--ease) both; }
+    animation: sp-rise .55s var(--ease) backwards; }
 .dk-slide > :nth-child(2), .dk-slide .dk-kpis > :nth-child(2), .dk-slide .dk-charts > :nth-child(2), .dk-slide .dk-runstate > :nth-child(2) { animation-delay: 60ms; }
 .dk-slide > :nth-child(3), .dk-slide .dk-kpis > :nth-child(3), .dk-slide .dk-charts > :nth-child(3), .dk-slide .dk-runstate > :nth-child(3) { animation-delay: 120ms; }
 .dk-slide > :nth-child(4), .dk-slide .dk-kpis > :nth-child(4), .dk-slide .dk-runstate > :nth-child(4) { animation-delay: 180ms; }
@@ -1524,6 +1525,8 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 /* the TRS ring: fills up to the value in the tile's colour, tick at the target */
 .kpi-ring { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; transform: rotate(-90deg); overflow: visible; } /* in the corner: the figure keeps the tile's width */
 .kpi:has(.kpi-ring) .l { padding-right: 42px; }
+/* the trend stays left of the ring, never under it */
+.kpi:has(.kpi-ring) .kv { padding-right: 42px; }
 .kpi-ring circle { fill: none; stroke-width: 6; }
 .kpi-ring .track { stroke: var(--soft); }
 .kpi-ring .fill { stroke: var(--kc); stroke-linecap: round; stroke-dasharray: var(--p) 100; transition: stroke-dasharray .9s var(--ease), stroke .4s; animation: kpi-ring-in 1.1s var(--ease) both; }

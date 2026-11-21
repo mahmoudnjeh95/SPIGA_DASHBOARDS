@@ -78,11 +78,15 @@
     private void Open()
     {
         if (Count > 0)
+        {
             _expanded = true;
+            Ui.Enlarged.Add(this);
+        }
     }
 
     private async Task Close()
     {
+        Ui.Enlarged.Remove(this);
         await Js("spigaChart.dispose", _big);
         _drawnBig = null;
         _expanded = false;
@@ -126,6 +130,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        Ui.Enlarged.Remove(this);
         await Js("spigaChart.dispose", _small);
         if (_expanded)
             await Js("spigaChart.dispose", _big);
