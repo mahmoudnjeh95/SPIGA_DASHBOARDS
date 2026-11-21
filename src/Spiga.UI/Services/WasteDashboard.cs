@@ -162,7 +162,7 @@ public sealed class WasteDashboard(PlantData plant, WasteService waste)
 public static class WasteQuery
 {
     public static string EntryLink(WasteEntry e)
-        => $"{(e.Kind == WasteKind.Emballage ? "saisie/dechets-emballage" : "saisie/dechets-produit")}"
+        => $"{(e.Kind == WasteKind.Emballage ? "production/dechets/emballage" : "production/dechets/produit")}"
            + $"?date={e.ProductionDate:yyyy-MM-dd}&poste={e.ShiftId}&saisie={e.Id}";
 
     public static DateTime? Date(string? value)

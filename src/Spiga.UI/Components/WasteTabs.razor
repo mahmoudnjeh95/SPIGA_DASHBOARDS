@@ -1,0 +1,31 @@
+@* Production › Déchets is one menu entry: the dashboard and the entry
+   screens that feed it (emballage, produit, à valider) are its tabs. A tab
+   shows only when the role can use it. *@
+@inject UserSession Session
+
+<nav class="tabrow waste-tabs" role="tablist" aria-label="Déchets">
+    @if (Session.Can(Modules.Dechets, AppAction.Voir))
+    {
+        @Tab(0, "production/dechets", "Tableau de bord")
+    }
+    @if (Session.Can(Modules.SaisieDechets, AppAction.Voir))
+    {
+        @Tab(1, "production/dechets/emballage", "Saisie emballage")
+        @if (Session.Can(Perm.DechetsProduit) || Session.Can(Perm.DechetsValider))
+        {
+            @Tab(2, "production/dechets/produit", "Saisie produit")
+        }
+        @if (Session.Can(Perm.DechetsValider))
+        {
+            @Tab(3, "production/dechets/a-valider", "Saisies à valider")
+        }
+    }
+</nav>
+
+@code {
+    // 0 = tableau de bord, 1 = emballage, 2 = produit, 3 = à valider.
+    [Parameter] public int Current { get; set; }
+
+    private RenderFragment Tab(int index, string href, string label) =>
+        @<a class="tab @(Current == index ? "on" : "")" role="tab" aria-selected="@(Current == index)" href="@href">@label</a>;
+}

@@ -7,6 +7,7 @@
 @inject PlantData Plant
 
 <RequireAccess Module="@Modules.SaisieDechets">
+    <WasteTabs Current="@(Kind == WasteKind.Emballage ? 1 : 2)" />
     @if (Kind == WasteKind.Produit && !Waste.CanEnter(Actor, Kind) && !Session.Can(Perm.DechetsValider))
     {
         <div class="card" style="max-width:640px">
@@ -18,7 +19,7 @@
     {
         <div class="head">
             <div>
-                <span class="pre">Saisie</span><h1>@Title</h1>
+                <span class="pre">Production › Déchets</span><h1>@Title</h1>
                 <p>
                     @(Kind == WasteKind.Emballage ? "Interface A1 : par machine, équipe et poste." : "Interface A2 : par secteur.")
                     Une saisie reste « à valider » jusqu'à sa validation par une autre personne, qui peut aussi vous la renvoyer

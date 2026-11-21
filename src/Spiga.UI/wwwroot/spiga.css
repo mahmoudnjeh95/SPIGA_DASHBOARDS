@@ -1257,6 +1257,8 @@ table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .savebar-note { flex: 1 1 300px; min-width: 0; font-size: 12px; }
 .savebar > .bar { flex: none; }
 .tab .badge { margin-left: 6px; }
+a.tab { display: inline-flex; align-items: center; text-decoration: none; }
+.waste-tabs { margin-bottom: 14px; }
 .stats-body { display: flex; flex-direction: column; gap: 14px; transition: opacity .25s var(--ease); }
 .stats-body.stale { opacity: .45; pointer-events: none; }
 

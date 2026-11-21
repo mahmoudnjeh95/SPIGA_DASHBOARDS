@@ -135,7 +135,7 @@
         });
 
     private IEnumerable<NavItem> Allowed()
-        => ModuleCatalog.Navigation.Where(n => Session.Can(n.RequiredPermission) && (!n.DesktopOnly || Desktop.IsAvailable)
+        => ModuleCatalog.Navigation.Where(n => n.IsOpenTo(Session.Can) && (!n.DesktopOnly || Desktop.IsAvailable)
                                                && (NativePages.FromRoute(n.Route) is not { } page || NativePages.IsAllowed(Session.Actor, page))
                                                && (n.Module != Modules.Audit || Session.Actor?.CanUnrestricted(Perm.View(Modules.Audit)) == true));
 
@@ -153,7 +153,10 @@
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
         if (path == "compte")
             return "Usine › <b>Mon compte</b>";
-        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path);
+        // A tab of a screen (production/dechets/produit) belongs to its menu entry.
+        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path)
+                   ?? ModuleCatalog.Navigation.Where(n => n.Route.Length > 0 && path.StartsWith(n.Route + "/"))
+                                              .MaxBy(n => n.Route.Length);
         if (item == null)
             return "Usine";
         var label = System.Net.WebUtility.HtmlEncode(item.Label);

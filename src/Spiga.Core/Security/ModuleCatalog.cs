@@ -34,13 +34,16 @@ public sealed record ModuleInfo(string Key, string Label, string Domain, string 
 
 // One entry of the navigation rail. Ready = the screen exists in this
 // version; the others open a page that says what the screen will hold.
-// Shown when the user holds Permission (default: the module's "voir");
+// Shown when the user holds Permission (default: the module's "voir") or OrPermission;
 // DesktopOnly entries only in the Windows application.
 public sealed record NavItem(
     string Key, string Label, string? Group, string Module, string Route, bool Ready,
-    string Content = "", string Filters = "", string Origin = "", string? Permission = null, bool DesktopOnly = false)
+    string Content = "", string Filters = "", string Origin = "", string? Permission = null, bool DesktopOnly = false, string? OrPermission = null)
 {
     public string RequiredPermission => Permission ?? Perm.View(Module);
+
+    // Déchets opens for who may see the dashboard or enter waste (its tabs).
+    public bool IsOpenTo(Func<string, bool> can) => can(RequiredPermission) || (OrPermission != null && can(OrPermission));
 }
 
 public static class ModuleCatalog
@@ -57,11 +60,11 @@ public static class ModuleCatalog
         new ModuleInfo(Modules.Qualite, "Qualité", "Qualité", "Humidité par produit et par ligne."),
         new ModuleInfo(Modules.Maintenance, "Maintenance", "Maintenance", "Indicateurs, arrêts, planification, pièces et consommables."),
         new ModuleInfo(Modules.Energie, "Énergie", "Énergie", "Électricité et vapeur par tonne."),
-        new ModuleInfo(Modules.Rh, "Ressources humaines (agrégé)", "Ressources humaines", "Taux d'absence par équipe."),
-        new ModuleInfo(Modules.RhNominatif, "Ressources humaines (nominatif)", "Ressources humaines", "Taux d'absence par ouvrier. Donnée personnelle."),
-        new ModuleInfo(Modules.SaisieDechets, "Saisie des déchets", "Saisie", "Déchets emballage et produit."),
-        new ModuleInfo(Modules.Pointage, "Pointage", "Saisie", "Présences, absences, renforts et remplacements par poste."),
-        new ModuleInfo(Modules.SaisieQuantites, "Saisie quantités et relevés", "Saisie", "Quantités du rendement, relevés énergie."),
+        new ModuleInfo(Modules.Rh, "Équipes (agrégé)", "Équipes", "Taux d'absence par équipe."),
+        new ModuleInfo(Modules.RhNominatif, "Équipes (nominatif)", "Équipes", "Taux d'absence par ouvrier. Donnée personnelle."),
+        new ModuleInfo(Modules.SaisieDechets, "Saisie des déchets", "Production", "Déchets emballage et produit."),
+        new ModuleInfo(Modules.Pointage, "Pointage", "Équipes", "Présences, absences, renforts et remplacements par poste."),
+        new ModuleInfo(Modules.SaisieQuantites, "Saisie quantités et relevés", "Production", "Quantités du rendement, relevés énergie."),
         new ModuleInfo(Modules.Objectifs, "Objectifs", "Administration", "Cibles et objectifs de coûts et consommations."),
         new ModuleInfo(Modules.Referentiels, "Référentiels", "Administration", "Machines, produits, équipes, motifs, personnel et lignes."),
         new ModuleInfo(Modules.Utilisateurs, "Utilisateurs et rôles", "Administration", "Comptes, rôles, règles de sécurité."),
@@ -72,74 +75,63 @@ public static class ModuleCatalog
 
     public static ModuleInfo? Find(string key) => All.FirstOrDefault(m => m.Key == key);
 
+    // Rail order: daily screens first, then by domain; "à venir" last in each group.
     public static readonly IReadOnlyList<NavItem> Navigation = new[]
     {
         new NavItem("vue-ensemble", "Vue d'ensemble", null, Modules.VueEnsemble, "", true),
-        // The operator's home: his machines live, and quick waste entry.
+        new NavItem("tableau", "Tableau de bord", null, Modules.Conditionnement, "production/tableau-de-bord", true,
+            Permission: Perm.TableauDetaille),
         new NavItem("poste", "Mon poste", null, Modules.SaisieDechets, "poste", true, Permission: Perm.DechetsSaisir),
 
         new NavItem("conditionnement", "Conditionnement", "Production", Modules.Conditionnement, "production/conditionnement", true),
-        new NavItem("tableau", "Tableau de bord", "Production", Modules.Conditionnement, "production/tableau-de-bord", true,
-            Permission: Perm.TableauDetaille),
+        // One entry for waste: dashboard, emballage, produit and à valider are its tabs.
+        new NavItem("dechets", "Déchets", "Production", Modules.Dechets, "production/dechets", true,
+            OrPermission: Perm.View(Modules.SaisieDechets)),
         new NavItem("rendement", "Rendement matière", "Production", Modules.Rendement, "module/rendement", false,
-            "Rendement par secteur et usine : matière versée, en-cours, semi-fini en silo, produit fini.",
+            "Rendement par secteur et usine : matière versée, en-cours, semi-fini en silo, produit fini ; saisie des quantités du jour par secteur.",
             "Période, secteur", "Nouveau (cahier des charges 4.9)"),
         new NavItem("silos", "Silos", "Production", Modules.Silos, "module/silos", false,
             "Trois écrans silos : niveau, produit, conformité, dernière actualisation, mise à jour manuelle.",
             "Aucun (état instantané) ; l'historique a ses dates", "Nouveau (cahier des charges 4.3)"),
-        new NavItem("dechets", "Déchets", "Production", Modules.Dechets, "production/dechets", true),
 
-        new NavItem("humidite", "Humidité", "Qualité", Modules.Qualite, "module/humidite", false,
-            "Humidité moyenne par produit et par ligne, tendance et seuils.",
-            "Période, ligne, produit", "Nouveau (cahier des charges 4.6), base Qualité"),
-
-        new NavItem("maintenance", "Indicateurs", "Maintenance", Modules.Maintenance, "module/maintenance", false,
-            "Préventif réalisé, ordres de travail clôturés, arrêts dus à la maintenance, pannes répétitives, grandes réparations.",
-            "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
         new NavItem("arrets", "Arrêts", "Maintenance", Modules.Maintenance, "maintenance/arrets", true),
         new NavItem("qualification", "Qualification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/qualification-arrets", true,
             Permission: "maintenance:saisir"),
         new NavItem("statistiques-arrets", "Statistiques des arrêts", "Maintenance", Modules.Maintenance, "maintenance/statistiques-arrets", true),
         new NavItem("planification", "Planification des arrêts", "Maintenance", Modules.Maintenance, "maintenance/planification", true,
             Permission: "maintenance:saisir"),
+        new NavItem("maintenance", "Indicateurs", "Maintenance", Modules.Maintenance, "module/maintenance", false,
+            "Préventif réalisé, ordres de travail clôturés, arrêts dus à la maintenance, pannes répétitives, grandes réparations.",
+            "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
         new NavItem("couts", "Pièces et consommables", "Maintenance", Modules.Maintenance, "module/couts", false,
             "Coût et consommation des pièces de rechange et consommables par machine, cumul comparé à l'objectif.",
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
 
-        new NavItem("energie", "Électricité et vapeur", "Énergie", Modules.Energie, "module/energie", false,
-            "kWh et tonnes de vapeur par jour, ratios par tonne de produit fini, comparés aux objectifs.",
-            "Période", "Nouveau (cahier des charges 4.8)"),
-
-        new NavItem("absences", "Absences et retards", "Ressources humaines", Modules.Rh, "rh/absences", true),
-        new NavItem("calendrier", "Calendrier des présences", "Ressources humaines", Modules.RhNominatif, "rh/calendrier", true),
-        new NavItem("polyvalence", "Polyvalence", "Ressources humaines", Modules.RhNominatif, "rh/polyvalence", true,
+        new NavItem("pointage", "Pointage", "Équipes", Modules.Pointage, "saisie/pointage", true),
+        new NavItem("absences", "Absences et retards", "Équipes", Modules.Rh, "rh/absences", true),
+        new NavItem("calendrier", "Calendrier des présences", "Équipes", Modules.RhNominatif, "rh/calendrier", true),
+        new NavItem("polyvalence", "Polyvalence", "Équipes", Modules.RhNominatif, "rh/polyvalence", true,
             Permission: Perm.Polyvalence),
 
-        new NavItem("saisie-emballage", "Déchets emballage", "Saisie", Modules.SaisieDechets, "saisie/dechets-emballage", true),
-        new NavItem("saisie-produit", "Déchets produit", "Saisie", Modules.SaisieDechets, "saisie/dechets-produit", true,
-            Permission: Perm.DechetsProduit),
-        new NavItem("a-valider", "Saisies à valider", "Saisie", Modules.SaisieDechets, "saisie/a-valider", true,
-            Permission: Perm.DechetsValider),
-        new NavItem("pointage", "Pointage", "Saisie", Modules.Pointage, "saisie/pointage", true),
-        new NavItem("saisie-rendement", "Quantités rendement", "Saisie", Modules.SaisieQuantites, "module/saisie-rendement", false,
-            "Quantités du jour par secteur pour le calcul du rendement.",
-            "Contexte de saisie : date, secteur", "Nouveau (cahier des charges 4.9)"),
-        new NavItem("saisie-energie", "Relevés énergie", "Saisie", Modules.SaisieQuantites, "module/saisie-energie", false,
-            "Relevés manuels des compteurs quand la source n'est pas connectée.",
-            "Contexte de saisie : date", "Nouveau (cahier des charges 4.8)"),
+        new NavItem("humidite", "Humidité", "Qualité et énergie", Modules.Qualite, "module/humidite", false,
+            "Humidité moyenne par produit et par ligne, tendance et seuils.",
+            "Période, ligne, produit", "Nouveau (cahier des charges 4.6), base Qualité"),
+        new NavItem("energie", "Électricité et vapeur", "Qualité et énergie", Modules.Energie, "module/energie", false,
+            "kWh et tonnes de vapeur par jour, ratios par tonne de produit fini, comparés aux objectifs ; relevés manuels des compteurs quand la source n'est pas connectée.",
+            "Période", "Nouveau (cahier des charges 4.8)"),
 
+        new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "admin/parametres", true,
+            Permission: Perm.ParametresPoste),
         new NavItem("acces", "Utilisateurs et rôles", "Administration", Modules.Utilisateurs, "admin/acces", true),
-        new NavItem("objectifs", "Objectifs", "Administration", Modules.Objectifs, "module/objectifs", false,
-            "Cibles TRS, consignes de déchets, objectifs de coûts et de consommations, avec date d'effet.",
-            "Année, domaine", "Reprend les cibles TRS des Paramètres actuels"),
+        new NavItem("personnel", "Personnel et lignes", "Administration", Modules.Referentiels, "admin/personnel", true),
         new NavItem("referentiels", "Référentiels", "Administration", Modules.Referentiels, "module/referentiels", false,
             "Machines, lignes, secteurs, produits et cadences, équipes et roulement, pauses, silos, motifs de déchet.",
             "Recherche", "Reprend cadences, équipes et pauses des Paramètres actuels"),
-        new NavItem("personnel", "Personnel et lignes", "Administration", Modules.Referentiels, "admin/personnel", true),
+        new NavItem("objectifs", "Objectifs", "Administration", Modules.Objectifs, "module/objectifs", false,
+            "Cibles TRS, consignes de déchets, objectifs de coûts et de consommations, avec date d'effet.",
+            "Année, domaine", "Reprend les cibles TRS des Paramètres actuels"),
         new NavItem("sources", "Sources de données", "Administration", Modules.Sources, "admin/sources", true),
         new NavItem("audit", "Journal d'audit", "Administration", Modules.Audit, "admin/audit", true),
-        new NavItem("parametres", "Paramètres", "Administration", Modules.Parametres, "admin/parametres", true,
-            Permission: Perm.ParametresPoste),
     };
 
     public static NavItem? FindNav(string key) => Navigation.FirstOrDefault(n => n.Key == key);

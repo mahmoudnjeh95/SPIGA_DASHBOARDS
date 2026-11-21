@@ -6,8 +6,9 @@
 
 @* Tableau de bord des déchets: emballage par machine, équipe et poste ;
    produit par secteur ; en kg et en % de la production conditionnée.
-   Fed by the entries of Saisie > Déchets emballage / produit. *@
+   Its tabs (WasteTabs) are the entry screens that feed it. *@
 <RequireAccess Module="@Modules.Dechets">
+    <WasteTabs Current="0" />
     <div class="head">
         <div>
             <span class="pre">Production</span><h1>Déchets</h1>
@@ -243,7 +244,12 @@
     protected override async Task OnParametersSetAsync()
     {
         if (!Session.Can(Modules.Dechets, AppAction.Voir))
+        {
+            // Waste entry without the dashboard: straight to the first entry tab.
+            if (Session.Can(Modules.SaisieDechets, AppAction.Voir))
+                Nav.NavigateTo("production/dechets/emballage", replace: true);
             return;
+        }
         _period = Ui.WastePeriod ?? Period.Today(Now) with { Kind = PeriodKind.Last7Days };
         if (DateTime.TryParse(FromParam, CultureInfo.InvariantCulture, out var from))
         {
