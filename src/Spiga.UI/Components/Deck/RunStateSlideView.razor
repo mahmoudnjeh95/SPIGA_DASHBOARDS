@@ -1,14 +1,7 @@
 @* État des machines (kiosk: RunStateSlide): the run-state photo of every
    machine of the group, live whatever the period, with the cause of its
-   stop once it has one, and how many run now. *@
-
-<section class="card dk-head plain">
-    <div class="dk-title">
-        <span class="pre">État des machines</span>
-        <h2>@Slide.Title</h2>
-        <p class="dk-sub"><b>@Slide.Tiles.Count(t => t.Running) / @Slide.Tiles.Count en marche</b> <span>maintenant</span></p>
-    </div>
-</section>
+   stop once it has one. No title card: the photos fill the screen (the
+   slide's name is in the deck's own bar). *@
 
 <div class="dk-runstate" style="--cols:@(Slide.Tiles.Count <= 5 ? Math.Max(1, Slide.Tiles.Count) : (Slide.Tiles.Count + 1) / 2)">
     @foreach (var t in Slide.Tiles)

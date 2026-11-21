@@ -1475,6 +1475,9 @@ table.cal-week { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .tv-bar .dk-timer { flex: 1 1 200px; }
 .tv-title { font-weight: 700; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
 .spiga-tv #components-reconnect-modal { display: none !important; }
+/* A slide replaced by a longer one must not drag the page down to keep
+   the note bar in place (scroll anchoring): the slides start at the top. */
+.dk-slide, .dk-note { overflow-anchor: none; }
 .tv-clock { font-weight: 700; color: var(--fg2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* kiosk (hall PC without sign-in) */
 .kiosk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

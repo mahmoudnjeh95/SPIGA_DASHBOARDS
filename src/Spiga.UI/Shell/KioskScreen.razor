@@ -10,7 +10,7 @@
 @inject IDesktopBridge Desktop
 @inject UserSession Session
 
-<main class="tv-view view @(Kiosk ? "kiosk" : "")">
+<main class="tv-view view @(Kiosk ? "kiosk" : "tv-fit")">
     @if (Kiosk)
     {
         <nav class="kiosk-bar" aria-label="Écran du poste">

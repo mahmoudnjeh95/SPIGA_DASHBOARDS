@@ -282,6 +282,24 @@ window.spigaTv = {
             }
         }
         new MutationObserver(check).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+        // A TV has no one to scroll it: the slide is scaled down until it
+        // fits the screen (never up). Measured from the slide's natural
+        // height (its height / the zoom applied), so no flicker.
+        setInterval(function () {
+            var view = document.querySelector(".tv-view.tv-fit");
+            if (!view) return;
+            var current = parseFloat(view.style.zoom) || 1;
+            // The blocks of the slide, stacked (the view itself is at least
+            // the screen's height, its note bar held at the bottom).
+            var kids = view.children, natural = 28;
+            for (var i = 0, n = 0; i < kids.length; i++) {
+                var h = kids[i].getBoundingClientRect().height;
+                if (h === 0 || getComputedStyle(kids[i]).position === "fixed") continue; // the stop pop-up floats
+                natural += h / current + (n++ > 0 ? 14 : 0);
+            }
+            var target = Math.max(0.4, Math.min(1, window.innerHeight / natural));
+            if (Math.abs(target - current) > 0.02) view.style.zoom = target.toFixed(3);
+        }, 1500);
         // F11: full screen (in the desktop TV window too, where the keys go to the page).
         document.addEventListener("keydown", function (e) {
             if (e.key === "F11") { e.preventDefault(); window.spigaTv.fullscreen(); }
