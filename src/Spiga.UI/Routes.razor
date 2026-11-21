@@ -8,6 +8,7 @@
 @inject AuthService Auth
 @inject ClientInfo Client
 @inject IDesktopBridge Desktop
+@inject ISessionStore Store
 @inject NavigationManager Nav
 @inject SpigaDashboards.App.Models.AppSettings StationSettings
 
@@ -82,7 +83,7 @@
     else if (Mode == SpigaMode.Tv)
     {
         var several = OpenModes.For(Session.Actor).Count > 1;
-        <KioskScreen OnLeave="@(several ? EventCallback.Factory.Create(this, () => _mode = null) : EventCallback.Factory.Create(this, Session.SignOutAsync))"
+        <KioskScreen OnLeave="@(several ? EventCallback.Factory.Create(this, () => SetMode(null)) : EventCallback.Factory.Create(this, Session.SignOutAsync))"
                      LeaveLabel="@(several ? "Changer d'écran" : "Se déconnecter")" />
     }
     else
@@ -127,7 +128,13 @@
         }
     }
 
-    private void Pick(SpigaMode mode) => _mode = mode;
+    private void Pick(SpigaMode mode) => SetMode(mode);
+
+    private void SetMode(SpigaMode? mode)
+    {
+        _mode = mode;
+        _ = Store.SaveModeAsync(mode);
+    }
 
     private bool _ready;
     // The welcome screen comes before the sign-in form, at start-up and
@@ -146,7 +153,13 @@
         {
             _needsSetup = await Auth.NeedsSetupAsync();
             if (!_needsSetup && Session.Actor == null)
-                await Session.TryResumeAsync();
+            {
+                // A reload keeps the sign-in: it keeps the chosen screen too
+                // (as long as the account may still open it).
+                if (await Session.TryResumeAsync() && await Store.LoadModeAsync() is { } kept
+                    && OpenModes.For(Session.Actor).Contains(kept))
+                    _mode = kept;
+            }
             _hadActor = Session.Actor != null;
             if (!_needsSetup && Screen is "kiosk" or "tv" && Session.Actor == null)
                 Session.EnterScreen(ScreenAccount.Create(StationSettings));

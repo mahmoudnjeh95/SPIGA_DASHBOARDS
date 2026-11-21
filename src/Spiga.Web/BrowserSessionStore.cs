@@ -8,6 +8,7 @@ namespace Spiga.Web;
 public sealed class BrowserSessionStore(ProtectedSessionStorage storage) : ISessionStore
 {
     private const string Key = "spiga.session";
+    private const string ModeKey = "spiga.mode";
 
     private sealed record Stored(int UserId, DateTime LastActivity);
 
@@ -30,9 +31,32 @@ public sealed class BrowserSessionStore(ProtectedSessionStorage storage) : ISess
         }
     }
 
+    public async Task SaveModeAsync(SpigaMode? mode)
+    {
+        try
+        {
+            if (mode is { } m) await storage.SetAsync(ModeKey, m.ToString());
+            else await storage.DeleteAsync(ModeKey);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Microsoft.JSInterop.JSException or TaskCanceledException) { }
+    }
+
+    public async Task<SpigaMode?> LoadModeAsync()
+    {
+        try
+        {
+            var result = await storage.GetAsync<string>(ModeKey);
+            return result.Success && Enum.TryParse<SpigaMode>(result.Value, out var m) ? m : null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Microsoft.JSInterop.JSException or System.Security.Cryptography.CryptographicException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
     public async Task ClearAsync()
     {
-        try { await storage.DeleteAsync(Key); }
+        try { await storage.DeleteAsync(ModeKey); await storage.DeleteAsync(Key); }
         catch (Exception ex) when (ex is InvalidOperationException or Microsoft.JSInterop.JSException or TaskCanceledException) { }
     }
 }

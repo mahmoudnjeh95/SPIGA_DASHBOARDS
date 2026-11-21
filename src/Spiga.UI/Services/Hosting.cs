@@ -154,6 +154,11 @@ public interface ISessionStore
     Task SaveAsync(int userId, DateTime lastActivity);
     Task<(int UserId, DateTime LastActivity)?> LoadAsync();
     Task ClearAsync();
+
+    // The mode chosen after sign-in (web): kept too, so a reload stays on
+    // the same screen. Hosts that never reload keep the defaults.
+    Task SaveModeAsync(SpigaMode? mode) => Task.CompletedTask;
+    Task<SpigaMode?> LoadModeAsync() => Task.FromResult<SpigaMode?>(null);
 }
 
 public sealed class NoSessionStore : ISessionStore
