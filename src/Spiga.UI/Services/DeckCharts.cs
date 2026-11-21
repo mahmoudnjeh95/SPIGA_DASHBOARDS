@@ -5,9 +5,10 @@ using SpigaDashboards.App.Services;
 namespace Spiga.UI.Services;
 
 // One chart of the web deck, ready for SpigaChart. HasData = false shows
-// "Pas de données" instead of an empty chart.
+// "Pas de données" instead of an empty chart. Times: a time axis (one time
+// per value) instead of the Labels.
 public sealed record DeckChart(IReadOnlyList<string> Labels, IReadOnlyList<ChartSeries> Series, Func<double, string> Format,
-    double? YMin = null, double? YMax = null, bool HasData = true)
+    double? YMin = null, double? YMax = null, bool HasData = true, IReadOnlyList<DateTime>? Times = null)
 {
     public static DeckChart Empty { get; } = new(Array.Empty<string>(), Array.Empty<ChartSeries>(), v => v.ToString("0.#", Fmt.French), HasData: false);
 }
@@ -100,7 +101,7 @@ public static class DeckCharts
     }
 
     // Net weight produced per step, one series per target weight (most
-    // produced first), in kg or t.
+    // produced first, piled up), in kg or t.
     public static DeckChart ProductionByWeight(IReadOnlyList<Step> steps)
     {
         var weights = steps.SelectMany(s => s.Lots).Where(l => l.TargetNetWeight > 0)
@@ -115,7 +116,7 @@ public static class DeckCharts
         var series = weights.Select((w, i) => new ChartSeries($"{w:0} g",
             steps.Select(s => (double?)Math.Round(KpiCalculator.ByWeight(s.Lots.Where(l => Math.Round(l.TargetNetWeight) == w).ToList())
                 .Sum(k => k.ProductionKg) / unit, 1)).ToList(),
-            Palette[i % Palette.Length])).ToList();
+            Palette[i % Palette.Length], Stack: "w")).ToList();
         return new DeckChart(steps.Select(s => s.Label).ToList(), series,
             v => tonnes ? v.ToString("0.#", French) + " t" : Fmt.Num(v) + " kg", 0);
     }
@@ -157,5 +158,91 @@ public static class DeckCharts
         if (target is { } t)
             series.Add(new ChartSeries(targetName ?? $"Cible {t:0} %", labels.Select(_ => (double?)t).ToList(), Green, ChartKind.Line, Reference: true));
         return new DeckChart(labels, series, format, 0);
+    }
+
+    // One bar per label, piled up by series (production per machine and team).
+    public static DeckChart Stacked(IReadOnlyList<string> labels, IReadOnlyList<(string Name, IReadOnlyList<double?> Values)> parts,
+        Func<double, string> format)
+    {
+        if (labels.Count == 0 || parts.All(p => p.Values.All(v => v is null or 0)))
+            return DeckChart.Empty;
+        return new DeckChart(labels, parts.Select((p, i) => new ChartSeries(p.Name, p.Values, Palette[i % Palette.Length], Stack: "s")).ToList(),
+            format, 0);
+    }
+
+    // Net average weight vs target over time (kiosk WeightLots): one point
+    // per Stiavelli lot at the middle of its span, lots of one production
+    // grouped up to 1000 bags so every line shows comparable steps; two lots
+    // more than 2 min apart are not joined. The target is flat over each lot.
+    // live = poste in progress: the last group still under 1000 bags is left out.
+    public static DeckChart WeightLots(IReadOnlyList<LotSpan> lots, DateTime start, DateTime end, bool live)
+    {
+        var spans = GroupLots(lots, live)
+            .Select(l => (From: l.StartTime < start ? start : l.StartTime, To: l.EndTime > end ? end : l.EndTime, Avg: Math.Round(l.Average, 1), l.Target))
+            .Where(s => s.To > s.From)
+            .OrderBy(s => s.From)
+            .ToList();
+        if (spans.Count == 0)
+            return DeckChart.Empty;
+        // Points of both series on one time list: the curve at lot middles,
+        // the target at lot edges; NaN = a gap in the line.
+        var points = new List<(DateTime T, double? Avg, double? Target)>();
+        for (var i = 0; i < spans.Count; i++)
+        {
+            var s = spans[i];
+            if (i > 0 && (s.From - spans[i - 1].To).TotalMinutes > 2)
+                points.Add((spans[i - 1].To.AddSeconds(1), double.NaN, double.NaN));
+            points.Add((s.From, null, s.Target));
+            points.Add((s.From + (s.To - s.From) / 2, s.Avg, null));
+            points.Add((s.To, null, s.Target));
+        }
+        var all = spans.SelectMany(s => new[] { s.Avg, s.Target }).ToList();
+        var pad = Math.Max(5, (all.Max() - all.Min()) * 0.2);
+        return new DeckChart(Array.Empty<string>(),
+            new[]
+            {
+                new ChartSeries("Poids moyen (lot)", points.Select(p => p.Avg).ToList(), Green, ChartKind.Line),
+                new ChartSeries("Cible", points.Select(p => p.Target).ToList(), Grey, ChartKind.Line, Reference: true),
+            },
+            v => v.ToString("0.0", French) + " g", Math.Max(0, Math.Floor(all.Min() - pad)), Math.Ceiling(all.Max() + 2 * pad),
+            Times: points.Select(p => p.T).ToList());
+    }
+
+    // Lines don't all close lots of the same size (PL03: 50 bags, the others
+    // 1000): consecutive lots of one production are merged up to 1000 bags;
+    // a production change closes the group early (kiosk GroupLots).
+    private static List<LotSpan> GroupLots(IReadOnlyList<LotSpan> lots, bool live)
+    {
+        var groups = new List<LotSpan>();
+        LotSpan? open = null;
+        double weightSum = 0;
+        foreach (var lot in lots.OrderBy(l => l.EndTime))
+        {
+            if (open != null && lot.ProductionId != open.ProductionId)
+            {
+                groups.Add(open);
+                open = null;
+            }
+            if (open == null)
+            {
+                open = new LotSpan { ProductionId = lot.ProductionId, StartTime = lot.StartTime };
+                weightSum = 0;
+            }
+            if (lot.StartTime < open.StartTime)
+                open.StartTime = lot.StartTime;
+            open.EndTime = lot.EndTime;
+            open.Bags += lot.Bags;
+            weightSum += lot.Average * lot.Bags;
+            open.Average = open.Bags > 0 ? weightSum / open.Bags : 0;
+            open.Target = lot.Target;
+            if (open.Bags >= 1000)
+            {
+                groups.Add(open);
+                open = null;
+            }
+        }
+        if (open != null && !live)
+            groups.Add(open);
+        return groups;
     }
 }

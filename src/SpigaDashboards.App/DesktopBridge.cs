@@ -6,10 +6,9 @@ using SpigaDashboards.App.Services;
 
 namespace SpigaDashboards.App;
 
-// What the Razor screens ask of the desktop: show the WPF dashboard (the one
-// page still WPF: Arrêts, Qualification, Statistiques, Planification and
-// Paramètres are Razor pages) in the main window beside the menu, open the
-// TV screen, follow the user's theme. The dashboard is kept while the user
+// What the Razor screens ask of the desktop: open the TV screen (the WPF
+// dashboard drives it; every page, the dashboard included, is a Razor page
+// since 2026-11-21), follow the user's theme. The dashboard is kept while the user
 // goes elsewhere, and updated in place when the account's rights change; it
 // reads through repositories limited to the machines of the account's scope
 // (MachineAccess).
@@ -68,7 +67,15 @@ internal sealed class DesktopBridge : IDesktopBridge
             Apply(_dashboard, NativeAccess.None);
     });
 
-    public void OpenTvScreen() => OnUi(() => Dashboard().OpenTvScreen());
+    // The dashboard page is Razor now: the WPF dashboard only drives the TV
+    // window, with the rights of the account that opens it.
+    public void OpenTvScreen(NativeAccess access) => OnUi(() =>
+    {
+        _dashboardAccess = access;
+        var dashboard = Dashboard();
+        Apply(dashboard, access);
+        dashboard.OpenTvScreen();
+    });
 
     private static void Apply(DashboardView dashboard, NativeAccess a)
     {

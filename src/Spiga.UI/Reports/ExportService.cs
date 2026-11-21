@@ -85,6 +85,27 @@ public static class ExportService
 
     public static void ExportToExcel(ProductionReport report, string path)
     {
+        using var file = File.Create(path);
+        ExportToExcel(report, file);
+    }
+
+    // The web Historique: the file is handed to the browser.
+    public static byte[] ExcelBytes(ProductionReport report)
+    {
+        using var stream = new MemoryStream();
+        ExportToExcel(report, stream);
+        return stream.ToArray();
+    }
+
+    public static byte[] PdfBytes(ProductionReport report)
+    {
+        using var stream = new MemoryStream();
+        ExportToPdf(report, stream);
+        return stream.ToArray();
+    }
+
+    public static void ExportToExcel(ProductionReport report, Stream output)
+    {
         using var workbook = new XLWorkbook();
         var charts = BuildCharts(report);
 
@@ -137,7 +158,7 @@ public static class ExportService
         detail.Column(1).Style.DateFormat.Format = "dd/MM/yyyy HH:mm";
         detail.Column(1).AdjustToContents();
 
-        workbook.SaveAs(path);
+        workbook.SaveAs(output);
     }
 
     private static object?[] GroupCells(GroupReportRow g) => new object?[]
@@ -276,6 +297,12 @@ public static class ExportService
 
     public static void ExportToPdf(ProductionReport report, string path)
     {
+        using var file = File.Create(path);
+        ExportToPdf(report, file);
+    }
+
+    public static void ExportToPdf(ProductionReport report, Stream output)
+    {
         var document = new PdfDocument();
         var pdf = new PdfWriter(document, report);
         var charts = BuildCharts(report);
@@ -348,7 +375,7 @@ public static class ExportService
             }));
 
         pdf.Finish();
-        document.Save(path);
+        document.Save(output, false);
     }
 
     private static string[] GroupRow(GroupReportRow g) => new[]

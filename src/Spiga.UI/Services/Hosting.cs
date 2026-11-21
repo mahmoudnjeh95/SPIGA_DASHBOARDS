@@ -50,8 +50,10 @@ public static class NativePages
     };
 
     // Still a WPF page (the desktop application shows it beside the menu, a
-    // browser a placeholder). The others are Razor pages, in both hosts.
-    public static bool IsWpf(NativePage page) => page == NativePage.Dashboard;
+    // browser a placeholder). None since the web dashboard (2026-11-21):
+    // every page is a Razor page, in both hosts. The kiosk PCs (no sign-in)
+    // and the desktop TV window keep the WPF dashboard.
+    public static bool IsWpf(NativePage page) => false;
 
     // The preventive rule form of the planning board, for a line and a component.
     public static string PreventiveRoute(string machineId, string component)
@@ -123,8 +125,9 @@ public interface IDesktopBridge
     // Sign-out / lock: the pages are dropped (unsaved edits with them).
     void DiscardNativePages();
 
-    // The station's hall screen: for NativeAccess.CanTv only.
-    void OpenTvScreen();
+    // The station's hall screen (WPF TV window): for NativeAccess.CanTv
+    // only, showing what the account may see on the dashboard (access).
+    void OpenTvScreen(NativeAccess access);
 
     // "Planifier un préventif" (Statistiques des arrêts): the planning board
     // opens on the preventive rule form for this line and component.
@@ -165,7 +168,7 @@ public sealed class NoDesktop : IDesktopBridge
     public bool IsAvailable => false;
     public void ShowNative(NativePage? page, NativeAccess access) { }
     public void DiscardNativePages() { }
-    public void OpenTvScreen() { }
+    public void OpenTvScreen(NativeAccess access) { }
     public IStationHost? Station => null;
     public void ApplyTheme(bool dark) { }
     public event Action? UserActivity { add { } remove { } }
@@ -263,6 +266,7 @@ public static class SpigaServices
         services.AddScoped<StopQualificationService>();
         services.AddScoped<PlanningBoardService>();
         services.AddScoped<DashboardDeckService>();
+        services.AddScoped<ProductionHistoryService>();
         services.AddScoped<StationSettingsEditor>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();
@@ -299,7 +303,8 @@ public sealed class UiState
     public Dictionary<string, ChartView> Charts { get; } = new();
 }
 
-public enum ChartKind { Auto, Bars, Line, Points, Area }
+// Stacked: the bars of every series piled up (production per weight...).
+public enum ChartKind { Auto, Bars, Stacked, Line, Points, Area }
 
 public sealed record ChartView(ChartKind Kind, IReadOnlySet<string> Hidden);
 
@@ -307,6 +312,8 @@ public sealed record ChartView(ChartKind Kind, IReadOnlySet<string> Hidden);
 // dashed line, never changed into bars or points. ScaleMax: the series is
 // drawn on its own scale, 0 to ScaleMax, not on the chart's axis (another
 // unit: a count beside hours, a cumulated %); Format: how its values read
-// (else the chart's).
+// (else the chart's). Stack: bars with the same Stack are piled up. Step: a
+// line that holds its value until the next point (run / stop, speed).
 public sealed record ChartSeries(string Name, IReadOnlyList<double?> Values, string Color,
-    ChartKind Kind = ChartKind.Bars, bool Reference = false, double? ScaleMax = null, Func<double, string>? Format = null);
+    ChartKind Kind = ChartKind.Bars, bool Reference = false, double? ScaleMax = null, Func<double, string>? Format = null,
+    string? Stack = null, bool Step = false);

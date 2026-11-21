@@ -15,7 +15,7 @@ namespace Spiga.UI.Services;
 // (MachineDaySlideViewModel...), from the shared period, filter and KPI code;
 // read through repositories limited to the account's machines; a team-bound
 // account counts its team's postes only.
-public sealed class DashboardDeckService(
+public sealed partial class DashboardDeckService(
     IDbConnectionFactory production, AppDbOptions appDb, AppSettings settings, TeamScheduleService teams, TimeProvider clock)
 {
     public static readonly string Permission = NativePages.Permission(NativePage.Dashboard);
@@ -96,9 +96,13 @@ public sealed class DashboardDeckService(
                 var earlier = !previous && mainId == currentShift && earlierEnd > mainStart
                     ? filter.Apply(await repository.GetLotsAsync(machine.MachineId, date, earlierEnd), teams)
                     : null;
+                // Weight per lot over its real time (2 h past the poste end:
+                // lots that complete its last 1000-bag group).
+                var spans = (await repository.GetLotSpansAsync(machine.MachineId, mainStart, mainStart.AddHours(10)))
+                    ?.Where(l => filter.MatchesWeight(l.Target)).ToList();
                 return new MachineSlide(header, previous ? "Poste précédent" : "", SlideText.Production(status?.CurrentProduction, allLots),
                     filter.Describe(),
-                    Poste(mainId, date, true, !previous && mainId == currentShift, lots, now, trsBand, weightBand, earlier),
+                    Poste(mainId, date, true, !previous && mainId == currentShift, lots, now, trsBand, weightBand, earlier, spans),
                     postes.Take(postes.Count - 1).Select(id => Poste(id, date, false, false, lots, now, trsBand, weightBand, null)).ToList(),
                     null);
             }
@@ -146,7 +150,7 @@ public sealed class DashboardDeckService(
     // One poste of one shift day (ShiftSummaryViewModel): its KPIs, and for
     // the main one its hourly charts and the up / down arrows of the poste in progress.
     private PosteFigures Poste(int shiftId, DateTime date, bool withCharts, bool running, IReadOnlyCollection<ProductionBucket> dayLots, DateTime now,
-        TrsBand trsBand, WeightBand weightBand, IReadOnlyCollection<ProductionBucket>? earlierLots)
+        TrsBand trsBand, WeightBand weightBand, IReadOnlyCollection<ProductionBucket>? earlierLots, IReadOnlyList<LotSpan>? spans = null)
     {
         var lots = dayLots.Where(l => l.ShiftId == shiftId && TeamScheduleService.GetShiftDate(l.StartTime, shiftId) == date).ToList();
         var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots), trsBand, weightBand);
@@ -158,7 +162,9 @@ public sealed class DashboardDeckService(
             var byHour = lots.ToLookup(l => l.StartTime);
             var steps = Enumerable.Range(0, 8).Select(i => start.AddHours(i)).Where(h => h <= now)
                 .Select(h => new DeckCharts.Step(h.ToString("HH"), byHour[h].ToList())).ToList();
-            charts = new PosteCharts(DeckCharts.OnOff(steps), DeckCharts.Speed(steps), DeckCharts.Weight(steps));
+            var end = start.AddHours(8);
+            var lotWeight = spans is { Count: > 0 } ? DeckCharts.WeightLots(spans, start, now < end ? now : end, live: now < end) : DeckChart.Empty;
+            charts = new PosteCharts(DeckCharts.OnOff(steps), DeckCharts.Speed(steps), lotWeight.HasData ? lotWeight : DeckCharts.Weight(steps));
         }
         KpiTrend? trs = null, speed = null, weight = null;
         if (withCharts && running && earlierLots != null)

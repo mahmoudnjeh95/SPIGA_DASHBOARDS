@@ -51,6 +51,7 @@ public static class Icons
         ["more"] = "<path d='m6 9 6 6 6-6'/>",
         ["less"] = "<path d='m18 15-6-6-6 6'/>",
         ["tv"] = "<rect x='2' y='7' width='20' height='15' rx='2'/><path d='m17 2-5 5-5-5'/>",
+        ["clock"] = "<circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/>",
     };
 
     private const string Fallback = "<circle cx='12' cy='12' r='3'/>";

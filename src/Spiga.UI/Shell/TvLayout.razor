@@ -1,0 +1,25 @@
+@* Écran TV: no menu, no top bar; the slides fill the screen. The page
+   tells spiga.js it is a TV (spigaTv): no reconnection banner, and a page
+   reload once the connection to the server cannot come back (the session
+   comes back with it). *@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<main class="tv-view view">
+    @Body
+</main>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        try
+        {
+            await JS.InvokeVoidAsync("spigaTv.enable");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

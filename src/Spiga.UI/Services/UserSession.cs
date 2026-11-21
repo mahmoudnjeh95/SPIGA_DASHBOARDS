@@ -124,6 +124,17 @@ public sealed class UserSession : IDisposable
 
     public void Touch() => _lastActivity = Now;
 
+    // Écran TV: a wall screen nobody clicks stays signed in while it shows
+    // (kept in the tab's store too, so a reload after a lost connection
+    // takes the session back).
+    public async Task KeepAwakeAsync()
+    {
+        if (Actor == null || IsLocked)
+            return;
+        Touch();
+        await _store.SaveAsync(Actor.User.Id, _lastActivity);
+    }
+
     public void PasswordChanged() => Notify();
 
     private void CheckIdle()

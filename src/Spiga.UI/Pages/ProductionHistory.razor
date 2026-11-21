@@ -1,0 +1,300 @@
+@page "/production/historique"
+@inherits SpigaPage
+@inject ProductionHistoryService History
+@inject IJSRuntime JS
+@using SpigaDashboards.App.ViewModels
+@using SpigaDashboards.App.Services
+
+@* Historique (kiosk: HistoryWindow): the production hour by hour over chosen
+   dates and filters, with its totals, and the Excel / PDF report. Opens on
+   the dashboard's period and filters (query string). *@
+@if (!NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+{
+    <div class="card" style="max-width:640px">
+        <h2>Accès refusé</h2>
+        <p>Vos rôles ne donnent pas le droit « @PermissionCatalog.Label(DashboardDeckService.Permission) ». Demandez-le à un administrateur.</p>
+    </div>
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Production</span><h1>Historique de production</h1>
+            <p>@(_report == null ? "Choisissez la période et les filtres, puis Rechercher." : $"{_report.PeriodText}{(_report.FilterLabel.Length > 0 ? " · " + _report.FilterLabel : "")}")</p>
+        </div>
+        <div class="head-tools">
+            <a class="bar" href="production/tableau-de-bord">‹ Tableau de bord</a>
+            @if (_canExport)
+            {
+                <button type="button" class="bar" disabled="@(_report is not { Detail.Count: > 0 } || _busy)" @onclick="() => ExportAsync(false)">@Icons.Svg("download")Excel</button>
+                <button type="button" class="bar" disabled="@(_report is not { Detail.Count: > 0 } || _busy)" @onclick="() => ExportAsync(true)">@Icons.Svg("download")PDF</button>
+            }
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <label for="hi-from">Du</label>
+            <input id="hi-from" type="date" value="@_from.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, true)" />
+        </div>
+        <div class="f">
+            <label for="hi-to">Au</label>
+            <input id="hi-to" type="date" value="@_to.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, false)" />
+        </div>
+        <div class="f">
+            <label for="hi-sector">Secteur</label>
+            <select id="hi-sector" value="@(_sector ?? "")" @onchange="e => { _sector = e.Value as string is { Length: > 0 } v ? v : null; _machine = null; }">
+                <option value="">Tous</option>
+                @foreach (var s in _machines.Select(m => m.Sector).Distinct())
+                {
+                    <option value="@s">@Machine.SectorLabel(s)</option>
+                }
+            </select>
+        </div>
+        <div class="f">
+            <label for="hi-machine">Machine</label>
+            <select id="hi-machine" value="@(_machine ?? "")" @onchange="e => _machine = e.Value as string is { Length: > 0 } v ? v : null">
+                <option value="">Toutes</option>
+                @if (_machineIds.Count > 1)
+                {
+                    <option value="@Selection">@string.Join(", ", _machineIds.Select(Plant))</option>
+                }
+                @foreach (var m in _machines.Where(m => _sector == null || m.Sector == _sector))
+                {
+                    <option value="@m.MachineId">@m.MachineName</option>
+                }
+            </select>
+        </div>
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_shift == null ? "on" : "")" aria-pressed="@(_shift == null)" @onclick="() => _shift = null">Tous</button>
+                @foreach (var shift in Shifts.All)
+                {
+                    <button type="button" class="seg @(_shift == shift ? "on" : "")" aria-pressed="@(_shift == shift)" @onclick="() => _shift = shift">@Shifts.Label(shift)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            @if (Actor.Team is { } myTeam)
+            {
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px">@myTeam</span>
+            }
+            else
+            {
+                <label for="hi-team">Équipe</label>
+                <select id="hi-team" value="@(_team ?? "")" @onchange="e => _team = e.Value as string is { Length: > 0 } v ? v : null">
+                    <option value="">Toutes</option>
+                    @foreach (var t in History.Teams)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            }
+        </div>
+        <div class="f">
+            <label for="hi-weight">Poids</label>
+            <select id="hi-weight" value="@(_weight?.ToString(CultureInfo.InvariantCulture) ?? "")"
+                    @onchange="e => _weight = double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var w) ? w : null">
+                <option value="">Tous</option>
+                @foreach (var w in History.Weights)
+                {
+                    <option value="@w.ToString(CultureInfo.InvariantCulture)">@w.ToString("0.##", Fmt.French) g</option>
+                }
+            </select>
+        </div>
+        <span class="sp"></span>
+        <button type="button" class="bar acc" disabled="@_busy" @onclick="SearchAsync">Rechercher</button>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_busy)
+    {
+        <Loader Text="Recherche en cours…" />
+    }
+    @if (_report is { } r)
+    {
+        var k = r.Summary;
+        <div class="row dk-kpis @(_busy ? "stale" : "")">
+            <KpiTile Label="TRS" Hint="@($"cible {r.TrsTarget:0} %")" Value="@Fmt.Pct(k.TrsPercent)" />
+            <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(k.ProductionKg)" Sub="@($"{Fmt.Num(k.TotalBags)} sacs")" />
+            <KpiTile Label="Disponibilité" Value="@Fmt.Pct(k.AvailabilityPercent)" />
+            <KpiTile Label="Performance" Value="@Fmt.Pct(k.PerformancePercent)" />
+            <KpiTile Label="Qualité" Value="@Fmt.Pct(k.QualityPercent)" />
+            <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(k.WeightDeviationPercent)" Sub="@k.GiveawayLabel" />
+            <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(k.SpeedBagsPerMinute, 1)" />
+        </div>
+
+        @if (r.Machines.Count > 0)
+        {
+            <section class="card">
+                <h2>Par machine</h2>
+                <div class="tbl-wrap">
+                    <table class="t">
+                        <thead><tr><th>Machine</th><th class="r">TRS</th><th class="r">Production</th><th class="r">Sacs</th><th class="r">Écart de poids</th><th class="r">Vitesse moy.</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in r.Machines)
+                            {
+                                <tr>
+                                    <td>@m.MachineName</td>
+                                    <td class="r">@Fmt.Pct(m.Kpis.TrsPercent)</td>
+                                    <td class="r">@KpiCalculator.FormatMass(m.Kpis.ProductionKg)</td>
+                                    <td class="r">@Fmt.Num(m.Kpis.TotalBags)</td>
+                                    <td class="r">@Fmt.SignedPct(m.Kpis.WeightDeviationPercent)</td>
+                                    <td class="r">@Fmt.Num(m.Kpis.SpeedBagsPerMinute, 1)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+
+        <section class="card">
+            <div class="card-head">
+                <h2>Détail heure par heure</h2>
+                <small class="nd">@(r.Detail.Count > ShownRows ? $"{Fmt.Num(r.Detail.Count)} lignes · les {ShownRows} plus récentes affichées, toutes dans les exports" : $"{Fmt.Num(r.Detail.Count)} ligne(s), une par machine, heure et production")</small>
+            </div>
+            <GridTable TItem="HistoryRow" Items="@(r.Detail.Take(ShownRows).ToList())" Columns="Columns" Empty="Aucune production sur ces dates et filtres." MaxHeight="70vh" />
+        </section>
+    }
+}
+
+@code {
+    private const int ShownRows = 2000;
+    private const string Selection = "*selection*";
+
+    [SupplyParameterFromQuery(Name = "du")] public string? QFrom { get; set; }
+    [SupplyParameterFromQuery(Name = "au")] public string? QTo { get; set; }
+    [SupplyParameterFromQuery(Name = "secteur")] public string? QSector { get; set; }
+    [SupplyParameterFromQuery(Name = "machines")] public string? QMachines { get; set; }
+    [SupplyParameterFromQuery(Name = "poste")] public int? QShift { get; set; }
+    [SupplyParameterFromQuery(Name = "equipe")] public string? QTeam { get; set; }
+    [SupplyParameterFromQuery(Name = "poids")] public string? QWeight { get; set; }
+
+    private DateTime _from;
+    private DateTime _to;
+    private string? _sector;
+    private string? _machine;
+    private List<string> _machineIds = new();
+    private int? _shift;
+    private string? _team;
+    private double? _weight;
+    private List<Machine> _machines = new();
+    private ProductionReport? _report;
+    private bool _busy;
+    private bool _canExport;
+
+    private static readonly CultureInfo Fr = Fmt.French;
+
+    private IReadOnlyList<GridColumn<HistoryRow>> Columns => new[]
+    {
+        new GridColumn<HistoryRow>("Heure", r => r.StartTime.ToString("dd/MM/yyyy HH:mm"), r => r.StartTime, css: "n nowrap"),
+        new GridColumn<HistoryRow>("Machine", r => r.MachineName),
+        new GridColumn<HistoryRow>("Poste", r => r.ShiftName),
+        new GridColumn<HistoryRow>("Équipe", r => r.Team),
+        new GridColumn<HistoryRow>("Produit", r => r.ProductName),
+        new GridColumn<HistoryRow>("Poids cible", r => r.TargetNetWeight.ToString("0", Fr) + " g", r => r.TargetNetWeight, css: "r"),
+        new GridColumn<HistoryRow>("Poids moyen", r => Fmt.Grams(r.AvgWeight), r => r.AvgWeight, css: "r"),
+        new GridColumn<HistoryRow>("Écart", r => r.DeviationGrams is { } d ? d.ToString("+0.0;-0.0;0", Fr) + " g" : "—", r => r.DeviationGrams, css: "r"),
+        new GridColumn<HistoryRow>("Production", r => KpiCalculator.FormatMass(r.ProductionKg), r => r.ProductionKg, css: "r"),
+        new GridColumn<HistoryRow>("Sacs", r => Fmt.Num(r.TotalBags), r => r.TotalBags, css: "r"),
+        new GridColumn<HistoryRow>("Vitesse", r => Fmt.Num(r.SpeedBagsPerMinute, 1), r => r.SpeedBagsPerMinute, css: "r"),
+        new GridColumn<HistoryRow>("TRS", r => Fmt.Pct(r.TrsPercent), r => r.TrsPercent, css: "r"),
+        new GridColumn<HistoryRow>("Conforme", r => r.ConformLabel, css: "c"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+            return;
+        _canExport = ProductionHistoryService.CanExport(Actor);
+        var today = Now.Date;
+        _from = Date(QFrom) ?? today.AddDays(-7);
+        _to = Date(QTo) ?? today;
+        _sector = string.IsNullOrEmpty(QSector) ? null : QSector;
+        _machineIds = (QMachines ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        _machine = _machineIds.Count == 1 ? _machineIds[0] : _machineIds.Count > 1 ? Selection : null;
+        _shift = QShift is >= 1 and <= 3 ? QShift : null;
+        _team = string.IsNullOrEmpty(QTeam) ? null : QTeam;
+        _weight = double.TryParse(QWeight, NumberStyles.Float, CultureInfo.InvariantCulture, out var w) ? w : null;
+        var actor = Actor;
+        if (await Run(async () => _machines = await Task.Run(() => History.MachinesAsync(actor))))
+            await SearchAsync();
+    }
+
+    private static DateTime? Date(string? text)
+        => DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
+
+    private void SetDate(ChangeEventArgs e, bool start)
+    {
+        if (Date(e.Value?.ToString()) is not { } d)
+            return;
+        if (start)
+            _from = d;
+        else
+            _to = d;
+    }
+
+    private string Plant(string machineId) => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;
+
+    private DashboardFilter Filter()
+    {
+        var ids = _machine == Selection ? _machineIds : _machine != null ? new List<string> { _machine } : new List<string>();
+        return new DashboardFilter
+        {
+            Sector = _sector,
+            MachineIds = ids,
+            MachineNames = ids.Select(Plant).ToList(),
+            ShiftId = _shift,
+            Team = _team,
+            TargetWeight = _weight,
+        };
+    }
+
+    private async Task SearchAsync()
+    {
+        _busy = true;
+        var (actor, from, to, filter) = (Actor, _from, _to, Filter());
+        try
+        {
+            await Run(async () => _report = await Task.Run(() => History.SearchAsync(actor, from, to, filter)));
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Historique (web) : " + ex);
+            Error = "Échec de la recherche : " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ExportAsync(bool pdf)
+    {
+        if (_report is not { } report)
+            return;
+        _busy = true;
+        var actor = Actor;
+        try
+        {
+            await Run(async () =>
+            {
+                var (name, mime, bytes) = await Task.Run(() => ProductionHistoryService.Export(actor, report, pdf));
+                await JS.InvokeVoidAsync("spigaDownload", name, mime, Convert.ToBase64String(bytes));
+            }, pdf ? "Rapport PDF exporté." : "Classeur Excel exporté.");
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Historique (web), export : " + ex);
+            Error = "Échec de l'export : " + ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,84 @@
+@* Synthèse of a sector (kiosk: SynthesisPanel): its lines over the current
+   month, the last 3 months or the year (buttons on the slide), each with
+   the weights it ran, then the TRS and weight-deviation trends, one curve
+   per line. *@
+@using SpigaDashboards.App.ViewModels
+@using SpigaDashboards.App.Services
+
+<section class="card dk-head plain">
+    <div class="dk-title">
+        <span class="pre">Synthèse</span>
+        <h2>@Slide.Sector</h2>
+        <p class="dk-sub">
+            <b>@Slide.PeriodLabel</b>
+            @if (Slide.FilterLabel.Length > 0)
+            {
+                <span class="chip acc">@Slide.FilterLabel</span>
+            }
+        </p>
+    </div>
+    <div class="segs dk-head-tools" role="group" aria-label="Période de la synthèse">
+        @foreach (var (p, label) in Periods)
+        {
+            <button type="button" class="seg @(Slide.Period == p ? "on" : "")" aria-pressed="@(Slide.Period == p)" @onclick="() => OnPeriod.InvokeAsync(p)">@label</button>
+        }
+    </div>
+</section>
+
+<div class="row dk-kpis">
+    <KpiTile Label="TRS du secteur" Value="@Fmt.Pct(Slide.Kpis.TrsPercent)" />
+    <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(Slide.Kpis.ProductionKg)" Sub="@($"{Fmt.Num(Slide.Kpis.TotalBags)} sacs")" />
+    <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(Slide.Kpis.WeightDeviationPercent)" Sub="@Slide.Kpis.GiveawayLabel" />
+    <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(Slide.Kpis.SpeedBagsPerMinute, 1)" />
+</div>
+
+<div class="dk-lines">
+    @foreach (var line in Slide.Lines)
+    {
+        <section class="card">
+            <div class="card-head">
+                <h2>@line.Name</h2>
+                <span class="chip @Fmt.Css(line.TrsSeverity)" title="@($"Cible {line.TrsTarget:0} %")">TRS @Fmt.Pct(line.Kpis.TrsPercent)</span>
+            </div>
+            <p class="nd">@KpiCalculator.FormatMass(line.Kpis.ProductionKg) · @Fmt.Num(line.Kpis.TotalBags) sacs · écart
+                <span class="chip @Fmt.Css(line.WeightSeverity)">@Fmt.SignedPct(line.Kpis.WeightDeviationPercent)</span> · @line.Kpis.GiveawayLabel</p>
+            @if (line.Kpis.Weights.Count == 0)
+            {
+                <p class="empty">Aucune production sur la période.</p>
+            }
+            else
+            {
+                <div class="tbl-wrap">
+                    <table class="t">
+                        <thead><tr><th>Poids</th><th class="r">TRS</th><th class="r">Production</th><th class="r">Poids moyen</th><th class="r">Écart</th></tr></thead>
+                        <tbody>
+                            @foreach (var w in line.Kpis.Weights)
+                            {
+                                <tr>
+                                    <td>@w.TargetWeight.ToString("0", Fmt.French) g <small>@w.ProductName</small></td>
+                                    <td class="r"><span class="chip @Fmt.Css(w.TrsSeverity)">@Fmt.Pct(w.TrsPercent)</span></td>
+                                    <td class="r">@w.ProductionText</td>
+                                    <td class="r">@Fmt.Grams(w.AvgWeight)</td>
+                                    <td class="r"><span class="chip @Fmt.Css(w.DeviationSeverity)">@Fmt.SignedPct(w.DeviationPercent)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+<div class="dk-charts">
+    <section class="card">@DeckChartView.Render($"TRS {Slide.Grain}", "syn-trs", Slide.TrsChart)</section>
+    <section class="card">@DeckChartView.Render($"Écart de poids {Slide.Grain} (% de la cible)", "syn-dev", Slide.DeviationChart)</section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SynthesisSlide Slide { get; set; } = default!;
+    [Parameter] public EventCallback<SynthesisPeriod> OnPeriod { get; set; }
+
+    private static readonly (SynthesisPeriod, string)[] Periods =
+        { (SynthesisPeriod.Month, "Mois en cours"), (SynthesisPeriod.ThreeMonths, "3 mois"), (SynthesisPeriod.Year, "Année") };
+}

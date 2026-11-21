@@ -1,14 +1,20 @@
-@* Every chart of the web screens. Drawn in SVG (no library: the plant PCs
-   may be offline). The user can change its kind (bars, line, points, area),
-   switch series off and on from the legend, and enlarge it (button or
-   double-click) to zoom with the mouse wheel and move along the X axis.
-   The choice is kept per chart (Key) for the session (UiState). A new chart
-   gets all of it by being a SpigaChart. *@
+@* Every chart of the web screens, drawn by ECharts (spiga-chart.js; the
+   library ships with the site: the plant PCs may be offline). The user can
+   change its kind (bars, stacked, line, points, area), switch series off and
+   on from the legend, and enlarge it (button or double-click) to zoom with
+   the mouse wheel or the slider. The choice is kept per chart (Key) for the
+   session (UiState). A new chart gets all of it by being a SpigaChart.
+   Times (optional): the X axis is a time axis, one time per value, instead
+   of the Labels. *@
+@using System.Text.Json
+@implements IAsyncDisposable
 @inject UiState Ui
+@inject IJSRuntime JS
 
 <div class="chart @(_expanded ? "chart-expanded" : "")">
     @Toolbar(false)
-    @Plot(false)
+    <div class="chart-plot" @ref="_small" role="img" aria-label="@Title" title="Double-clic : agrandir" @ondblclick="Open"
+         style="height:@(Height)px"></div>
 </div>
 
 @if (_expanded)
@@ -17,22 +23,14 @@
         <div class="chart-modal-box" @onclick:stopPropagation="true">
             <div class="chart-modal-head">
                 <h2>@Title</h2>
-                <span class="chart-hint">Molette : zoom · ‹ › : se déplacer · légende : masquer / afficher · Échap : fermer</span>
+                <span class="chart-hint">Molette ou barre du bas : zoom et déplacement · légende : masquer / afficher · Échap : fermer</span>
                 <span class="sp"></span>
-                <button type="button" class="bar small" @onclick="ResetZoom" disabled="@(_from == 0 && _to == Labels.Count)">Réinitialiser le zoom</button>
+                <button type="button" class="bar small" @onclick="ResetZoom">Réinitialiser le zoom</button>
                 <button type="button" class="bar small chart-close" @onclick="Close">Fermer</button>
             </div>
             @Toolbar(true)
-            <div class="chart-zoom" @onwheel="OnWheel">
-                @Plot(true)
-                @if (_to - _from < Labels.Count)
-                {
-                    <div class="chart-pan">
-                        <button type="button" class="seg" @onclick="() => Pan(-1)" disabled="@(_from == 0)" aria-label="Vers la gauche">‹</button>
-                        <span>@Labels[_from] – @Labels[_to - 1]</span>
-                        <button type="button" class="seg" @onclick="() => Pan(1)" disabled="@(_to == Labels.Count)" aria-label="Vers la droite">›</button>
-                    </div>
-                }
+            <div class="chart-zoom">
+                <div class="chart-plot" @ref="_big" role="img" aria-label="@Title" style="height:520px"></div>
             </div>
         </div>
     </div>
@@ -45,23 +43,20 @@
     [Parameter] public Func<double, string> Format { get; set; } = v => v.ToString("0.#", CultureInfo.GetCultureInfo("fr-FR"));
     [Parameter] public double? YMin { get; set; }
     [Parameter] public double? YMax { get; set; }
+    [Parameter] public IReadOnlyList<DateTime>? Times { get; set; }
 
     // Counts (people, events): the scale stops on whole numbers.
     [Parameter] public bool Integer { get; set; }
     [Parameter] public string? Key { get; set; }
     [Parameter] public int Height { get; set; } = 220;
 
-    private bool _expanded;
-    private int _from, _to;
+    private ElementReference _small, _big;
+    private string? _drawnSmall, _drawnBig;
+    private bool _expanded, _disposed;
     private string ChartKey => Key ?? Title;
+    private int Count => Times?.Count ?? Labels.Count;
 
     private ChartView View => Ui.Charts.TryGetValue(ChartKey, out var v) ? v : new ChartView(ChartKind.Auto, new HashSet<string>());
-
-    protected override void OnParametersSet()
-    {
-        if (_to == 0 || _to > Labels.Count)
-            (_from, _to) = (0, Labels.Count);
-    }
 
     // ---------- interactions ----------
 
@@ -82,47 +77,175 @@
 
     private void Open()
     {
-        if (Labels.Count > 0)
+        if (Count > 0)
             _expanded = true;
     }
 
-    private void Close() => _expanded = false;
-
-    private void ResetZoom() => (_from, _to) = (0, Labels.Count);
-
-    // Wheel up: zoom in around the middle of what is shown; down: out.
-    private void OnWheel(WheelEventArgs e)
+    private async Task Close()
     {
-        var count = _to - _from;
-        var next = e.DeltaY < 0 ? Math.Max(2, (int)Math.Round(count * 0.75)) : Math.Min(Labels.Count, (int)Math.Round(count / 0.75) + 1);
-        if (next == count)
-            return;
-        var middle = (_from + _to) / 2.0;
-        _from = Math.Clamp((int)Math.Round(middle - next / 2.0), 0, Labels.Count - next);
-        _to = _from + next;
+        await Js("spigaChart.dispose", _big);
+        _drawnBig = null;
+        _expanded = false;
     }
 
-    private void Pan(int direction)
-    {
-        var step = Math.Max(1, (_to - _from) / 3);
-        var from = Math.Clamp(_from + direction * step, 0, Labels.Count - (_to - _from));
-        _to = from + (_to - _from);
-        _from = from;
-    }
+    private Task ResetZoom() => Js("spigaChart.resetZoom", _big);
 
     // ---------- drawing ----------
 
-    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-    private static string N(double v) => v.ToString("0.##", Inv);
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var small = Spec(false);
+        if (small != _drawnSmall)
+        {
+            _drawnSmall = small;
+            await Js("spigaChart.set", _small, small);
+        }
+        if (_expanded)
+        {
+            var big = Spec(true);
+            if (big != _drawnBig)
+            {
+                _drawnBig = big;
+                await Js("spigaChart.set", _big, big);
+            }
+        }
+    }
 
-    // SVG <text> (Razor reserves the <text> tag inside code).
-    private static MarkupString Txt(string css, double x, double y, string anchor, string content)
-        => new($"<text class=\"{css}\" x=\"{N(x)}\" y=\"{N(y)}\" text-anchor=\"{anchor}\">{System.Net.WebUtility.HtmlEncode(content)}</text>");
+    private async Task Js(string fn, params object?[] args)
+    {
+        if (_disposed)
+            return;
+        try
+        {
+            await JS.InvokeVoidAsync(fn, args);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (InvalidOperationException) { } // prerendering: no browser yet
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Js("spigaChart.dispose", _small);
+        if (_expanded)
+            await Js("spigaChart.dispose", _big);
+        _disposed = true;
+    }
+
+    private static ChartKind KindOf(ChartSeries s, ChartKind chosen) => chosen == ChartKind.Auto ? s.Kind : chosen;
+
+    // What spiga-chart.js draws: the series shown, each value with its text,
+    // and the scale (its ticks already formatted).
+    private string Spec(bool big)
+    {
+        var view = View;
+        var shown = Series.Where(s => !view.Hidden.Contains(s.Name)).ToList();
+        var count = Count;
+        var stackAll = view.Kind == ChartKind.Stacked;
+        string KindName(ChartSeries s) => s.Reference ? "ref" : KindOf(s, view.Kind) switch
+        {
+            ChartKind.Bars or ChartKind.Stacked => "bar",
+            ChartKind.Points => "points",
+            ChartKind.Area => "area",
+            _ => "line",
+        };
+        string? StackOf(ChartSeries s) => KindName(s) != "bar" ? null : stackAll ? "all" : s.Stack;
+
+        // The scale: from the values on the drawn axis, piled up where stacked.
+        var onAxis = shown.Where(s => s.ScaleMax == null).ToList();
+        var values = new List<double>();
+        foreach (var s in onAxis.Where(s => StackOf(s) == null))
+            values.AddRange(s.Values.Take(count).Where(v => v != null && !double.IsNaN(v.Value)).Select(v => v!.Value));
+        foreach (var g in onAxis.Where(s => StackOf(s) != null).GroupBy(StackOf))
+            for (var i = 0; i < count; i++)
+            {
+                values.Add(g.Sum(s => i < s.Values.Count && s.Values[i] is > 0 ? s.Values[i]!.Value : 0));
+                values.Add(g.Sum(s => i < s.Values.Count && s.Values[i] is < 0 ? s.Values[i]!.Value : 0));
+            }
+        var (min, max, interval) = Scale(values);
+        var ticks = new List<string>();
+        for (var t = min; t <= max + interval / 1000; t += interval)
+            ticks.Add(Format(t));
+
+        var bars = shown.Count(s => !s.Reference && KindName(s) == "bar" && StackOf(s) == null);
+        var labelsShown = count <= (big ? 31 : 16);
+        var longest = Times != null ? 0 : Labels.Take(count).Select(l => Math.Min(22, l.Length)).DefaultIfEmpty(0).Max();
+        var slant = Times == null && count > 0 && longest * 7.0 > (big ? 1000.0 : 480.0) / count * 0.92;
+
+        var series = shown.Select(s =>
+        {
+            var f = s.Format ?? Format;
+            var data = new List<object?[]>();
+            for (var i = 0; i < count; i++)
+            {
+                var v = i < s.Values.Count ? s.Values[i] : null;
+                // Plant wall-clock time, sent as UTC and shown as UTC (no time-zone shift in the browser).
+                object? x = Times != null ? new DateTimeOffset(DateTime.SpecifyKind(Times[i], DateTimeKind.Unspecified), TimeSpan.Zero).ToUnixTimeMilliseconds() : null;
+                if (v == null && Times != null)
+                    continue;
+                if (v is { } gap && double.IsNaN(gap))
+                {
+                    data.Add(new[] { x, (object)"-", null, null }); // a break in the line
+                    continue;
+                }
+                // Side-by-side bars: a 0 label would run into its neighbour's (the tooltip keeps it).
+                var hideLabel = v == 0 && KindName(s) == "bar" && (bars > 1 || StackOf(s) != null);
+                data.Add(new[] { x, v, v is { } d ? f(d) : null, hideLabel ? (object)1 : null });
+            }
+            return new
+            {
+                name = s.Name,
+                color = s.Color,
+                kind = KindName(s),
+                stack = StackOf(s),
+                own = s.ScaleMax,
+                step = s.Step,
+                data,
+            };
+        }).ToList();
+
+        return JsonSerializer.Serialize(new
+        {
+            big,
+            times = Times != null,
+            cats = Times == null ? Labels.Take(count).ToList() : null,
+            min,
+            max,
+            interval,
+            ticks,
+            labels = labelsShown,
+            slant,
+            series,
+        });
+    }
+
+    // A scale with round steps: 5 to 7 ticks, unless YMin and YMax are both
+    // set (then exactly 4 steps between them, as given).
+    private (double Min, double Max, double Interval) Scale(List<double> values)
+    {
+        var lo = YMin ?? Math.Min(0, values.DefaultIfEmpty(0).Min());
+        var hi = YMax ?? Math.Max(lo + 1, values.DefaultIfEmpty(1).Max() * 1.1);
+        if (YMin != null && YMax != null)
+            return (lo, hi, (hi - lo) / 4);
+        var raw = (hi - lo) / 5;
+        var mag = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var step = new[] { 1, 2, 2.5, 5, 10 }.Select(k => k * mag).First(k => k >= raw * 0.999);
+        if (Integer)
+            step = Math.Max(1, Math.Ceiling(step));
+        if (YMin == null)
+            lo = Math.Floor(lo / step + 1e-9) * step;
+        if (YMax == null)
+            hi = lo + Math.Max(1, Math.Ceiling((hi - lo) / step - 1e-9)) * step;
+        else
+            step = (hi - lo) / Math.Max(1, Math.Round((hi - lo) / step));
+        return (Math.Round(lo, 6), Math.Round(hi, 6), step);
+    }
 
     private static readonly (ChartKind Kind, string Label, string Icon)[] Kinds =
     {
         (ChartKind.Auto, "D'origine", "<path d='M4 20V10M10 20V4M16 20v-7M22 20H2'/>"),
         (ChartKind.Bars, "Barres", "<rect x='4' y='10' width='4' height='10' rx='1'/><rect x='10' y='4' width='4' height='16' rx='1'/><rect x='16' y='13' width='4' height='7' rx='1'/>"),
+        (ChartKind.Stacked, "Barres empilées", "<rect x='5' y='12' width='5' height='8' rx='1'/><rect x='5' y='6' width='5' height='5' rx='1'/><rect x='14' y='14' width='5' height='6' rx='1'/><rect x='14' y='8' width='5' height='5' rx='1'/>"),
         (ChartKind.Line, "Courbe", "<path d='m3 17 6-6 4 4 8-8'/>"),
         (ChartKind.Points, "Points", "<circle cx='6' cy='16' r='2'/><circle cx='11' cy='9' r='2'/><circle cx='16' cy='13' r='2'/><circle cx='20' cy='6' r='2'/>"),
         (ChartKind.Area, "Aire", "<path d='M3 20V14l5-5 4 4 9-8v15z'/>"),
@@ -131,6 +254,7 @@
     private RenderFragment Toolbar(bool expanded) => __builder =>
     {
         var view = View;
+        var stackable = Series.Count(s => !s.Reference && s.ScaleMax == null) > 1;
         <div class="chart-head">
             @if (!expanded)
             {
@@ -157,6 +281,8 @@
             <div class="chart-tools" role="group" aria-label="Type de graphique">
                 @foreach (var (kind, label, icon) in Kinds)
                 {
+                    if (kind == ChartKind.Stacked && !stackable)
+                        continue;
                     <button type="button" class="chart-tool @(view.Kind == kind ? "on" : "")" title="@label" aria-pressed="@(view.Kind == kind)" @onclick="() => SetKind(kind)">
                         <svg viewBox="0 0 24 24" aria-hidden="true">@((MarkupString)icon)</svg>
                     </button>
@@ -170,122 +296,4 @@
             </div>
         </div>
     };
-
-    private RenderFragment Plot(bool expanded) => __builder =>
-    {
-        var view = View;
-        int from = expanded ? _from : 0, to = expanded ? _to : Labels.Count;
-        var count = Math.Max(0, to - from);
-        double w = expanded ? 1000 : 480, h = expanded ? 460 : Height;
-        double left = 46, right = 12, top = 22, bottom = 28;
-        var labelEvery = Math.Max(1, (int)Math.Ceiling(count / (expanded ? 24.0 : 12.0)));
-        // Labels too long for their slot (causes, components): slanted, cut
-        // at 22 characters (the tooltips keep them whole).
-        var longest = Labels.Skip(from).Take(count).Select(l => Math.Min(22, l.Length)).DefaultIfEmpty(0).Max();
-        var slanted = longest * 6.4 > (w - left - right) / Math.Max(1, count) * labelEvery * 0.92;
-        if (slanted)
-            bottom += Math.Min(72, longest * 4.3);
-        double pw = w - left - right, ph = h - top - bottom;
-        var shown = Series.Where(s => !view.Hidden.Contains(s.Name)).ToList();
-        // Series on their own scale (ScaleMax) stay off the drawn axis.
-        var values = shown.Where(s => s.ScaleMax == null).SelectMany(s => s.Values.Skip(from).Take(count)).Where(v => v != null).Select(v => v!.Value).ToList();
-        var min = YMin ?? Math.Min(0, values.DefaultIfEmpty(0).Min());
-        var max = YMax ?? Math.Max(min + 1, values.DefaultIfEmpty(1).Max() * 1.15);
-        if (Integer && YMax == null)
-            max = min + Math.Max(4, Math.Ceiling((max - min) / 4) * 4);
-        double Y(double v) => top + ph - (Math.Clamp(v, min, max) - min) / (max - min) * ph;
-        double YOf(ChartSeries s, double v) => s.ScaleMax is { } sm ? top + ph - Math.Clamp(v, 0, sm) / sm * ph : Y(v);
-        double BaseOf(ChartSeries s) => s.ScaleMax != null ? top + ph : Y(Math.Max(min, 0));
-        string F(ChartSeries s, double v) => (s.Format ?? Format)(v);
-        var band = count == 0 ? pw : pw / count;
-        double X(int i) => left + band * (i + 0.5);
-        var bars = shown.Where(s => !s.Reference && KindOf(s, view.Kind) == ChartKind.Bars).ToList();
-        var barW = Math.Min(expanded ? 70 : 42, band * 0.72 / Math.Max(1, bars.Count));
-        var showLabels = count <= (expanded ? 31 : 16);
-
-        <svg class="chart-svg" viewBox="0 0 @N(w) @N(h)" role="img" aria-label="@Title" @ondblclick="Open"
-             style="@(expanded ? "" : $"max-height:{Height + 40}px")">
-            @for (var g = 0; g <= 4; g++)
-            {
-                var v = min + (max - min) * g / 4;
-                <line class="chart-grid" x1="@N(left)" x2="@N(w - right)" y1="@N(Y(v))" y2="@N(Y(v))" />
-                @Txt("chart-axis", left - 6, Y(v) + 4, "end", Format(v))
-            }
-            @for (var i = 0; i < count; i += labelEvery)
-            {
-                var label = Labels[from + i];
-                if (slanted)
-                {
-                    var y = top + ph + 14;
-                    var cut = label.Length > 22 ? label[..21] + "…" : label;
-                    @((MarkupString)$"<text class=\"chart-axis\" x=\"{N(X(i))}\" y=\"{N(y)}\" text-anchor=\"end\" transform=\"rotate(-30 {N(X(i))} {N(y)})\"><title>{System.Net.WebUtility.HtmlEncode(label)}</title>{System.Net.WebUtility.HtmlEncode(cut)}</text>")
-                }
-                else
-                {
-                    @Txt("chart-axis", X(i), h - 8, "middle", label)
-                }
-            }
-
-            @* bars first, lines and points over them *@
-            @for (var b = 0; b < bars.Count; b++)
-            {
-                var s = bars[b];
-                @for (var i = 0; i < count; i++)
-                {
-                    if (s.Values[from + i] is not { } v)
-                        continue;
-                    var x = X(i) - barW * bars.Count / 2 + barW * b;
-                    var y0 = BaseOf(s);
-                    var y = YOf(s, v);
-                    <g class="chart-bar" style="--d:@(i * 40)ms">
-                        <title>@Labels[from + i] · @s.Name : @F(s, v)</title>
-                        <rect x="@N(x + 1)" y="@N(Math.Min(y, y0))" width="@N(Math.Max(1, barW - 2))" height="@N(Math.Max(1, Math.Abs(y0 - y)))" rx="@N(Math.Min(6, barW / 4))" fill="@s.Color" />
-                        @* Side-by-side bars: a 0 label would run into its neighbour's (the tooltip keeps it). *@
-                        @if (showLabels && s.ScaleMax == null && (bars.Count == 1 || v != 0))
-                        {
-                            @Txt("chart-value", x + barW / 2, Math.Min(y, y0) - 5, "middle", F(s, v))
-                        }
-                    </g>
-                }
-            }
-            @foreach (var s in shown.Where(s => s.Reference || KindOf(s, view.Kind) != ChartKind.Bars))
-            {
-                var kind = s.Reference ? ChartKind.Line : KindOf(s, view.Kind);
-                var pts = Enumerable.Range(0, count).Where(i => s.Values[from + i] != null).Select(i => (I: i, X: X(i), Y: YOf(s, s.Values[from + i]!.Value))).ToList();
-                if (pts.Count == 0)
-                    continue;
-                var line = string.Join(" ", pts.Select((p, k) => (k == 0 ? "M" : "L") + N(p.X) + " " + N(p.Y)));
-                if (s.Reference)
-                {
-                    var y = pts[0].Y;
-                    <line class="chart-ref" x1="@N(left)" x2="@N(w - right)" y1="@N(y)" y2="@N(y)" stroke="@s.Color"><title>@s.Name</title></line>
-                    continue;
-                }
-                @if (kind == ChartKind.Area)
-                {
-                    var baseY = N(BaseOf(s));
-                    <path class="chart-area" d="@($"{line} L{N(pts[^1].X)} {baseY} L{N(pts[0].X)} {baseY} Z")" fill="@s.Color" />
-                }
-                @if (kind is ChartKind.Line or ChartKind.Area)
-                {
-                    <path class="chart-line" d="@line" stroke="@s.Color" pathLength="1" />
-                }
-                @foreach (var p in pts)
-                {
-                    var v = s.Values[from + p.I]!.Value;
-                    <g class="chart-point @(kind == ChartKind.Points ? "big" : "")" style="--d:@(p.I * 40)ms">
-                        <title>@Labels[from + p.I] · @s.Name : @F(s, v)</title>
-                        <circle cx="@N(p.X)" cy="@N(p.Y)" r="@(kind == ChartKind.Points ? "7" : "4.5")" fill="@(kind == ChartKind.Points ? s.Color : "var(--tile)")" stroke="@s.Color" />
-                        @* A series on its own scale: its values in the tooltips only (labels would overlap). *@
-                        @if (showLabels && s.ScaleMax == null)
-                        {
-                            @Txt("chart-value", p.X, p.Y - 11, "middle", F(s, v))
-                        }
-                    </g>
-                }
-            }
-        </svg>
-    };
-
-    private static ChartKind KindOf(ChartSeries s, ChartKind chosen) => chosen == ChartKind.Auto ? s.Kind : chosen;
 }

@@ -136,7 +136,7 @@ public class WebMigrationTests
         Assert.False(NativePages.IsWpf(NativePage.Stops));
         Assert.False(NativePages.IsWpf(NativePage.StopQualification));
         Assert.False(NativePages.IsWpf(NativePage.StopPlanning));
-        Assert.True(NativePages.IsWpf(NativePage.Dashboard));
+        Assert.False(NativePages.IsWpf(NativePage.Dashboard));
         Assert.Equal("maintenance/planification?ligne=PC01&composant=Mo%C3%A2teur", NativePages.PreventiveRoute("PC01", "Moâteur"));
         Assert.False(NativePages.IsWpf(NativePage.StopStatistics));
         Assert.False(NativePages.IsWpf(NativePage.Settings));

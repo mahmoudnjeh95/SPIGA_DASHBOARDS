@@ -68,7 +68,7 @@
             <span class="sp"></span>
             @if (Desktop.IsAvailable && Session.Actor?.CanEverywhere(Perm.EcranTv) == true)
             {
-                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen()">@Icons.Svg("tv")Écran TV</button>
+                <button type="button" class="bar acc" @onclick="() => Desktop.OpenTvScreen(NativePages.Access(Session.Actor!, NativePage.Dashboard))">@Icons.Svg("tv")Écran TV</button>
             }
             <button type="button" class="bar" @onclick="Session.ToggleThemeAsync">@Icons.Svg(Session.Theme == "dark" ? "sun" : "moon")@(Session.Theme == "dark" ? "Mode clair" : "Mode sombre")</button>
             <a class="bar" href="compte">@Icons.Svg("user")Mon compte</a>

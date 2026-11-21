@@ -2,128 +2,171 @@
 @inherits SpigaPage
 @inject DashboardDeckService Deck
 @inject IDesktopBridge Desktop
+@inject ClientInfo Client
 @implements IDisposable
 @using SpigaDashboards.App.ViewModels
 @using SpigaDashboards.App.ViewModels.Slides
 
 @* Tableau de bord détaillé: the slides of the kiosk dashboard, rotated, with
-   its period and filters. The desktop application still shows its WPF
-   dashboard here (NativePages.IsWpf) until the web one is complete. *@
-@if (Desktop.IsAvailable && NativePages.IsWpf(NativePage.Dashboard) || !NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+   its period and filters, the note of the screens and the stop pop-up.
+   Tv (TvScreen, /production/ecran-tv): the same slides full screen. *@
+@if (!Allowed)
 {
     <NativePagePlaceholder Page="NativePage.Dashboard" Group="Production" Title="Le tableau de bord détaillé" />
 }
 else
 {
-    <div class="head">
-        <div>
-            <span class="pre">Production</span><h1>Tableau de bord détaillé</h1>
-            <p>@(_slides.Count == 0 ? "" : $"{_index + 1} / {_slides.Count} · {SlideDeck.Label(_slides[_index], NameOf)}")</p>
+    @if (!Tv)
+    {
+        <div class="head">
+            <div>
+                <span class="pre">Production</span><h1>Tableau de bord détaillé</h1>
+                <p>@(_slides.Count == 0 ? "" : $"{_index + 1} / {_slides.Count} · {SlideDeck.Label(_slides[_index], NameOf)}")</p>
+            </div>
+            <div class="head-tools">
+                <a class="bar" href="@HistoryLink">@Icons.Svg("clock")Historique</a>
+                @if (!Desktop.IsAvailable && Actor.CanEverywhere(Perm.EcranTv))
+                {
+                    <a class="bar acc" href="production/ecran-tv">@Icons.Svg("tv")Écran TV</a>
+                }
+            </div>
         </div>
-    </div>
 
-    <div class="filters">
-        <div class="f">
-            <span>Période</span>
-            <div class="segs" role="group" aria-label="Période">
-                @foreach (var (p, label) in Periods)
-                {
-                    <button type="button" class="seg @(_period == p ? "on" : "")" aria-pressed="@(_period == p)" @onclick="() => SetPeriodAsync(p)">@label</button>
-                }
-            </div>
-            @if (_period == DashboardPeriod.Custom)
-            {
-                <div class="q-inline">
-                    <input type="date" aria-label="Du" value="@_from.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, true)" />
-                    <input type="date" aria-label="Au" value="@_to.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, false)" />
-                </div>
-            }
-        </div>
-        <div class="f">
-            <span>Secteur</span>
-            <div class="segs" role="group" aria-label="Secteur">
-                <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => SetSectorAsync(null)">Tous</button>
-                @foreach (var s in _machines.Select(m => m.Sector).Distinct())
-                {
-                    <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => SetSectorAsync(s)">@Machine.SectorLabel(s)</button>
-                }
-            </div>
-        </div>
-        <div class="f">
-            <span>Machines</span>
-            <details class="pb-lines">
-                <summary class="bar small">@MachinesLabel ▾</summary>
-                <div class="pb-lines-pop card">
-                    <div class="pb-lines-all"><button type="button" class="link" @onclick="AllMachinesAsync">Toutes</button></div>
-                    @foreach (var m in SectorMachines)
+        <div class="filters">
+            <div class="f">
+                <span>Période</span>
+                <div class="segs" role="group" aria-label="Période">
+                    @foreach (var (p, label) in Periods)
                     {
-                        <label class="check"><input type="checkbox" checked="@(!_unticked.Contains(m.MachineId))" @onchange="e => TickMachineAsync(m.MachineId, e.Value is true)" /> @m.MachineName</label>
+                        <button type="button" class="seg @(_period == p ? "on" : "")" aria-pressed="@(_period == p)" @onclick="() => SetPeriodAsync(p)">@label</button>
                     }
                 </div>
-            </details>
-        </div>
-        <div class="f">
-            <span>Poste</span>
-            <div class="segs" role="group" aria-label="Poste">
-                <button type="button" class="seg @(_shift == null ? "on" : "")" @onclick="() => SetShiftAsync(null)">Tous</button>
-                @foreach (var shift in Shifts.All)
+                @if (_period == DashboardPeriod.Custom)
                 {
-                    <button type="button" class="seg @(_shift == shift ? "on" : "")" @onclick="() => SetShiftAsync(shift)">@Shifts.Label(shift)</button>
+                    <div class="q-inline">
+                        <input type="date" aria-label="Du" value="@_from.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, true)" />
+                        <input type="date" aria-label="Au" value="@_to.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, false)" />
+                    </div>
+                }
+            </div>
+            <div class="f">
+                <span>Secteur</span>
+                <div class="segs" role="group" aria-label="Secteur">
+                    <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => SetSectorAsync(null)">Tous</button>
+                    @foreach (var s in _machines.Select(m => m.Sector).Distinct())
+                    {
+                        <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => SetSectorAsync(s)">@Machine.SectorLabel(s)</button>
+                    }
+                </div>
+            </div>
+            <div class="f">
+                <span>Machines</span>
+                <details class="pb-lines">
+                    <summary class="bar small">@MachinesLabel ▾</summary>
+                    <div class="pb-lines-pop card">
+                        <div class="pb-lines-all"><button type="button" class="link" @onclick="AllMachinesAsync">Toutes</button></div>
+                        @foreach (var m in SectorMachines)
+                        {
+                            <label class="check"><input type="checkbox" checked="@(!_unticked.Contains(m.MachineId))" @onchange="e => TickMachineAsync(m.MachineId, e.Value is true)" /> @m.MachineName</label>
+                        }
+                    </div>
+                </details>
+            </div>
+            <div class="f">
+                <span>Poste</span>
+                <div class="segs" role="group" aria-label="Poste">
+                    <button type="button" class="seg @(_shift == null ? "on" : "")" @onclick="() => SetShiftAsync(null)">Tous</button>
+                    @foreach (var shift in Shifts.All)
+                    {
+                        <button type="button" class="seg @(_shift == shift ? "on" : "")" @onclick="() => SetShiftAsync(shift)">@Shifts.Label(shift)</button>
+                    }
+                </div>
+            </div>
+            <div class="f">
+                @if (Actor.Team is { } myTeam)
+                {
+                    <span>Votre équipe</span>
+                    <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les postes de votre équipe">@myTeam</span>
+                }
+                else
+                {
+                    <label for="dk-team">Équipe</label>
+                    <select id="dk-team" value="@(_team ?? "")" @onchange="SetTeamAsync">
+                        <option value="">Toutes</option>
+                        @foreach (var t in Deck.Teams)
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                }
+            </div>
+            <div class="f">
+                <label for="dk-weight">Poids</label>
+                <select id="dk-weight" value="@(_weight?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetWeightAsync">
+                    <option value="">Tous</option>
+                    @foreach (var w in Deck.Weights)
+                    {
+                        <option value="@w.ToString(CultureInfo.InvariantCulture)">@w.ToString("0.##", Fmt.French) g</option>
+                    }
+                </select>
+            </div>
+            <span class="sp"></span>
+            @if (!Filter.IsEmpty || _period != DashboardPeriod.Day)
+            {
+                <button type="button" class="link" @onclick="ResetAsync">Réinitialiser</button>
+            }
+        </div>
+
+        <div class="dk-nav">
+            <button type="button" class="bar small" title="Diapositive précédente" aria-label="Précédente" @onclick="() => StepAsync(-1)" disabled="@(_slides.Count == 0)">‹</button>
+            <button type="button" class="bar small" title="@(_paused ? "Reprendre la rotation" : "Mettre la rotation en pause")" @onclick="TogglePause" disabled="@(_slides.Count == 0)">@(_paused ? "▶ Reprendre" : "⏸ Pause")</button>
+            <button type="button" class="bar small" title="Diapositive suivante" aria-label="Suivante" @onclick="() => StepAsync(1)" disabled="@(_slides.Count == 0)">›</button>
+            <div class="dk-timer" title="@(_paused ? "Rotation en pause" : $"Diapositive suivante dans {Math.Max(0, (int)Math.Ceiling(_seconds - _elapsed))} s")">
+                <i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i>
+            </div>
+            <div class="dk-dots">
+                @for (var i = 0; i < _slides.Count; i++)
+                {
+                    var n = i;
+                    <button type="button" class="dk-dot @(n == _index ? "on" : "")" title="@SlideDeck.Label(_slides[n], NameOf)" aria-label="@SlideDeck.Label(_slides[n], NameOf)" @onclick="() => GoAsync(n)"></button>
                 }
             </div>
         </div>
-        <div class="f">
-            @if (Actor.Team is { } myTeam)
+    }
+    else
+    {
+        @* Écran TV: the slides alone, full screen; the timer bar and two discreet buttons. *@
+        <div class="tv-bar">
+            <div class="dk-timer"><i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i></div>
+            <span class="tv-title">@(_slides.Count == 0 ? "" : SlideDeck.Label(_slides[_index], NameOf))</span>
+            <button type="button" class="bar small" onclick="spigaTv.fullscreen()">Plein écran</button>
+            <a class="bar small" href="production/tableau-de-bord">Quitter l'écran TV</a>
+        </div>
+    }
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @* The note of the screens (kiosk: the yellow sticky note bar): the same
+       text on every dashboard and TV screen, never rotated away. *@
+    @if (_canEditNote && !Tv || !string.IsNullOrWhiteSpace(_note))
+    {
+        <div class="dk-note" role="note">
+            @if (_canEditNote && !Tv)
             {
-                <span>Votre équipe</span>
-                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les postes de votre équipe">@myTeam</span>
+                <textarea id="dk-note" rows="1" maxlength="1000" aria-label="Note des écrans" placeholder="Note pour tous les écrans (consigne, information…)"
+                          value="@_noteDraft" @oninput="NoteTyped"></textarea>
+                @if (_noteStatus.Length > 0)
+                {
+                    <span class="dk-note-status">@_noteStatus</span>
+                }
+                <button type="button" class="bar small" disabled="@(!_noteEditing || _noteDraft == _note)" @onclick="SaveNoteAsync">Enregistrer</button>
             }
             else
             {
-                <label for="dk-team">Équipe</label>
-                <select id="dk-team" value="@(_team ?? "")" @onchange="SetTeamAsync">
-                    <option value="">Toutes</option>
-                    @foreach (var t in Deck.Teams)
-                    {
-                        <option value="@t">@t</option>
-                    }
-                </select>
+                <p>@_note</p>
             }
         </div>
-        <div class="f">
-            <label for="dk-weight">Poids</label>
-            <select id="dk-weight" value="@(_weight?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetWeightAsync">
-                <option value="">Tous</option>
-                @foreach (var w in Deck.Weights)
-                {
-                    <option value="@w.ToString(CultureInfo.InvariantCulture)">@w.ToString("0.##", Fmt.French) g</option>
-                }
-            </select>
-        </div>
-        <span class="sp"></span>
-        @if (!Filter.IsEmpty || _period != DashboardPeriod.Day)
-        {
-            <button type="button" class="link" @onclick="ResetAsync">Réinitialiser</button>
-        }
-    </div>
-
-    <div class="dk-nav">
-        <button type="button" class="bar small" title="Diapositive précédente" aria-label="Précédente" @onclick="() => StepAsync(-1)" disabled="@(_slides.Count == 0)">‹</button>
-        <button type="button" class="bar small" title="@(_paused ? "Reprendre la rotation" : "Mettre la rotation en pause")" @onclick="TogglePause" disabled="@(_slides.Count == 0)">@(_paused ? "▶ Reprendre" : "⏸ Pause")</button>
-        <button type="button" class="bar small" title="Diapositive suivante" aria-label="Suivante" @onclick="() => StepAsync(1)" disabled="@(_slides.Count == 0)">›</button>
-        <div class="dk-timer" title="@(_paused ? "Rotation en pause" : $"Diapositive suivante dans {Math.Max(0, (int)Math.Ceiling(_seconds - _elapsed))} s")">
-            <i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i>
-        </div>
-        <div class="dk-dots">
-            @for (var i = 0; i < _slides.Count; i++)
-            {
-                var n = i;
-                <button type="button" class="dk-dot @(n == _index ? "on" : "")" title="@SlideDeck.Label(_slides[n], NameOf)" aria-label="@SlideDeck.Label(_slides[n], NameOf)" @onclick="() => GoAsync(n)"></button>
-            }
-        </div>
-    </div>
-
-    <Flash Error="@Error" Info="@Info" />
+    }
 
     @if (_slides.Count == 0 && !_loading)
     {
@@ -144,15 +187,51 @@ else
                 case MachineSlide machine:
                     <MachineSlideView Slide="machine" />
                     break;
-                case string pending:
-                    <div class="card"><h2>@pending</h2><p class="empty">Cette diapositive arrive dans la version web : le tableau de bord de l'application l'affiche déjà.</p></div>
+                case SynthesisSlide synthesis:
+                    <SynthesisSlideView Slide="synthesis" OnPeriod="SetSynthesisPeriodAsync" />
                     break;
+                case PackagingSlide packaging:
+                    <PackagingSlideView Slide="packaging" />
+                    break;
+                case RunStateSlide runState:
+                    <RunStateSlideView Slide="runState" />
+                    break;
+            }
+        </div>
+    }
+
+    @* Stop pop-up (kiosk: StopAlertPopup): the lines stopped with no cause
+       yet. Comes up when a new one appears, then as a reminder every 30 min
+       while any is left, and goes away after 20 s or a click. *@
+    @if (_alert is { Count: > 0 } alert)
+    {
+        <div class="dk-alert" role="alert" @onclick="DismissAlert">
+            <div class="dk-alert-head">
+                <b>@(alert.Count == 1 ? "ARRÊT EN COURS — cause à définir" : $"{alert.Count} ARRÊTS EN COURS — cause à définir")</b>
+                <button type="button" class="dk-alert-close" aria-label="Fermer" @onclick="DismissAlert" @onclick:stopPropagation="true">×</button>
+            </div>
+            @foreach (var stop in alert.Take(AlertLines))
+            {
+                <div class="dk-alert-row">
+                    <div><b>@NameOf(stop.MachineId)</b><small>À l'arrêt @stop.SinceText</small></div>
+                    <span>@stop.DurationText</span>
+                </div>
+            }
+            @if (alert.Count > AlertLines)
+            {
+                <small class="dk-alert-more">@(alert.Count - AlertLines == 1 ? "+ 1 autre ligne" : $"+ {alert.Count - AlertLines} autres lignes")</small>
             }
         </div>
     }
 }
 
 @code {
+    // Écran TV (TvScreen): the same deck full screen, no filters, never locked.
+    [Parameter] public bool Tv { get; set; }
+
+    private bool Allowed => NativePages.IsAllowed(Session.Actor, NativePage.Dashboard)
+                            && (!Tv || Session.Actor?.CanEverywhere(Perm.EcranTv) == true);
+
     private static readonly (DashboardPeriod Period, string Label)[] Periods =
     {
         (DashboardPeriod.Day, "Aujourd'hui"), (DashboardPeriod.PreviousShift, "Poste préc."), (DashboardPeriod.Yesterday, "Hier"),
@@ -167,6 +246,22 @@ else
     private int? _shift;
     private string? _team;
     private double? _weight;
+    private SynthesisPeriod _synthesisPeriod = SynthesisPeriod.Month;
+
+    // Sticky note and stop pop-up, read every minute.
+    private const int AlertLines = 5;
+    private static readonly TimeSpan AlertShown = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan AlertReminder = TimeSpan.FromMinutes(30);
+    private string? _note;
+    private string _noteDraft = "";
+    private bool _noteEditing;
+    private string _noteStatus = "";
+    private bool _canEditNote;
+    private List<SpigaDashboards.App.Models.OngoingStop>? _alert;
+    private DateTime _alertSince;
+    private DateTime _lastAlert = DateTime.MinValue;
+    private readonly HashSet<string> _alerted = new();
+    private int _sideTicks;
 
     private List<Machine> _machines = new();
     private List<SlideDescriptor> _slides = new();
@@ -215,12 +310,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (Desktop.IsAvailable && NativePages.IsWpf(NativePage.Dashboard) || !NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+        if (!Allowed)
             return;
         var today = Deck.Now.Date;
         (_from, _to) = (today.AddDays(-7), today);
         await Run(async () => _machines = await Deck.MachinesAsync(Actor));
         Rebuild();
+        _canEditNote = DashboardDeckService.CanEditNote(Actor);
+        await RefreshSideAsync();
         _life = new CancellationTokenSource();
         _ = TickAsync(_life.Token);
         await ShowAsync();
@@ -253,8 +350,21 @@ else
             {
                 await InvokeAsync(async () =>
                 {
+                    if (_alert != null && Deck.Now - _alertSince >= AlertShown)
+                        DismissAlert();
+                    if (++_sideTicks >= 60)
+                    {
+                        _sideTicks = 0;
+                        await RefreshSideAsync();
+                        // A wall screen nobody clicks: it stays signed in while shown.
+                        if (Tv)
+                            await Session.KeepAwakeAsync();
+                    }
                     if (_slides.Count == 0 || _loading)
+                    {
+                        StateHasChanged();
                         return;
+                    }
                     if (!_paused)
                         _elapsed += 1;
                     if (!_paused && _elapsed >= _seconds)
@@ -294,11 +404,16 @@ else
             object? content = null;
             var (actor, filter, period, from, to) = (Actor, Filter, _period, (DateTime?)_from, (DateTime?)_to);
             var machines = _machines;
+            var synthesisPeriod = _synthesisPeriod;
+            List<Machine> Of(IEnumerable<string> ids) => ids.Select(id => machines.FirstOrDefault(m => m.MachineId == id)).OfType<Machine>().ToList();
             var ok = await Run(async () => content = await Task.Run(async () => slide switch
             {
                 MachineSlideDescriptor ms when machines.FirstOrDefault(m => m.MachineId == ms.MachineId) is { } machine
                     => await Deck.MachineAsync(actor, machine, period, from, to, filter, cancel),
-                _ => (object)SlideDeck.Label(slide, NameOf),
+                SynthesisSlideDescriptor sd => await Deck.SynthesisAsync(actor, sd.Sector, Of(sd.MachineIds), synthesisPeriod, filter, cancel),
+                PackagingSlideDescriptor pd => await Deck.PackagingAsync(actor, pd, Of(pd.MachineIds), period, from, to, filter, cancel),
+                RunStateSlideDescriptor rd => await Deck.RunStateAsync(actor, rd.Title, Of(rd.MachineIds), cancel),
+                _ => (object?)null,
             }, cancel));
             if (version != _version || !ok)
                 return;
@@ -339,6 +454,72 @@ else
     }
 
     private void TogglePause() => _paused = !_paused;
+
+    // ---------- note, stop pop-up ----------
+
+    private async Task RefreshSideAsync()
+    {
+        if (Session.Actor == null)
+            return;
+        var actor = Actor;
+        try
+        {
+            // Text being typed is never overwritten by the refresh.
+            if (await Task.Run(() => Deck.NoteAsync(actor)) is { } note)
+            {
+                _note = note;
+                if (!_noteEditing)
+                    _noteDraft = note;
+            }
+            var open = await Task.Run(() => Deck.UnqualifiedStopsAsync(actor));
+            var keys = open.Select(s => $"{s.MachineId}|{s.Start:O}").ToHashSet();
+            var isNew = keys.Any(k => !_alerted.Contains(k));
+            _alerted.Clear();
+            _alerted.UnionWith(keys);
+            if (open.Count == 0)
+                DismissAlert();
+            else if (isNew || Deck.Now - _lastAlert >= AlertReminder)
+            {
+                _alert = open;
+                _alertSince = _lastAlert = Deck.Now;
+            }
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Tableau de bord (web), note / arrêts en cours : " + ex.Message);
+        }
+    }
+
+    private void DismissAlert() => _alert = null;
+
+    private void NoteTyped(ChangeEventArgs e)
+    {
+        _noteDraft = e.Value as string ?? "";
+        _noteEditing = true;
+        _noteStatus = "";
+    }
+
+    private async Task SaveNoteAsync()
+    {
+        var text = _noteDraft;
+        var author = new SpigaDashboards.App.Data.ChangeAuthor(Actor.Login, Actor.DisplayName, Client.Workstation);
+        var actor = Actor;
+        _noteStatus = "";
+        if (await Run(() => Task.Run(() => Deck.SaveNoteAsync(actor, author, text))))
+        {
+            _note = text.Trim();
+            _noteDraft = _note;
+            _noteEditing = false;
+            _noteStatus = "Enregistré.";
+        }
+    }
+
+    // Synthèse: its own period (buttons on the slide), kept for the next ones.
+    private Task SetSynthesisPeriodAsync(SynthesisPeriod period)
+    {
+        _synthesisPeriod = period;
+        return ShowAsync(keepTimer: true);
+    }
 
     // ---------- filters ----------
 
@@ -410,6 +591,24 @@ else
         (_period, _sector, _shift, _team, _weight) = (DashboardPeriod.Day, null, null, null, null);
         _unticked.Clear();
         return ApplyAsync();
+    }
+
+    // Historique opens on the dashboard's period and filters.
+    private string HistoryLink
+    {
+        get
+        {
+            var (from, to) = _period == DashboardPeriod.Custom ? (_from, _to.AddDays(1))
+                : PeriodRanges.Get(_period == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : _period, Deck.Now);
+            var f = Filter;
+            var q = new List<string> { $"du={from:yyyy-MM-dd}", $"au={to.AddDays(-1):yyyy-MM-dd}" };
+            if (f.Sector != null) q.Add("secteur=" + Uri.EscapeDataString(f.Sector));
+            if (f.MachineIds.Count > 0) q.Add("machines=" + Uri.EscapeDataString(string.Join(",", f.MachineIds)));
+            if (f.ShiftId != null) q.Add($"poste={f.ShiftId}");
+            if (f.Team != null) q.Add("equipe=" + Uri.EscapeDataString(f.Team));
+            if (f.TargetWeight != null) q.Add("poids=" + f.TargetWeight.Value.ToString(CultureInfo.InvariantCulture));
+            return "production/historique?" + string.Join("&", q);
+        }
     }
 
     private string NameOf(string machineId) => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;

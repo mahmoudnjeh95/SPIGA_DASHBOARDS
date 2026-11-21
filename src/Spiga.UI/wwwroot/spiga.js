@@ -250,3 +250,36 @@ window.spigaBoard = {
         if (root && root.__spBoard) { root.__spBoard(); root.__spBoard = null; }
     }
 };
+
+// ---------- Écran TV (TvLayout) ----------
+// A wall screen: it keeps showing its last slide while the connection to
+// the server is down, without the reconnection banner, and reloads the page
+// once Blazor gives up (the tab's session comes back with the reload).
+window.spigaTv = {
+    enable: function () {
+        if (window.__spTv) return;
+        window.__spTv = true;
+        document.documentElement.classList.add("spiga-tv");
+        var reloading = false;
+        function check() {
+            var modal = document.getElementById("components-reconnect-modal");
+            if (!modal || reloading) return;
+            var c = modal.className || "";
+            if (c.indexOf("components-reconnect-failed") >= 0 || c.indexOf("components-reconnect-rejected") >= 0) {
+                reloading = true;
+                setTimeout(function tryReload() {
+                    // The server back? Reload; else try again a bit later.
+                    fetch(location.href, { method: "HEAD", cache: "no-store" })
+                        .then(function () { location.reload(); })
+                        .catch(function () { setTimeout(tryReload, 10000); });
+                }, 3000);
+            }
+        }
+        new MutationObserver(check).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+    },
+    fullscreen: function () {
+        var el = document.documentElement;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else if (el.requestFullscreen) el.requestFullscreen().catch(function () { });
+    }
+};

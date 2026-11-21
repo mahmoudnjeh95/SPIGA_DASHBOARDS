@@ -31,6 +31,7 @@ public partial class App : Application
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
 
+        ChartHelpers.ScreenTextColor = () => ThemeService.ChartTextColor;
         ThemeService.Apply(settings.Theme);
 
         AppLogger.Log(settings.Provider == DatabaseProvider.SqlServer

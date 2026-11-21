@@ -23,7 +23,10 @@ public static class ChartHelpers
     // ExportService sets this while it builds its charts.
     [ThreadStatic] private static bool _printColors;
 
-    public static SKColor TextColor => _printColors ? new SKColor(0x1B, 0x1F, 0x26) : ThemeService.ChartTextColor;
+    public static SKColor TextColor => _printColors ? new SKColor(0x1B, 0x1F, 0x26) : ScreenTextColor();
+
+    // The screen theme's chart text colour (the kiosk sets it to its ThemeService's).
+    public static Func<SKColor> ScreenTextColor { get; set; } = () => new SKColor(0x1B, 0x1F, 0x26);
 
     public static IDisposable PrintScope()
     {
