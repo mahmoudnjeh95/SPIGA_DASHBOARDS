@@ -14,6 +14,13 @@ window.spigaChart = (function () {
     }
     var ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" };
     function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ESC[c]; }); }
+    // A colour with this opacity (hex or rgb).
+    function fade(c, a) {
+        var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c);
+        if (m) return "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + a + ")";
+        m = /rgba?\(([^,]+),([^,]+),([^,)]+)/.exec(c);
+        return m ? "rgba(" + m[1] + "," + m[2] + "," + m[3] + "," + a + ")" : c;
+    }
     function two(n) { return (n < 10 ? "0" : "") + n; }
     function timeText(ms, withDay) {
         var d = new Date(ms);
@@ -58,6 +65,8 @@ window.spigaChart = (function () {
                 o.type = "line"; o.symbol = "none"; o.silent = true; o.z = 1;
                 o.lineStyle = { color: c, width: 2, type: [7, 5] };
                 o.tooltip = { show: false };
+                // Its name at the end of the line ("Cible 65 %"), as the target lines of the demo.
+                o.endLabel = { show: true, formatter: s.name, color: c, fontWeight: 700, fontSize: 11 };
             } else if (s.kind === "bar") {
                 o.type = "bar"; o.barMaxWidth = spec.big ? 70 : 42; o.barGap = "12%";
                 if (s.stack) { o.stack = s.stack; label.position = "inside"; label.color = "#fff"; label.fontSize = 11; }
@@ -69,8 +78,11 @@ window.spigaChart = (function () {
                 if (o.type === "line") {
                     o.showSymbol = s.data.length <= 60;
                     o.lineStyle = { width: 3, color: c };
-                    if (s.step) o.step = "end";
-                    if (s.kind === "area") o.areaStyle = { opacity: .18 };
+                    if (s.step) o.step = "end"; else o.smooth = 0.3;
+                    o.symbol = "circle";
+                    o.emphasis = { focus: "series", scale: 1.6 };
+                    // Area: fading from the line to the axis.
+                    if (s.kind === "area") o.areaStyle = { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: fade(c, .38) }, { offset: 1, color: fade(c, 0) }]) };
                 }
                 label.position = "top"; o.label = label;
             }
@@ -89,11 +101,13 @@ window.spigaChart = (function () {
                 }
             };
         var byItem = spec.times && spec.series.some(function (s) { return s.kind === "points"; });
+        var hasRef = spec.series.some(function (s) { return s.kind === "ref"; });
+        var zoomable = !!spec.times || (spec.cats && spec.cats.length > 12);
         return {
             animation: !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches),
             useUTC: true, // the times are the plant's wall-clock times, sent as UTC
             textStyle: { fontFamily: font },
-            grid: { left: 8, right: 14, top: 26, bottom: spec.big ? 44 : 6, containLabel: true },
+            grid: { left: 8, right: hasRef ? 64 : 14, top: 26, bottom: spec.big ? 44 : zoomable ? 30 : 6, containLabel: true },
             legend: { show: false },
             tooltip: {
                 trigger: byItem ? "item" : "axis", confine: true,
@@ -108,10 +122,16 @@ window.spigaChart = (function () {
                     }).join("");
                 }
             },
-            dataZoom: spec.big
-                ? [{ type: "inside", filterMode: "none" },
-                   { type: "slider", height: 20, bottom: 8, filterMode: "none", borderColor: line, textStyle: { color: fg3 },
-                     fillerColor: "rgba(127,127,127,.15)", labelFormatter: spec.times ? function (ms) { return timeText(ms, multiDay); } : undefined }]
+            // Zoom: a slider under every chart that has more to show than its
+            // width holds (and in the enlarged view); in a page the wheel
+            // zooms with Ctrl only, so it still scrolls the page.
+            dataZoom: spec.big || zoomable
+                ? [{ type: "inside", filterMode: "none", zoomOnMouseWheel: spec.big ? true : "ctrl", moveOnMouseWheel: false },
+                   { type: "slider", height: spec.big ? 20 : 14, bottom: spec.big ? 8 : 4, filterMode: "none", borderColor: line, textStyle: { color: fg3 },
+                     showDetail: !!spec.big, brushSelect: false,
+                     fillerColor: "rgba(127,127,127,.15)", handleSize: "110%",
+                     dataBackground: { lineStyle: { color: fg3, opacity: .5 }, areaStyle: { color: line } },
+                     labelFormatter: spec.times ? function (ms) { return timeText(ms, multiDay); } : undefined }]
                 : [],
             xAxis: x, yAxis: yAxes, series: series
         };
