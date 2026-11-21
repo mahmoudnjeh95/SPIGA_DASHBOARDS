@@ -304,6 +304,32 @@ public sealed class UiState
 }
 
 // Stacked: the bars of every series piled up (production per weight...).
+// Web, after sign-in (ModeChooser): the whole application, the dashboard
+// alone (with Historique and Arrêts) or the TV screen.
+public enum SpigaMode { App, Dashboard, Tv }
+
+public static class OpenModes
+{
+    // What the account may open after sign-in, by its rights: « Ouvrir SPIGA
+    // Suivi Production », « Ouvrir SPIGA Dashboard », « Ouvrir SPIGA TV »
+    // (the two screens also need the detailed dashboard, the TV over the
+    // whole plant). One only: it opens directly; none: nothing to open.
+    public static List<SpigaMode> For(Actor? actor)
+    {
+        var modes = new List<SpigaMode>();
+        if (actor == null)
+            return modes;
+        if (actor.Can(Perm.OuvrirApplication))
+            modes.Add(SpigaMode.App);
+        var dashboard = NativePages.IsAllowed(actor, NativePage.Dashboard);
+        if (dashboard && actor.Can(Perm.OuvrirDashboard))
+            modes.Add(SpigaMode.Dashboard);
+        if (dashboard && actor.CanEverywhere(Perm.EcranTv))
+            modes.Add(SpigaMode.Tv);
+        return modes;
+    }
+}
+
 public enum ChartKind { Auto, Bars, Stacked, Line, Points, Area }
 
 public sealed record ChartView(ChartKind Kind, IReadOnlySet<string> Hidden);

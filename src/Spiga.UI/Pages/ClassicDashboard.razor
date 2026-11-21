@@ -141,7 +141,11 @@ else
             <span class="tv-title">@(_slides.Count == 0 ? "" : SlideDeck.Label(_slides[_index], NameOf))</span>
             <span class="tv-clock">@Deck.Now.ToString("dd/MM/yyyy  HH:mm")</span>
             <button type="button" class="bar small" onclick="spigaTv.fullscreen()">Plein écran</button>
-            @if (!Session.IsScreen)
+            @if (InKiosk && OnLeave.HasDelegate)
+            {
+                <button type="button" class="bar small" @onclick="OnLeave">@LeaveLabel</button>
+            }
+            else if (!InKiosk)
             {
                 <a class="bar small" href="production/tableau-de-bord">Quitter l'écran TV</a>
             }
@@ -235,8 +239,14 @@ else
     // Écran TV (TvScreen): the same deck full screen, no filters, never locked.
     [Parameter] public bool Tv { get; set; }
 
+    // Shown inside KioskScreen (its own bar leaves the screen): no « Quitter ».
+    [Parameter] public bool InKiosk { get; set; }
+    [Parameter] public EventCallback OnLeave { get; set; }
+    [Parameter] public string LeaveLabel { get; set; } = "Quitter";
+
     private bool Allowed => NativePages.IsAllowed(Session.Actor, NativePage.Dashboard)
-                            && (!Tv || Session.Actor?.CanEverywhere(Perm.EcranTv) == true);
+                            // Inside KioskScreen the mode was already checked (OpenModes, ScreenAccount).
+                            && (!Tv || InKiosk || Session.Actor?.CanEverywhere(Perm.EcranTv) == true);
 
     private static readonly (DashboardPeriod Period, string Label)[] Periods =
     {

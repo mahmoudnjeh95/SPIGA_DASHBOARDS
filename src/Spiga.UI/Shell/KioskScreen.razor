@@ -8,6 +8,7 @@
 @using Spiga.UI.Pages
 @inject IJSRuntime JS
 @inject IDesktopBridge Desktop
+@inject UserSession Session
 
 <main class="tv-view view @(Kiosk ? "kiosk" : "")">
     @if (Kiosk)
@@ -17,12 +18,30 @@
             <span class="sp"></span>
             <button type="button" class="bar small @(_view == View.Dashboard ? "acc" : "")" @onclick="() => _view = View.Dashboard">@Icons.Svg("tableau")Tableau de bord</button>
             <button type="button" class="bar small @(_view == View.History ? "acc" : "")" @onclick="() => _view = View.History">@Icons.Svg("clock")Historique</button>
-            <button type="button" class="bar small @(_view == View.Stops ? "acc" : "")" @onclick="() => _view = View.Stops">@Icons.Svg("arrets")Arrêts</button>
+            @if (NativePages.IsAllowed(Session.Actor, NativePage.Stops))
+            {
+                <button type="button" class="bar small @(_view == View.Stops ? "acc" : "")" @onclick="() => _view = View.Stops">@Icons.Svg("arrets")Arrêts</button>
+            }
             @if (Desktop.IsAvailable)
             {
                 <button type="button" class="bar small" @onclick="() => Desktop.OpenTvScreen()">@Icons.Svg("tv")Écran TV</button>
             }
-            <button type="button" class="bar small" @onclick="OnSignIn">@Icons.Svg("user")Se connecter</button>
+            else if (!Session.IsScreen && OnTv.HasDelegate)
+            {
+                <button type="button" class="bar small" @onclick="OnTv">@Icons.Svg("tv")Écran TV</button>
+            }
+            @if (Session.IsScreen)
+            {
+                <button type="button" class="bar small" @onclick="OnSignIn">@Icons.Svg("user")Se connecter</button>
+            }
+            else
+            {
+                @if (OnApp.HasDelegate)
+                {
+                    <button type="button" class="bar small" @onclick="OnApp">@Icons.Svg("vue-ensemble")Application complète</button>
+                }
+                <button type="button" class="bar small" @onclick="Session.SignOutAsync">@Icons.Svg("logout")Se déconnecter</button>
+            }
         </nav>
     }
     @switch (_view)
@@ -34,7 +53,7 @@
             <Stops />
             break;
         default:
-            <ClassicDashboard Tv="true" />
+            <ClassicDashboard Tv="true" InKiosk="true" OnLeave="OnLeave" LeaveLabel="@LeaveLabel" />
             break;
     }
 </main>
@@ -44,6 +63,15 @@
 
     [Parameter] public bool Kiosk { get; set; }
     [Parameter] public EventCallback OnSignIn { get; set; }
+
+    // Web, signed in (SPIGA Dashboard chosen after sign-in): to the whole
+    // application, or to the TV screen.
+    [Parameter] public EventCallback OnApp { get; set; }
+    [Parameter] public EventCallback OnTv { get; set; }
+
+    // SPIGA TV signed in: the button of its bar (back to the choice, or sign-out).
+    [Parameter] public EventCallback OnLeave { get; set; }
+    [Parameter] public string LeaveLabel { get; set; } = "Quitter";
 
     private View _view = View.Dashboard;
 

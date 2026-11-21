@@ -4,6 +4,10 @@ namespace Spiga.Core.Security;
 // share one module (Maintenance: indicateurs, arrêts, pièces).
 public static class Modules
 {
+    // What an account may open after sign-in: its "voir" is « Ouvrir SPIGA
+    // Suivi Production » (the whole application). Without it, only SPIGA
+    // Dashboard (conditionnement:dashboard) and / or SPIGA TV (conditionnement:tv).
+    public const string Application = "application";
     public const string VueEnsemble = "vue-ensemble";
     public const string Conditionnement = "conditionnement";
     public const string Rendement = "rendement";
@@ -43,6 +47,8 @@ public static class ModuleCatalog
 {
     public static readonly IReadOnlyList<ModuleInfo> All = new[]
     {
+        new ModuleInfo(Modules.Application, "Ouverture", "Administration",
+            "Ce que le compte ouvre après connexion : l'application complète, SPIGA Dashboard, SPIGA TV."),
         new ModuleInfo(Modules.VueEnsemble, "Vue d'ensemble", "Tableaux de bord", "Synthèse usine et points à traiter."),
         new ModuleInfo(Modules.Conditionnement, "Conditionnement", "Production", "TRS, écart de poids, production par machine."),
         new ModuleInfo(Modules.Rendement, "Rendement matière", "Production", "Rendement par secteur et usine."),

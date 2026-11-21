@@ -8,6 +8,7 @@
 @inject AuthService Auth
 @inject ClientInfo Client
 @inject IDesktopBridge Desktop
+@inject NavigationManager Nav
 @inject SpigaDashboards.App.Models.AppSettings StationSettings
 
 <div class="spiga-root" data-theme="@Session.Theme">
@@ -56,6 +57,34 @@
     {
         <LockScreen />
     }
+    else if (OpenModes.For(Session.Actor) is { Count: 0 })
+    {
+        <div class="gate">
+            <div class="gate-card">
+                <Brand />
+                <h1>Aucun écran à ouvrir</h1>
+                <p>Vos rôles ne donnent ni l'application, ni SPIGA Dashboard, ni SPIGA TV. Demandez-les à un administrateur.</p>
+                <button type="button" class="link" @onclick="Session.SignOutAsync">Se déconnecter</button>
+            </div>
+        </div>
+    }
+    else if (_mode == null && !Desktop.IsAvailable && OpenModes.For(Session.Actor) is { Count: > 1 } choice)
+    {
+        <ModeChooser Modes="choice" OnPick="Pick" />
+    }
+    else if (Mode == SpigaMode.Dashboard)
+    {
+        var open = OpenModes.For(Session.Actor);
+        <KioskScreen Kiosk="true"
+                     OnApp="@(open.Contains(SpigaMode.App) ? EventCallback.Factory.Create(this, () => Pick(SpigaMode.App)) : default)"
+                     OnTv="@(open.Contains(SpigaMode.Tv) ? EventCallback.Factory.Create(this, () => Pick(SpigaMode.Tv)) : default)" />
+    }
+    else if (Mode == SpigaMode.Tv)
+    {
+        var several = OpenModes.For(Session.Actor).Count > 1;
+        <KioskScreen OnLeave="@(several ? EventCallback.Factory.Create(this, () => _mode = null) : EventCallback.Factory.Create(this, Session.SignOutAsync))"
+                     LeaveLabel="@(several ? "Changer d'écran" : "Se déconnecter")" />
+    }
     else
     {
         <Router AppAssembly="typeof(Routes).Assembly">
@@ -80,6 +109,25 @@
 
     // Kiosk: the sign-in form was asked for ("Se connecter").
     private bool _signingIn;
+
+    // What was chosen after sign-in (ModeChooser); null = not yet. An
+    // account with one mode only opens it directly (Mode).
+    private SpigaMode? _mode;
+
+    // The desktop application has a shortcut per mode: its own opens the
+    // application when the account may.
+    private SpigaMode Mode
+    {
+        get
+        {
+            if (_mode is { } chosen)
+                return chosen;
+            var open = OpenModes.For(Session.Actor);
+            return Desktop.IsAvailable && open.Contains(SpigaMode.App) ? SpigaMode.App : open.FirstOrDefault();
+        }
+    }
+
+    private void Pick(SpigaMode mode) => _mode = mode;
 
     private bool _ready;
     // The welcome screen comes before the sign-in form, at start-up and
@@ -113,7 +161,10 @@
     private void OnSessionChanged()
     {
         if (_hadActor && Session.Actor == null)
+        {
             _welcomed = false;
+            _mode = null;
+        }
         _hadActor = Session.Actor != null;
         _ = InvokeAsync(async () =>
         {

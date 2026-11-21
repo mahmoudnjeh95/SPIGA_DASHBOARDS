@@ -27,6 +27,11 @@ public static class Perm
 
     public const string TableauDetaille = "conditionnement:tableau";
     public const string EcranTv = "conditionnement:tv";
+
+    // What the account opens after sign-in (ModeChooser): the application,
+    // SPIGA Dashboard, SPIGA TV (EcranTv). One only: it opens directly.
+    public const string OuvrirApplication = "application:voir";
+    public const string OuvrirDashboard = "conditionnement:dashboard";
     // The note shown on every screen of the site: over the whole plant.
     public const string NoteEcran = "conditionnement:note";
     public const string ParametresPoste = "parametres:administrer";
@@ -82,13 +87,17 @@ public static class PermissionCatalog
         void View(string module, string label = "Consulter") => Add(module, "voir", label);
         void Export(string module) => Add(module, "exporter", "Exporter", "Excel / PDF");
 
+        View(Modules.Application, "Ouvrir SPIGA Suivi Production (application complète)");
+
         View(Modules.VueEnsemble); Export(Modules.VueEnsemble);
         Add(Modules.VueEnsemble, "equipes", "Couvrir plusieurs équipes",
             "Responsables. Sans ce droit, le compte est rattaché à une seule équipe et ne voit que ses postes");
 
         View(Modules.Conditionnement); Export(Modules.Conditionnement);
         Add(Modules.Conditionnement, "tableau", "Tableau de bord détaillé", "Diapositives, historique, synthèse secteur (application poste)");
-        Add(Modules.Conditionnement, "tv", "Lancer l'écran TV");
+        Add(Modules.Conditionnement, "dashboard", "Ouvrir SPIGA Dashboard",
+            "Le tableau de bord seul, avec historique et arrêts ; avec « Tableau de bord détaillé »");
+        Add(Modules.Conditionnement, "tv", "Ouvrir SPIGA TV (écran TV)", "Les diapositives seules, plein écran ; avec « Tableau de bord détaillé », sur toute l'usine");
         Add(Modules.Conditionnement, "note", "Modifier la note de l'écran", "Bandeau affiché sur tous les écrans du site : sur toute l'usine");
 
         View(Modules.Rendement); Export(Modules.Rendement);

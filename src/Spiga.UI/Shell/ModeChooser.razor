@@ -1,0 +1,44 @@
+@* Web, right after sign-in: the three ways to use SPIGA, as the three
+   shortcuts of the desktop installation. Only those the account may open
+   (OpenModes); Routes opens a lone one directly. *@
+@inject UserSession Session
+
+<div class="gate">
+    <div class="gate-card mode-card">
+        <Brand />
+        <h1>Bonjour @Session.Actor?.DisplayName</h1>
+        <p>Que voulez-vous ouvrir ?</p>
+        <div class="mode-list">
+            @if (Modes.Contains(SpigaMode.App))
+            {
+                <button type="button" class="mode-opt" @onclick="() => OnPick.InvokeAsync(SpigaMode.App)">
+                    <span class="mode-ico">@Icons.Svg("vue-ensemble")</span>
+                    <b>SPIGA Suivi Production</b>
+                    <small>L'application complète : saisies, maintenance, personnel, tableaux de bord.</small>
+                </button>
+            }
+            @if (Modes.Contains(SpigaMode.Dashboard))
+            {
+                <button type="button" class="mode-opt" @onclick="() => OnPick.InvokeAsync(SpigaMode.Dashboard)">
+                    <span class="mode-ico">@Icons.Svg("tableau")</span>
+                    <b>SPIGA Dashboard</b>
+                    <small>Le tableau de bord seul, avec l'historique et les arrêts.</small>
+                </button>
+            }
+            @if (Modes.Contains(SpigaMode.Tv))
+            {
+                <button type="button" class="mode-opt" @onclick="() => OnPick.InvokeAsync(SpigaMode.Tv)">
+                    <span class="mode-ico">@Icons.Svg("tv")</span>
+                    <b>SPIGA TV</b>
+                    <small>Les diapositives seules, en plein écran, pour l'écran du hall.</small>
+                </button>
+            }
+        </div>
+        <button type="button" class="link" @onclick="Session.SignOutAsync">Se déconnecter</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<SpigaMode> OnPick { get; set; }
+    [Parameter] public IReadOnlyList<SpigaMode> Modes { get; set; } = Array.Empty<SpigaMode>();
+}

@@ -71,4 +71,35 @@ public class DashboardWebTests
         Assert.False(NativePages.IsAllowed(screen, NativePage.StopQualification));
         Assert.False(screen.Can(Perm.ComptesGerer));
     }
+
+    private static Actor Account(params string[] permissions)
+    {
+        var role = new Role { Code = "r", Name = "R", Permissions = new PermissionSet(permissions) };
+        return new Actor(new AppUser { Id = 9, Login = "u", DisplayName = "U" },
+            new[] { new Actor.Grant(role, new RoleAssignment { RoleName = "R", Scope = DataScope.Everything }) });
+    }
+
+    [Fact]
+    public void Each_account_opens_what_its_rights_give()
+    {
+        var screens = new[] { Perm.View(Modules.Conditionnement), Perm.TableauDetaille };
+        Assert.Equal(new[] { SpigaMode.Tv }, OpenModes.For(Account(screens.Append(Perm.EcranTv).ToArray())));
+        Assert.Equal(new[] { SpigaMode.Dashboard }, OpenModes.For(Account(screens.Append(Perm.OuvrirDashboard).ToArray())));
+        Assert.Equal(new[] { SpigaMode.App, SpigaMode.Dashboard },
+            OpenModes.For(Account(screens.Append(Perm.OuvrirApplication).Append(Perm.OuvrirDashboard).ToArray())));
+        Assert.Equal(new[] { SpigaMode.App, SpigaMode.Dashboard, SpigaMode.Tv },
+            OpenModes.For(Account(screens.Concat(new[] { Perm.OuvrirApplication, Perm.OuvrirDashboard, Perm.EcranTv }).ToArray())));
+        // The screens need the detailed dashboard to show anything.
+        Assert.Empty(OpenModes.For(Account(Perm.EcranTv, Perm.OuvrirDashboard)));
+    }
+
+    [Fact]
+    public void The_role_templates_keep_the_application_and_the_screens_open_alone()
+    {
+        Assert.All(RoleTemplates.All.Where(t => !t.Code.StartsWith("ecran-")), t => Assert.Contains(Perm.OuvrirApplication, t.Permissions));
+        var tv = RoleTemplates.All.Single(t => t.Code == "ecran-tv");
+        Assert.Equal(new[] { SpigaMode.Tv }, OpenModes.For(Account(tv.Permissions)));
+        var dashboard = RoleTemplates.All.Single(t => t.Code == "ecran-dashboard");
+        Assert.Equal(new[] { SpigaMode.Dashboard }, OpenModes.For(Account(dashboard.Permissions)));
+    }
 }

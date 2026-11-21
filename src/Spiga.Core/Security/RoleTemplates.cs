@@ -19,7 +19,7 @@ public static class RoleTemplates
 
     public sealed record Template(string Code, string Name, string Description, string[] Permissions, string[] Assignable);
 
-    public static readonly IReadOnlyList<Template> All = new Template[]
+    public static readonly IReadOnlyList<Template> All = WithOpening(new Template[]
     {
         new("direction", "Direction", "Consultation de toute l'usine et exports.",
             Views(Modules.VueEnsemble, Modules.Conditionnement, Modules.Rendement, Modules.Silos, Modules.Dechets, Modules.Qualite,
@@ -61,7 +61,25 @@ public static class RoleTemplates
             new[] { Perm.View(Modules.VueEnsemble), Perm.EquipesMultiples, Perm.View(Modules.Rh), "rh:exporter", Perm.View(Modules.RhNominatif), "rh-nominatif:exporter",
                 Perm.Polyvalence, Perm.PointageVoir, Perm.View(Modules.Referentiels) },
             Array.Empty<string>()),
-    };
+        // Screens signed in with an account of their own (web or desktop):
+        // they open their one view directly, nothing else.
+        new("ecran-dashboard", "Écran tableau de bord", "Ouvre SPIGA Dashboard seul : tableau de bord, historique et arrêts de toute l'usine.",
+            new[] { Perm.View(Modules.Conditionnement), Perm.TableauDetaille, Perm.OuvrirDashboard, "conditionnement:exporter", Perm.View(Modules.Maintenance) },
+            Array.Empty<string>()),
+        new("ecran-tv", "Écran TV", "Ouvre SPIGA TV seul : les diapositives en plein écran (périmètre : toute l'usine).",
+            new[] { Perm.View(Modules.Conditionnement), Perm.TableauDetaille, Perm.EcranTv },
+            Array.Empty<string>()),
+    });
+
+    // Every template but the screens opens the application; those with the
+    // detailed dashboard open SPIGA Dashboard too.
+    private static Template[] WithOpening(Template[] templates)
+        => templates.Select(t => t.Code.StartsWith("ecran-", StringComparison.Ordinal) ? t : t with
+        {
+            Permissions = t.Permissions.Append(Perm.OuvrirApplication)
+                .Concat(t.Permissions.Contains(Perm.TableauDetaille) ? new[] { Perm.OuvrirDashboard } : Array.Empty<string>())
+                .ToArray(),
+        }).ToArray();
 
     private static IEnumerable<string> Views(params string[] modules) => modules.Select(Perm.View);
 
