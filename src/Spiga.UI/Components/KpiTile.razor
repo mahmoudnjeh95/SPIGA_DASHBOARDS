@@ -10,7 +10,16 @@
 <div class="card kpi @(Missing ? "na" : "") @(Flash != null ? (FlashGood ? "flash-good" : "flash-bad") : "")" @key="FlashKey">
     <span class="l">@Label @if (!string.IsNullOrEmpty(Hint)) { <small>(@Hint)</small> }</span>
     <div class="kv">
-        <span class="v @Css">@Value</span>
+        @if (Parts is { } parts)
+        {
+            // Several figures ("501,2 g · 1 003,5 g"): each one whole, the line
+            // breaks only between them.
+            <span class="v @Css">@for (var i = 0; i < parts.Length; i++) { if (i > 0) { <text> · </text> } <span class="vi">@parts[i]</span> }</span>
+        }
+        else
+        {
+            <span class="v @Css">@Value</span>
+        }
         @if (Trend is { } t)
         {
             <span class="kpi-trend @(t.Direction > 0 ? "up" : t.Direction < 0 ? "down" : "flat")" title="@t.Text">
@@ -44,7 +53,14 @@
             </svg>
         }
     </div>
-    <span class="s">@Sub</span>
+    @if (ChildContent != null)
+    {
+        <span class="s parts">@ChildContent</span>
+    }
+    else
+    {
+        <span class="s">@Sub</span>
+    }
     @if (Flash != null)
     {
         <span class="kpi-flash">@Flash</span>
@@ -58,6 +74,8 @@
     [Parameter] public string? Css { get; set; }
     [Parameter] public string? Sub { get; set; }
     [Parameter] public bool Missing { get; set; }
+    // Under the figure instead of Sub: figures of their own (TRS: D · P · Q).
+    [Parameter] public RenderFragment? ChildContent { get; set; }
 
     [Parameter] public double? Ring { get; set; }
     [Parameter] public double? RingTarget { get; set; }
@@ -67,6 +85,11 @@
 
     // A new flash restarts its animation (the tile is drawn again).
     private string FlashKey => Flash == null ? "" : Flash + FlashGood;
+
+    // A list value (Css "list") with several figures, split on its " · ".
+    private string[]? Parts => Css?.Split(' ').Contains("list") == true && Value.Contains(" · ")
+        ? Value.Split(" · ")
+        : null;
 
     private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
 

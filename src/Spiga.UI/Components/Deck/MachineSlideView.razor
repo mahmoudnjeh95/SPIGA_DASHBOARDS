@@ -66,14 +66,15 @@
 
 <div class="row dk-kpis">
     <KpiTile Label="TRS" Hint="@($"cible {m.TrsTarget:0} %")" Value="@Fmt.Pct(m.Kpis.TrsPercent)" Css="@Fmt.Css(m.TrsSeverity)"
-             Ring="@m.Kpis.TrsPercent" RingTarget="@m.TrsTarget" Trend="@m.TrsTrend" Flash="@_flash["trs"].Text" FlashGood="@_flash["trs"].Good" />
-    <KpiTile Label="Disponibilité" Value="@Fmt.Pct(m.Kpis.AvailabilityPercent)" Css="@Fmt.Css(Bands.Availability(m.Kpis.AvailabilityPercent))" />
-    <KpiTile Label="Performance" Value="@Fmt.Pct(m.Kpis.PerformancePercent)" Css="@Fmt.Css(Bands.Performance(m.Kpis.PerformancePercent))" />
-    <KpiTile Label="Qualité" Value="@Fmt.Pct(m.Kpis.QualityPercent)" Css="@Fmt.Css(Bands.Quality(m.Kpis.QualityPercent))"
-             Flash="@_flash["quality"].Text" FlashGood="@_flash["quality"].Good" />
+             Ring="@m.Kpis.TrsPercent" RingTarget="@m.TrsTarget" Trend="@m.TrsTrend" Flash="@_flash["trs"].Text" FlashGood="@_flash["trs"].Good">
+        @* Disponibilité · Performance · Qualité under the TRS, each in its band's colour *@
+        <span title="Disponibilité">D <b class="@Fmt.Css(Bands.Availability(m.Kpis.AvailabilityPercent))">@Fmt.Pct(m.Kpis.AvailabilityPercent)</b></span>
+        <span title="Performance">· P <b class="@Fmt.Css(Bands.Performance(m.Kpis.PerformancePercent))">@Fmt.Pct(m.Kpis.PerformancePercent)</b></span>
+        <span title="Qualité">· Q <b class="@Fmt.Css(Bands.Quality(m.Kpis.QualityPercent))">@Fmt.Pct(m.Kpis.QualityPercent)</b></span>
+    </KpiTile>
     <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(m.Kpis.SpeedBagsPerMinute, 1)" Sub="@($"max {Fmt.Num(m.Kpis.MaxSpeedBagsPerMinute, 1)}")"
              Trend="@m.SpeedTrend" Flash="@_flash["speed"].Text" FlashGood="@_flash["speed"].Good" />
-    <KpiTile Label="Poids moyen" Value="@KpiCalculator.FormatAverages(m.Kpis.Weights)" Css="@(m.WeightOnTarget ? "gold txt" : "txt")"
+    <KpiTile Label="Poids moyen" Value="@KpiCalculator.FormatAverages(m.Kpis.Weights)" Css="@(m.WeightOnTarget ? "gold txt list" : "txt list")"
              Sub="@(m.Kpis.Weights.Count == 0 ? "Pas de données de poids" : "Cible " + string.Join(" · ", m.Kpis.Weights.Select(w => $"{w.TargetWeight:0} g")))"
              Trend="@(m.WeightOnTarget ? null : m.WeightTrend)" />
     <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(m.Kpis.WeightDeviationPercent)" Css="@Fmt.Css(m.WeightSeverity)" Sub="@m.Kpis.GiveawayLabel"
@@ -89,6 +90,7 @@
         <section class="card">@Chart($"Production nette {p.Grain}, par poids", "prod", p.Production)</section>
         <section class="card">@Chart($"Écart de poids {p.Grain} (% de la cible)", "dev", p.Deviation)</section>
     </div>
+    @WeightTable(m.Kpis.Weights)
     <section class="card">
         <div class="card-head"><h2>Équipes <small>meilleur TRS d'abord</small></h2></div>
         @if (p.Teams.Count == 0)
@@ -126,6 +128,7 @@ else if (m.Charts is { } c)
         <section class="card">@Chart("Vitesse moyenne / max (sacs/min)", "speed-h", c.Speed)</section>
         <section class="card">@Chart("Poids moyen / cible", "weight-h", c.Weight)</section>
     </div>
+    @WeightTable(m.Kpis.Weights)
     @if (Slide.Previous.Count > 0)
     {
         <section class="card">
@@ -179,6 +182,36 @@ else if (m.Charts is { } c)
             ["deviation"] = TileFlash.Of(Ui, scope + "deviation", m.Kpis.WeightDeviationPercent, 0.05, 0, d => d.ToString("+0.00;-0.00", Fmt.French) + " pt"),
         };
     }
+
+    // Production par poids (kiosk): one row per weight the machine ran
+    // (500 g, 800 g, 1000 g...), biggest production first.
+    private RenderFragment WeightTable(IReadOnlyList<WeightKpi> weights) => __builder =>
+    {
+        if (weights.Count == 0)
+            return;
+        <section class="card dk-weights">
+            <div class="card-head"><h2>Production par poids</h2></div>
+            <div class="tbl-wrap">
+                <table class="t">
+                    <thead><tr><th>Poids / produit</th><th class="r">Sacs</th><th class="r">Production</th><th class="r">Poids moyen</th><th class="r">Écart</th><th class="r">Surpoids</th><th class="r">TRS</th></tr></thead>
+                    <tbody>
+                        @foreach (var w in weights.OrderByDescending(w => w.ProductionKg))
+                        {
+                            <tr>
+                                <td><b>@($"{w.TargetWeight:0} g")</b> <small>@w.ProductName</small></td>
+                                <td class="r">@Fmt.Num(w.TotalBags)</td>
+                                <td class="r">@KpiCalculator.FormatMass(w.ProductionKg)</td>
+                                <td class="r">@(w.AvgWeight is { } a ? a.ToString("N1", Fmt.French) + " g" : Fmt.Missing)</td>
+                                <td class="r"><span class="chip @Fmt.Css(w.DeviationSeverity)">@Fmt.Grams(w.DeviationGrams)</span> <small>@Fmt.SignedPct(w.DeviationPercent)</small></td>
+                                <td class="r">@w.GiveawayText</td>
+                                <td class="r"><span class="chip @Fmt.Css(w.TrsSeverity)">@Fmt.Pct(w.TrsPercent)</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    };
 
     private RenderFragment Chart(string title, string key, DeckChart chart) => __builder =>
     {

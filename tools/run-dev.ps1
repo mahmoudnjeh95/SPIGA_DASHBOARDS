@@ -41,6 +41,10 @@ c.commit()
 
 if ($Web) {
     if (-not $NoBuild) { dotnet build src\Spiga.Web | Out-Host }
+    # Development: the stylesheets and scripts of Spiga.UI are served from its
+    # wwwroot (without it _content/Spiga.UI/* answer 404 and the browser keeps
+    # an old cached copy).
+    $env:ASPNETCORE_ENVIRONMENT = 'Development'
     $app = Start-Process dotnet -ArgumentList 'run', '--no-build', '--project', 'src\Spiga.Web', '--urls', 'http://localhost:5000' -PassThru
     Start-Process 'http://localhost:5000'
 } else {

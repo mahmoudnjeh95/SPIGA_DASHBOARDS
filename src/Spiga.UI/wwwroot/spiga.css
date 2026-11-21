@@ -1508,6 +1508,16 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 .kpi { position: relative; }
 .kv { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .kv .v { flex: 0 1 auto; min-width: 0; }
+/* no room beside the figure: the trend goes under it, never over it */
+.kpi > .kv { flex-wrap: wrap; row-gap: 2px; }
+.kpi > .kv > .v { min-width: auto; max-width: 100%; }
+/* figures under the main one (TRS: D · P · Q), each whole, in its band's colour */
+.kpi .s.parts { font-size: 14px; font-weight: 600; display: flex; flex-wrap: wrap; column-gap: 6px; }
+.kpi .s.parts > span { white-space: nowrap; }
+.kpi .s.parts b { font-weight: 800; }
+/* a list of figures (Poids moyen): never cut inside a figure, only between them */
+.kpi .v.list { overflow-wrap: normal; }
+.kpi .v.list:not(:has(.vi)), .kpi .v.list .vi { white-space: nowrap; }
 /* figures on one line, a little smaller when the tile is narrow */
 .dk-kpis .kpi .v:not(.txt) { white-space: nowrap; font-size: clamp(24px, 2.1vw, 36px); }
 .dk-kpis .kpi:has(.kpi-ring) { flex-basis: 200px; }
