@@ -12,7 +12,7 @@ the last snapshot (the PC was off, the script was not running), up to
 --max-gap hours; beyond that, regenerate the history.
 
 Run from the repo root (Ctrl+C stops it):
-    python database/live_seed.py [--cadence 60] [--seed N] [--while-pid PID [PID ...]]
+    python database/live_seed.py [--cadence 60] [--seed N] [--db FILE] [--while-pid PID [PID ...]]
 --while-pid: stop when all these processes have exited (run-dev.ps1 passes the app's).
 """
 import argparse
@@ -184,12 +184,16 @@ def alive_one(pid):
 
 
 def main():
+    global DB_PATH
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cadence", type=int, default=60, metavar="SEC", help="seconds between snapshots (default 60)")
     ap.add_argument("--max-gap", type=float, default=48, metavar="H", help="longest gap filled at start-up (hours)")
     ap.add_argument("--seed", type=int, default=None, help="random seed (default: different each run)")
+    ap.add_argument("--db", default=DB_PATH, metavar="FILE",
+                    help="database to keep alive (default: database/spiga_dashboards.db; e.g. the one beside an installed app)")
     ap.add_argument("--while-pid", type=int, nargs="+", default=None, metavar="PID", help="stop when these processes have all exited")
     args = ap.parse_args()
+    DB_PATH = args.db
     if not os.path.exists(DB_PATH):
         raise SystemExit(f"{DB_PATH} not found: run generate_seed_data.py --synthetic 30 first")
 
