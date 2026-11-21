@@ -153,10 +153,7 @@
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
         if (path == "compte")
             return "Usine › <b>Mon compte</b>";
-        // A tab of a screen (saisie/dechets/produit) belongs to its menu entry.
-        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path)
-                   ?? ModuleCatalog.Navigation.Where(n => n.Route.Length > 0 && path.StartsWith(n.Route + "/"))
-                                              .MaxBy(n => n.Route.Length);
+        var item = ModuleCatalog.Navigation.FirstOrDefault(n => n.Route == path);
         if (item == null)
             return "Usine";
         var label = System.Net.WebUtility.HtmlEncode(item.Label);
