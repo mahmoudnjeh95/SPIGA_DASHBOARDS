@@ -14,7 +14,7 @@ public class MachineRunTile
     public SlotKind? PlannedSlot { get; init; }
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
-    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    public string? PlannedLabel => SlideText.Planned(PlannedSlot);
     public string RunStateLabel => PlannedLabel ?? (!IsConnected ? "Pas de données" : BeltRunning ? "En marche" : "À l'arrêt");
 
     // The line's stop in progress, and its cause pill under the name: only
@@ -39,18 +39,6 @@ public class MachineRunTile
     public string CauseDuration => Stop == null ? "" : "depuis " + Stop.DurationText;
     public string CauseReturn => Stop?.ShortReturnText is { Length: > 0 } text ? "  ·  " + text : "";
     public bool IsOverdue => Stop?.IsOverdue ?? false;
-}
-
-// Banner of a run-state photo while the line is in a slot of the
-// Planification board (grey for a planned stop, yellow for a maintenance).
-public static class RunStateText
-{
-    public static string? Planned(SlotKind? slot) => slot switch
-    {
-        SlotKind.PlannedStop => "ARRÊT PLANIFIÉ",
-        SlotKind.Maintenance => "MAINTENANCE",
-        _ => null,
-    };
 }
 
 // First Cumul slide: nothing but the run-state photo of every machine,

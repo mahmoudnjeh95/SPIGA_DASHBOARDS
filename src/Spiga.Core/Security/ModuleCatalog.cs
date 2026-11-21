@@ -74,7 +74,7 @@ public static class ModuleCatalog
 
         new NavItem("conditionnement", "Conditionnement", "Production", Modules.Conditionnement, "production/conditionnement", true),
         new NavItem("tableau", "Tableau de bord", "Production", Modules.Conditionnement, "production/tableau-de-bord", true,
-            Permission: Perm.TableauDetaille, DesktopOnly: true),
+            Permission: Perm.TableauDetaille),
         new NavItem("rendement", "Rendement matière", "Production", Modules.Rendement, "module/rendement", false,
             "Rendement par secteur et usine : matière versée, en-cours, semi-fini en silo, produit fini.",
             "Période, secteur", "Nouveau (cahier des charges 4.9)"),

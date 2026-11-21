@@ -29,7 +29,7 @@ public class MachinePeriodSlideViewModel
     public SlotKind? PlannedSlot { get; init; }
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
-    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    public string? PlannedLabel => SlideText.Planned(PlannedSlot);
     // The line's stop in progress, if any (scrolling bar under the machine
     // photo, whatever the period).
     public OngoingStop? OngoingStop { get; init; }

@@ -262,6 +262,7 @@ public static class SpigaServices
         services.AddScoped<StopListService>();
         services.AddScoped<StopQualificationService>();
         services.AddScoped<PlanningBoardService>();
+        services.AddScoped<DashboardDeckService>();
         services.AddScoped<StationSettingsEditor>();
         services.AddScoped<UiState>();
         services.TryAddScoped<ISessionStore, NoSessionStore>();

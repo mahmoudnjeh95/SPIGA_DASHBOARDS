@@ -20,7 +20,7 @@ public class MachineDaySlideViewModel
     public SlotKind? PlannedSlot { get; init; }
     public bool IsPlannedStop => PlannedSlot == SlotKind.PlannedStop;
     public bool IsMaintenance => PlannedSlot == SlotKind.Maintenance;
-    public string? PlannedLabel => RunStateText.Planned(PlannedSlot);
+    public string? PlannedLabel => SlideText.Planned(PlannedSlot);
     // The line's stop in progress, if any.
     public OngoingStop? OngoingStop { get; init; }
     // A planned stop / maintenance going on now: one big panel instead of the
@@ -115,24 +115,6 @@ public class MachineDaySlideViewModel
         };
     }
 
-    // Same French number format as the tiles (WPF bindings use fr-FR, see App).
-    private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
-
     internal static string FormatProduction(ProductionInfo? production, IReadOnlyCollection<ProductionBucket> lots)
-    {
-        if (production == null)
-            return "Aucun relevé reçu de la machine depuis 6 h";
-
-        var state = production.IsTerminated ? "Terminée" : "En cours";
-        // Lots of this production in the loaded period first (real lot
-        // averages); otherwise Stiavelli's running average, if it looks sane.
-        var avgWeight = KpiCalculator.ProductionAverageWeight(lots, production.ProductionId, production.TargetNetWeight) ?? production.AvgWeight;
-        var weight = avgWeight is { } avg ? string.Create(French, $"  ·  moyen {avg:0.0} g") : "";
-        var quality = production.TotalBags > 0 ? string.Create(French, $"{production.QualityPercent:0.0} %") : "— %";
-        var since = production.StartTime.Date == DateTime.Now.Date
-            ? $"depuis {production.StartTime:HH:mm}"
-            : $"depuis le {production.StartTime:dd/MM HH:mm}";
-        return string.Create(French, $"{state} : {production.ProductName} {production.TargetNetWeight:0} g  ·  {since}  ·  ") +
-               string.Create(French, $"{production.TotalBags:N0} sacs  ·  {quality} conformes{weight}").Replace(' ', ' ');
-    }
+        => SlideText.Production(production, lots);
 }

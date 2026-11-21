@@ -1,3 +1,416 @@
 @page "/production/tableau-de-bord"
+@inherits SpigaPage
+@inject DashboardDeckService Deck
+@inject IDesktopBridge Desktop
+@implements IDisposable
+@using SpigaDashboards.App.ViewModels
+@using SpigaDashboards.App.ViewModels.Slides
 
-<NativePagePlaceholder Page="NativePage.Dashboard" Group="Production" Title="Le tableau de bord détaillé" />
+@* Tableau de bord détaillé: the slides of the kiosk dashboard, rotated, with
+   its period and filters. The desktop application still shows its WPF
+   dashboard here (NativePages.IsWpf) until the web one is complete. *@
+@if (Desktop.IsAvailable && NativePages.IsWpf(NativePage.Dashboard) || !NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+{
+    <NativePagePlaceholder Page="NativePage.Dashboard" Group="Production" Title="Le tableau de bord détaillé" />
+}
+else
+{
+    <div class="head">
+        <div>
+            <span class="pre">Production</span><h1>Tableau de bord détaillé</h1>
+            <p>@(_slides.Count == 0 ? "" : $"{_index + 1} / {_slides.Count} · {SlideDeck.Label(_slides[_index], NameOf)}")</p>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="f">
+            <span>Période</span>
+            <div class="segs" role="group" aria-label="Période">
+                @foreach (var (p, label) in Periods)
+                {
+                    <button type="button" class="seg @(_period == p ? "on" : "")" aria-pressed="@(_period == p)" @onclick="() => SetPeriodAsync(p)">@label</button>
+                }
+            </div>
+            @if (_period == DashboardPeriod.Custom)
+            {
+                <div class="q-inline">
+                    <input type="date" aria-label="Du" value="@_from.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, true)" />
+                    <input type="date" aria-label="Au" value="@_to.ToString("yyyy-MM-dd")" @onchange="e => SetDatesAsync(e, false)" />
+                </div>
+            }
+        </div>
+        <div class="f">
+            <span>Secteur</span>
+            <div class="segs" role="group" aria-label="Secteur">
+                <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => SetSectorAsync(null)">Tous</button>
+                @foreach (var s in _machines.Select(m => m.Sector).Distinct())
+                {
+                    <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => SetSectorAsync(s)">@Machine.SectorLabel(s)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            <span>Machines</span>
+            <details class="pb-lines">
+                <summary class="bar small">@MachinesLabel ▾</summary>
+                <div class="pb-lines-pop card">
+                    <div class="pb-lines-all"><button type="button" class="link" @onclick="AllMachinesAsync">Toutes</button></div>
+                    @foreach (var m in SectorMachines)
+                    {
+                        <label class="check"><input type="checkbox" checked="@(!_unticked.Contains(m.MachineId))" @onchange="e => TickMachineAsync(m.MachineId, e.Value is true)" /> @m.MachineName</label>
+                    }
+                </div>
+            </details>
+        </div>
+        <div class="f">
+            <span>Poste</span>
+            <div class="segs" role="group" aria-label="Poste">
+                <button type="button" class="seg @(_shift == null ? "on" : "")" @onclick="() => SetShiftAsync(null)">Tous</button>
+                @foreach (var shift in Shifts.All)
+                {
+                    <button type="button" class="seg @(_shift == shift ? "on" : "")" @onclick="() => SetShiftAsync(shift)">@Shifts.Label(shift)</button>
+                }
+            </div>
+        </div>
+        <div class="f">
+            @if (Actor.Team is { } myTeam)
+            {
+                <span>Votre équipe</span>
+                <span class="chip acc" style="align-self:flex-start;margin-top:5px" title="Les chiffres ne comptent que les postes de votre équipe">@myTeam</span>
+            }
+            else
+            {
+                <label for="dk-team">Équipe</label>
+                <select id="dk-team" value="@(_team ?? "")" @onchange="SetTeamAsync">
+                    <option value="">Toutes</option>
+                    @foreach (var t in Deck.Teams)
+                    {
+                        <option value="@t">@t</option>
+                    }
+                </select>
+            }
+        </div>
+        <div class="f">
+            <label for="dk-weight">Poids</label>
+            <select id="dk-weight" value="@(_weight?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetWeightAsync">
+                <option value="">Tous</option>
+                @foreach (var w in Deck.Weights)
+                {
+                    <option value="@w.ToString(CultureInfo.InvariantCulture)">@w.ToString("0.##", Fmt.French) g</option>
+                }
+            </select>
+        </div>
+        <span class="sp"></span>
+        @if (!Filter.IsEmpty || _period != DashboardPeriod.Day)
+        {
+            <button type="button" class="link" @onclick="ResetAsync">Réinitialiser</button>
+        }
+    </div>
+
+    <div class="dk-nav">
+        <button type="button" class="bar small" title="Diapositive précédente" aria-label="Précédente" @onclick="() => StepAsync(-1)" disabled="@(_slides.Count == 0)">‹</button>
+        <button type="button" class="bar small" title="@(_paused ? "Reprendre la rotation" : "Mettre la rotation en pause")" @onclick="TogglePause" disabled="@(_slides.Count == 0)">@(_paused ? "▶ Reprendre" : "⏸ Pause")</button>
+        <button type="button" class="bar small" title="Diapositive suivante" aria-label="Suivante" @onclick="() => StepAsync(1)" disabled="@(_slides.Count == 0)">›</button>
+        <div class="dk-timer" title="@(_paused ? "Rotation en pause" : $"Diapositive suivante dans {Math.Max(0, (int)Math.Ceiling(_seconds - _elapsed))} s")">
+            <i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i>
+        </div>
+        <div class="dk-dots">
+            @for (var i = 0; i < _slides.Count; i++)
+            {
+                var n = i;
+                <button type="button" class="dk-dot @(n == _index ? "on" : "")" title="@SlideDeck.Label(_slides[n], NameOf)" aria-label="@SlideDeck.Label(_slides[n], NameOf)" @onclick="() => GoAsync(n)"></button>
+            }
+        </div>
+    </div>
+
+    <Flash Error="@Error" Info="@Info" />
+
+    @if (_slides.Count == 0 && !_loading)
+    {
+        <div class="card"><p class="empty">Aucune diapositive pour ces filtres.</p></div>
+    }
+    else if (_content == null)
+    {
+        @if (_loading)
+        {
+            <Loader Text="Chargement de la diapositive…" />
+        }
+    }
+    else
+    {
+        <div class="stats-body dk-slide @(_loading ? "stale" : "")" aria-busy="@_loading" @key="_contentKey">
+            @switch (_content)
+            {
+                case MachineSlide machine:
+                    <MachineSlideView Slide="machine" />
+                    break;
+                case string pending:
+                    <div class="card"><h2>@pending</h2><p class="empty">Cette diapositive arrive dans la version web : le tableau de bord de l'application l'affiche déjà.</p></div>
+                    break;
+            }
+        </div>
+    }
+}
+
+@code {
+    private static readonly (DashboardPeriod Period, string Label)[] Periods =
+    {
+        (DashboardPeriod.Day, "Aujourd'hui"), (DashboardPeriod.PreviousShift, "Poste préc."), (DashboardPeriod.Yesterday, "Hier"),
+        (DashboardPeriod.Week, "Semaine"), (DashboardPeriod.Month, "Mois"), (DashboardPeriod.ThreeMonths, "3 mois"), (DashboardPeriod.Custom, "Dates…"),
+    };
+
+    private DashboardPeriod _period = DashboardPeriod.Day;
+    private DateTime _from;
+    private DateTime _to;
+    private string? _sector;
+    private readonly HashSet<string> _unticked = new(StringComparer.OrdinalIgnoreCase);
+    private int? _shift;
+    private string? _team;
+    private double? _weight;
+
+    private List<Machine> _machines = new();
+    private List<SlideDescriptor> _slides = new();
+    private int _index;
+    private object? _content;
+    private string _contentKey = "";
+    private bool _loading;
+    private bool _paused;
+    private double _seconds;
+    private double _elapsed;
+    private int _version;
+    private CancellationTokenSource? _reading;
+    private CancellationTokenSource? _life;
+    private DateTime _loadedAt;
+
+    private IEnumerable<Machine> SectorMachines => _machines.Where(m => _sector == null || m.Sector == _sector);
+
+    private DashboardFilter Filter
+    {
+        get
+        {
+            var shown = SectorMachines.ToList();
+            var ticked = shown.Where(m => !_unticked.Contains(m.MachineId)).ToList();
+            var all = ticked.Count == shown.Count;
+            return new DashboardFilter
+            {
+                Sector = _sector,
+                MachineIds = all ? Array.Empty<string>() : ticked.Select(m => m.MachineId).ToList(),
+                MachineNames = all ? Array.Empty<string>() : ticked.Select(m => m.MachineName).ToList(),
+                ShiftId = _shift,
+                Team = _team,
+                TargetWeight = _weight,
+            };
+        }
+    }
+
+    private string MachinesLabel
+    {
+        get
+        {
+            var shown = SectorMachines.ToList();
+            var ticked = shown.Where(m => !_unticked.Contains(m.MachineId)).Select(m => m.MachineName).ToList();
+            return ticked.Count == shown.Count ? "Toutes" : ticked.Count == 0 ? "Aucune" : ticked.Count <= 2 ? string.Join(", ", ticked) : $"{ticked.Count} machines";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Desktop.IsAvailable && NativePages.IsWpf(NativePage.Dashboard) || !NativePages.IsAllowed(Session.Actor, NativePage.Dashboard))
+            return;
+        var today = Deck.Now.Date;
+        (_from, _to) = (today.AddDays(-7), today);
+        await Run(async () => _machines = await Deck.MachinesAsync(Actor));
+        Rebuild();
+        _life = new CancellationTokenSource();
+        _ = TickAsync(_life.Token);
+        await ShowAsync();
+    }
+
+    public void Dispose()
+    {
+        _life?.Cancel();
+        _life?.Dispose();
+        _reading?.Cancel();
+        _reading?.Dispose();
+    }
+
+    // The deck again for the filters (its shape follows the sector / machines).
+    private void Rebuild()
+    {
+        var key = _slides.Count > _index ? _slides[_index].Key : null;
+        _slides = Deck.Deck(_machines, Filter);
+        _index = Math.Max(0, _slides.FindIndex(s => s.Key == key));
+    }
+
+    // Rotation: a slide stays its duration (Paramètres > Affichage), the data
+    // of the slide shown is read again every refresh interval.
+    private async Task TickAsync(CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop))
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (_slides.Count == 0 || _loading)
+                        return;
+                    if (!_paused)
+                        _elapsed += 1;
+                    if (!_paused && _elapsed >= _seconds)
+                        await StepAsync(1);
+                    else if (Deck.Now - _loadedAt > TimeSpan.FromMinutes(Math.Max(1, Deck.Settings.DataRefreshIntervalMinutes)))
+                        await ShowAsync(keepTimer: true);
+                    else
+                        StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task ShowAsync(bool keepTimer = false)
+    {
+        if (_slides.Count == 0)
+        {
+            _content = null;
+            return;
+        }
+        var version = ++_version;
+        _reading?.Cancel();
+        _reading?.Dispose();
+        var cancel = (_reading = new CancellationTokenSource()).Token;
+        var slide = _slides[_index];
+        if (!keepTimer)
+        {
+            _elapsed = 0;
+            _seconds = Deck.SecondsFor(slide);
+        }
+        _loading = true;
+        try
+        {
+            object? content = null;
+            var (actor, filter, period, from, to) = (Actor, Filter, _period, (DateTime?)_from, (DateTime?)_to);
+            var machines = _machines;
+            var ok = await Run(async () => content = await Task.Run(async () => slide switch
+            {
+                MachineSlideDescriptor ms when machines.FirstOrDefault(m => m.MachineId == ms.MachineId) is { } machine
+                    => await Deck.MachineAsync(actor, machine, period, from, to, filter, cancel),
+                _ => (object)SlideDeck.Label(slide, NameOf),
+            }, cancel));
+            if (version != _version || !ok)
+                return;
+            _content = content;
+            _contentKey = slide.Key;
+            _loadedAt = Deck.Now;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (version == _version)
+            {
+                SpigaDashboards.App.Services.AppLogger.Log("Tableau de bord (web) : " + ex);
+                Error = "Diapositive indisponible : " + ex.Message;
+            }
+        }
+        finally
+        {
+            if (version == _version)
+                _loading = false;
+        }
+    }
+
+    private Task StepAsync(int count)
+    {
+        if (_slides.Count == 0)
+            return Task.CompletedTask;
+        _index = ((_index + count) % _slides.Count + _slides.Count) % _slides.Count;
+        return ShowAsync();
+    }
+
+    private Task GoAsync(int index)
+    {
+        _index = index;
+        return ShowAsync();
+    }
+
+    private void TogglePause() => _paused = !_paused;
+
+    // ---------- filters ----------
+
+    private Task ApplyAsync()
+    {
+        Rebuild();
+        return ShowAsync();
+    }
+
+    private Task SetPeriodAsync(DashboardPeriod period)
+    {
+        _period = period;
+        return ShowAsync();
+    }
+
+    private Task SetDatesAsync(ChangeEventArgs e, bool start)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+            return Task.CompletedTask;
+        if (start)
+            _from = d.Date;
+        else
+            _to = d.Date;
+        return ShowAsync();
+    }
+
+    private Task SetSectorAsync(string? sector)
+    {
+        _sector = sector;
+        _unticked.Clear();
+        return ApplyAsync();
+    }
+
+    private Task TickMachineAsync(string machineId, bool on)
+    {
+        if (on)
+            _unticked.Remove(machineId);
+        else
+            _unticked.Add(machineId);
+        return ApplyAsync();
+    }
+
+    private Task AllMachinesAsync()
+    {
+        _unticked.Clear();
+        return ApplyAsync();
+    }
+
+    private Task SetShiftAsync(int? shift)
+    {
+        _shift = shift;
+        return ShowAsync();
+    }
+
+    private Task SetTeamAsync(ChangeEventArgs e)
+    {
+        _team = e.Value as string is { Length: > 0 } t ? t : null;
+        return ShowAsync();
+    }
+
+    private Task SetWeightAsync(ChangeEventArgs e)
+    {
+        _weight = double.TryParse(e.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var w) ? w : null;
+        return ShowAsync();
+    }
+
+    private Task ResetAsync()
+    {
+        (_period, _sector, _shift, _team, _weight) = (DashboardPeriod.Day, null, null, null, null);
+        _unticked.Clear();
+        return ApplyAsync();
+    }
+
+    private string NameOf(string machineId) => _machines.FirstOrDefault(m => m.MachineId == machineId)?.MachineName ?? machineId;
+}

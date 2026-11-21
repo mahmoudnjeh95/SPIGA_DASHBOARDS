@@ -1,0 +1,161 @@
+@* One machine of the deck (kiosk: MachineDayPanel / MachinePeriodPanel):
+   its state now, then the poste in progress (or the one before) with its
+   hourly charts and the postes before it, or the period with its trend
+   charts and the teams compared. *@
+@using SpigaDashboards.App.ViewModels.Slides
+@using SpigaDashboards.App.Services
+
+@{
+    var h = Slide.Header;
+    var m = Slide.Main;
+    // A planned stop / maintenance going on now takes the whole poste view.
+    var declared = h.Stop is { TakesWholeView: true } && Slide.Period == null && Slide.PeriodLabel.Length == 0 ? h.Stop : null;
+}
+<section class="card dk-head">
+    <RunStateArt State="@h.State" Label="@h.StateText" Class="dk-photo" />
+    <div class="dk-title">
+        <span class="pre">@h.SectorLabel</span>
+        <h2>@h.Name</h2>
+        <p class="dk-sub">
+            @if (Slide.Period == null)
+            {
+                <b>Poste @m.Name</b> <span>@m.Hours · @m.Team</span>
+                <span class="chip @(m.Running ? "ok" : "")">@(m.Running ? "EN COURS" : "TERMINÉ")</span>
+            }
+            else
+            {
+                <b>@Slide.PeriodLabel</b>
+            }
+            @if (Slide.FilterLabel.Length > 0)
+            {
+                <span class="chip acc">@Slide.FilterLabel</span>
+            }
+        </p>
+        <p class="nd dk-prod">@Slide.ProductionLabel</p>
+    </div>
+    @if (h.Stop is { } stop && declared == null)
+    {
+        <div class="dk-ticker" style="--tc:@stop.TickerColor;--tt:@stop.TickerTextColor"><span>@stop.TickerText</span></div>
+    }
+    else if (h.Recovery is { } recovery)
+    {
+        <div class="dk-ticker ok"><span>REPRISE · @recovery.Text</span></div>
+    }
+</section>
+
+@if (declared != null)
+{
+    <section class="card dk-declared @(declared.Kind == OngoingStopKind.Maintenance ? "maint" : "planned")">
+        <h2>@declared.Title</h2>
+        <p>@declared.SinceText (@declared.DurationText) · @declared.CauseText</p>
+        @if (declared.ExpectedEndText.Length > 0)
+        {
+            <p class="@(declared.IsOverdue ? "bad-t" : "")">@declared.ExpectedEndText</p>
+        }
+    </section>
+    return;
+}
+
+<div class="row dk-kpis">
+    <KpiTile Label="TRS" Hint="@($"cible {m.TrsTarget:0} %")" Value="@Fmt.Pct(m.Kpis.TrsPercent)" Css="@Fmt.Css(m.TrsSeverity)" Sub="@Trend(m.TrsTrend)" />
+    <KpiTile Label="Disponibilité" Value="@Fmt.Pct(m.Kpis.AvailabilityPercent)" />
+    <KpiTile Label="Performance" Value="@Fmt.Pct(m.Kpis.PerformancePercent)" Css="@(m.Kpis.PerformancePercent == null ? "nd" : null)" />
+    <KpiTile Label="Qualité" Value="@Fmt.Pct(m.Kpis.QualityPercent)" Css="@(m.Kpis.QualityPercent == null ? "nd" : null)" />
+    <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(m.Kpis.SpeedBagsPerMinute, 1)"
+             Sub="@($"max {Fmt.Num(m.Kpis.MaxSpeedBagsPerMinute, 1)}{(Trend(m.SpeedTrend) is { Length: > 0 } st ? " · " + st : "")}")" />
+    <KpiTile Label="Poids moyen" Value="@KpiCalculator.FormatAverages(m.Kpis.Weights)" Css="@(m.WeightOnTarget ? "gold txt" : "txt")"
+             Sub="@((m.Kpis.Weights.Count == 0 ? "Pas de données de poids" : "Cible " + string.Join(" · ", m.Kpis.Weights.Select(w => $"{w.TargetWeight:0} g"))) + (Trend(m.WeightTrend) is { Length: > 0 } wt ? " · " + wt : ""))" />
+    <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(m.Kpis.WeightDeviationPercent)" Css="@Fmt.Css(m.WeightSeverity)" Sub="@m.Kpis.GiveawayLabel" />
+    <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(m.Kpis.ProductionKg)" Sub="@($"{Fmt.Num(m.Kpis.TotalBags)} sacs")" />
+</div>
+
+@if (Slide.Period is { } p)
+{
+    <div class="dk-charts">
+        <section class="card">@Chart($"TRS {p.Grain}", "trs", p.Trs)</section>
+        <section class="card">@Chart($"Vitesse moyenne / max {p.Grain} (sacs/min)", "speed", p.Speed)</section>
+        <section class="card">@Chart($"Production nette {p.Grain}, par poids", "prod", p.Production)</section>
+        <section class="card">@Chart($"Écart de poids {p.Grain} (% de la cible)", "dev", p.Deviation)</section>
+    </div>
+    <section class="card">
+        <div class="card-head"><h2>Équipes <small>meilleur TRS d'abord</small></h2></div>
+        @if (p.Teams.Count == 0)
+        {
+            <p class="empty">Aucune production sur la période.</p>
+        }
+        else
+        {
+            <div class="tbl-wrap">
+                <table class="t">
+                    <thead><tr><th>Équipe</th><th class="r">TRS</th><th class="r">Vitesse</th><th class="r">Poids moyen</th><th class="r">Écart</th><th class="r">Production</th><th class="r">Sacs</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in p.Teams)
+                        {
+                            <tr>
+                                <td>@t.Team</td>
+                                <td class="r"><span class="chip @Fmt.Css(t.TrsSeverity)">@Fmt.Pct(t.Kpis.TrsPercent)</span></td>
+                                <td class="r">@Fmt.Num(t.Kpis.SpeedBagsPerMinute, 1)</td>
+                                <td class="r">@KpiCalculator.FormatAverages(t.Kpis.Weights)</td>
+                                <td class="r"><span class="chip @Fmt.Css(t.WeightSeverity)">@Fmt.SignedPct(t.Kpis.WeightDeviationPercent)</span></td>
+                                <td class="r">@KpiCalculator.FormatMass(t.Kpis.ProductionKg)</td>
+                                <td class="r">@Fmt.Num(t.Kpis.TotalBags)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+else if (m.Charts is { } c)
+{
+    <div class="dk-charts three">
+        <section class="card">@Chart("En marche (par heure)", "onoff", c.OnOff)</section>
+        <section class="card">@Chart("Vitesse moyenne / max (sacs/min)", "speed-h", c.Speed)</section>
+        <section class="card">@Chart("Poids moyen / cible", "weight-h", c.Weight)</section>
+    </div>
+    @if (Slide.Previous.Count > 0)
+    {
+        <section class="card">
+            <div class="card-head"><h2>Postes précédents <small>même journée</small></h2></div>
+            <div class="tbl-wrap">
+                <table class="t">
+                    <thead><tr><th>Poste</th><th>Équipe</th><th class="r">TRS</th><th class="r">Vitesse</th><th class="r">Poids moyen</th><th class="r">Écart</th><th class="r">Production</th></tr></thead>
+                    <tbody>
+                        @foreach (var prev in Slide.Previous)
+                        {
+                            <tr>
+                                <td>@prev.Name <small>@prev.Hours</small></td>
+                                <td>@prev.Team</td>
+                                <td class="r"><span class="chip @Fmt.Css(prev.TrsSeverity)">@Fmt.Pct(prev.Kpis.TrsPercent)</span></td>
+                                <td class="r">@Fmt.Num(prev.Kpis.SpeedBagsPerMinute, 1)</td>
+                                <td class="r">@KpiCalculator.FormatAverages(prev.Kpis.Weights)</td>
+                                <td class="r"><span class="chip @Fmt.Css(prev.WeightSeverity)">@Fmt.SignedPct(prev.Kpis.WeightDeviationPercent)</span></td>
+                                <td class="r">@KpiCalculator.FormatMass(prev.Kpis.ProductionKg)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public MachineSlide Slide { get; set; } = default!;
+
+    // "▲ +0,3 pt · 2 min"
+    private static string Trend(KpiTrend? t) => t == null ? "" : (t.Direction > 0 ? "▲ " : t.Direction < 0 ? "▼ " : "= ") + t.Text;
+
+    private RenderFragment Chart(string title, string key, DeckChart chart) => __builder =>
+    {
+        if (!chart.HasData)
+        {
+            <h2>@title</h2>
+            <p class="empty">Pas de données.</p>
+            return;
+        }
+        <SpigaChart Title="@title" Key="@("deck-" + key)" Labels="chart.Labels" Series="chart.Series" Format="chart.Format"
+                    YMin="chart.YMin" YMax="chart.YMax" Height="230" />
+    };
+}
