@@ -137,11 +137,55 @@ window.spigaChart = (function () {
         };
     }
 
+    // A grid of counts (SpigaHeatmap: stops per weekday and hour): the cells
+    // in the blues of the theme, a scale that filters them (drag its ends),
+    // the shifts named under the hours.
+    function heatOption(el, spec) {
+        var css = getComputedStyle(el);
+        var v = function (n, f) { return css.getPropertyValue(n).trim() || f; };
+        var fg = v("--fg", "#111"), fg3 = v("--fg3", "#777"), line = v("--line", "#ddd"), tile = v("--tile", "#fff");
+        var dark = !!el.closest("[data-theme='dark']");
+        var blues = dark ? ["#104281", "#1C5CAB", "#2A78D6", "#5598E7", "#9EC5F4"] : ["#CDE2FB", "#9EC5F4", "#5598E7", "#2A78D6", "#1C5CAB"];
+        return {
+            animation: !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+            textStyle: { fontFamily: v("--font", "Segoe UI, sans-serif") },
+            grid: { left: 8, right: 8, top: 34, bottom: spec.bands && spec.bands.length ? 30 : 6, containLabel: true },
+            tooltip: {
+                confine: true, backgroundColor: tile, borderColor: line, textStyle: { color: fg, fontSize: 13 },
+                formatter: function (p) { return esc(p.data[3]); }
+            },
+            visualMap: {
+                // min 1: a cell without stops is out of the scale, in grey.
+                min: 1, max: Math.max(1, spec.max), calculable: true, dimension: 2, orient: "horizontal", right: 0, top: 0, itemHeight: 120, itemWidth: 10,
+                text: ["plus", "moins"], textStyle: { color: fg3 }, inRange: { color: blues }, outOfRange: { color: [dark ? "#22272F" : "#EEF1F5"] }
+            },
+            xAxis: { type: "category", data: spec.xs, splitArea: { show: false }, axisLine: { lineStyle: { color: line } }, axisTick: { show: false },
+                axisLabel: { color: fg3, fontSize: 11 } },
+            yAxis: { type: "category", data: spec.ys, inverse: true, axisLine: { show: false }, axisTick: { show: false },
+                axisLabel: { color: fg3, fontWeight: 600, fontSize: 12 } },
+            series: [{
+                type: "heatmap", data: spec.data,
+                itemStyle: { borderColor: tile, borderWidth: 3, borderRadius: 5 },
+                label: { show: true, fontSize: 11, fontWeight: 700, color: dark ? "#fff" : "#0B1220", formatter: function (p) { return p.data[2] > 0 ? p.data[2] : ""; } },
+                emphasis: { itemStyle: { shadowBlur: 12, shadowColor: "rgba(0,0,0,.35)" } },
+                markArea: spec.bands && spec.bands.length ? {
+                    silent: true, itemStyle: { color: "transparent", borderColor: line, borderWidth: 0 },
+                    label: { position: "bottom", distance: 26, color: fg3, fontSize: 11, fontWeight: 600 },
+                    data: spec.bands.map(function (b) { return [{ name: b.label, xAxis: b.from }, { xAxis: b.to }]; })
+                } : undefined
+            }]
+        };
+    }
+
     // A new chart grows from its baseline; the same chart with new values
     // (data refresh, same series) moves its bars and points to them.
     function draw(el) {
         var existing = echarts.getInstanceByDom(el);
         var chart = existing || echarts.init(el, null, { renderer: "svg" });
+        if (el.__spSpec.kind === "heat") {
+            chart.setOption(heatOption(el, el.__spSpec), true);
+            return;
+        }
         var opt = option(el, el.__spSpec);
         var names = el.__spSpec.series.map(function (s) { return s.name + "|" + s.kind; }).join(";");
         opt.series.forEach(function (s, i) { s.id = s.name + "#" + i; });

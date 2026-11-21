@@ -1,0 +1,67 @@
+@* A grid of counts drawn by ECharts (spiga-chart.js, heatOption): one cell
+   per column x row, in the blues of the theme, its count written in it, a
+   tooltip, and a scale above that filters the cells (drag its ends). Bands:
+   names under ranges of columns (the shifts under the hours). *@
+@using System.Text.Json
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="chart-plot heat-plot" @ref="_el" role="img" aria-label="@Label" style="height:@(Height)px"></div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Columns { get; set; } = Array.Empty<string>();
+    [Parameter, EditorRequired] public IReadOnlyList<string> Rows { get; set; } = Array.Empty<string>();
+    // Value of a cell (column, row) and its tooltip.
+    [Parameter, EditorRequired] public Func<int, int, int> Value { get; set; } = (_, _) => 0;
+    [Parameter, EditorRequired] public Func<int, int, string> Tooltip { get; set; } = (_, _) => "";
+    [Parameter] public IReadOnlyList<(int From, int To, string Label)> Bands { get; set; } = Array.Empty<(int, int, string)>();
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public int Height { get; set; } = 300;
+
+    private ElementReference _el;
+    private string? _drawn;
+    private bool _disposed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var data = new List<object[]>();
+        var max = 0;
+        for (var x = 0; x < Columns.Count; x++)
+            for (var y = 0; y < Rows.Count; y++)
+            {
+                var v = Value(x, y);
+                max = Math.Max(max, v);
+                data.Add(new object[] { x, y, v, Tooltip(x, y) });
+            }
+        var spec = JsonSerializer.Serialize(new
+        {
+            kind = "heat",
+            xs = Columns,
+            ys = Rows,
+            data,
+            max,
+            bands = Bands.Select(b => new { from = Columns[b.From], to = Columns[b.To], label = b.Label }),
+        });
+        if (spec == _drawn || _disposed)
+            return;
+        _drawn = spec;
+        try
+        {
+            await JS.InvokeVoidAsync("spigaChart.set", _el, spec);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        try
+        {
+            await JS.InvokeVoidAsync("spigaChart.dispose", _el);
+        }
+        catch (JSDisconnectedException) { }
+        catch (TaskCanceledException) { }
+        catch (InvalidOperationException) { }
+    }
+}
