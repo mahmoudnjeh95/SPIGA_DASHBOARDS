@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <link rel="stylesheet" href="_content/Spiga.UI/spiga.css" />
+    <link rel="stylesheet" href="_content/Spiga.UI/spiga.css?v=@V" />
     <link rel="icon" type="image/png" href="_content/Spiga.UI/img/cds-icon.png" />
     <title>SPIGA Suivi Production</title>
 </head>
@@ -17,9 +17,9 @@
         </div>
     </div>
     <Routes @rendermode="Interactive" Workstation="@HttpContext?.Connection.RemoteIpAddress?.ToString()" Screen="@DevScreen" />
-    <script src="_content/Spiga.UI/lib/echarts/echarts.min.js"></script>
-    <script src="_content/Spiga.UI/spiga.js"></script>
-    <script src="_content/Spiga.UI/spiga-chart.js"></script>
+    <script src="_content/Spiga.UI/lib/echarts/echarts.min.js?v=@V"></script>
+    <script src="_content/Spiga.UI/spiga.js?v=@V"></script>
+    <script src="_content/Spiga.UI/spiga-chart.js?v=@V"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>
@@ -27,6 +27,10 @@
 @code {
     // No prerendering: the session (sign-in) lives in the interactive circuit.
     private static readonly IComponentRenderMode Interactive = new InteractiveServerRenderMode(prerender: false);
+
+    // A new build gives new file links: browsers drop their cached copy of
+    // the styles and scripts (an old spiga.js kept running after an update).
+    private static readonly string V = typeof(Spiga.UI.Components.KpiTile).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
 
     [CascadingParameter] public HttpContext? HttpContext { get; set; }
 

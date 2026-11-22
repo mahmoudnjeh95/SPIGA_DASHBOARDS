@@ -1,0 +1,447 @@
+@* The profile of one person (Polyvalence), in a window over the page: the
+   verdict for the next post up and four scores first, to decide at a
+   glance; then one tab per group (polyvalence, performance on the machine,
+   stops and quality, attendance and reliability) with the figures against
+   the machines' usual level. Échap or a click outside closes it. *@
+@inject PlantData Plant
+
+<div class="emp-modal" @onclick="Close">
+    <div class="emp-box" @onclick:stopPropagation="true" @onkeydown="Key" tabindex="-1" @ref="_box" role="dialog" aria-modal="true" aria-label="@($"Fiche de {P.Name}")">
+        @* ---------- header: who, overall score, verdict ---------- *@
+        <header class="emp-head">
+            <div class="emp-avatar" aria-hidden="true">@Initials</div>
+            <div class="emp-who">
+                <h2>@P.Name</h2>
+                <p>@StaffFunctions.Label(P.Function) · @P.Team · <span class="n">@PeriodText</span></p>
+            </div>
+            <div class="emp-verdict @EmployeeScore.ReadinessCss(S.Readiness)">
+                <span class="emp-verdict-icon" aria-hidden="true">@VerdictIcon</span>
+                <div>
+                    <b>@EmployeeScore.ReadinessLabel(S.Readiness)</b>
+                    <small>@(S.Target is { } t ? "pour " + StaffFunctions.Label(t).ToLowerInvariant() : "pas de poste supérieur")</small>
+                </div>
+            </div>
+            <div class="emp-overall" title="Note globale : performance 35 %, arrêts et qualité 25 %, présence 25 %, polyvalence 15 %">
+                @Ring(S.Overall, 64, 7)
+                <small>note globale</small>
+            </div>
+            <button type="button" class="bar small emp-close" @onclick="Close" aria-label="Fermer la fiche">✕</button>
+        </header>
+
+        @* ---------- the four scores (each opens its tab) ---------- *@
+        <nav class="emp-scores">
+            @for (var i = 0; i < 4; i++)
+            {
+                var index = i + 1;
+                var g = S.Groups.ElementAt(i);
+                <button type="button" class="emp-score @(_tab == index ? "on" : "")" @onclick="() => _tab = index">
+                    @Ring(g.Score, 46, 5)
+                    <span><b>@index · @g.Name</b><small>@g.Summary</small></span>
+                </button>
+            }
+        </nav>
+
+        <div class="emp-tabs" role="tablist">
+            <button type="button" role="tab" class="@(_tab == 0 ? "on" : "")" @onclick="() => _tab = 0">Synthèse</button>
+            @foreach (var (i, name) in new[] { (1, "Polyvalence"), (2, "Performance"), (3, "Arrêts et qualité"), (4, "Présence et fiabilité") })
+            {
+                var index = i;
+                <button type="button" role="tab" class="@(_tab == index ? "on" : "")" @onclick="() => _tab = index">@index · @name</button>
+            }
+        </div>
+
+        <div class="emp-body">
+            @(_tab switch { 0 => Synthesis, 1 => PolyvalenceTab, 2 => PerformanceTab, 3 => StopsTab, _ => PresenceTab })
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EmployeeProfile P { get; set; } = null!;
+    [Parameter, EditorRequired] public EmployeeScore S { get; set; } = null!;
+    [Parameter, EditorRequired] public PresenceReport.Result Report { get; set; } = null!;
+    [Parameter] public string PeriodText { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private int _tab;
+    private ElementReference _box;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (first)
+            await _box.FocusAsync();
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task Key(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            await Close();
+        else if (e.Key is "ArrowRight" or "ArrowLeft")
+            _tab = (_tab + (e.Key == "ArrowRight" ? 1 : 4)) % 5;
+    }
+
+    // Packaging waste is entered by hand: no entry at all on his machines
+    // is "not entered", not "zero waste".
+    private bool HasWaste => P.WasteKg > 0 || P.UsualWastePerTonne > 0;
+
+    private string Initials => string.Concat(P.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    private string VerdictIcon => S.Readiness switch
+    {
+        Readiness.Ready => "✓",
+        Readiness.Soon => "◔",
+        Readiness.NotYet => "✕",
+        Readiness.Untested => "?",
+        _ => "—",
+    };
+
+    private string PostName(Skill s)
+        => s.MachineId != null ? Plant.NameOf(s.MachineId)
+            : s.LineId is { } id && Report.Lines.TryGetValue(id, out var line) ? line.Label
+            : "Sans machine";
+
+    // A score ring: the band's colour, the score in the middle, "—" without data.
+    private static RenderFragment Ring(double? score, int size, int stroke) => __builder =>
+    {
+        var r = (size - stroke) / 2.0;
+        var c = size / 2.0;
+        <span class="emp-ring @EmployeeScore.Band(score)" style="width:@(size)px;height:@(size)px">
+            <svg viewBox="0 0 @size @size" aria-hidden="true">
+                <circle class="track" cx="@N(c)" cy="@N(c)" r="@N(r)" stroke-width="@stroke" />
+                @if (score is { } v)
+                {
+                    <circle class="fill" cx="@N(c)" cy="@N(c)" r="@N(r)" stroke-width="@stroke" pathLength="100"
+                            stroke-dasharray="@($"{N(v)} 100")" transform="@($"rotate(-90 {N(c)} {N(c)})")" />
+                }
+            </svg>
+            <b>@(score is { } s ? s.ToString("0") : "—")</b>
+        </span>
+    };
+
+    private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    // How much worse than usual is still green (Ok) or orange (Warn): in
+    // points (TRS, tolerance) or, Relative, as a share of the usual value.
+    private sealed record Tolerance(double Ok, double Warn, bool Relative);
+    private static readonly Tolerance TrsPoints = new(2, 8, false);
+    private static readonly Tolerance QualityPoints = new(0.5, 2, false);
+    private static readonly Tolerance Share = new(0.10, 0.30, true);
+    private static readonly Tolerance Pace = new(0.03, 0.10, true);
+
+    // His figure against the machines' usual one: a bar for his, a tick
+    // for the usual, the difference in words with an arrow and its colour.
+    // higherBetter: false for stops, waste, weight deviation.
+    private static RenderFragment Meter(string label, double? own, double? usual, Func<double, string> fmt, bool higherBetter, Tolerance tol,
+        double? max = null, string? unitDiff = null) => __builder =>
+    {
+        var top = max ?? Math.Max(own ?? 0, usual ?? 0) * 1.2;
+        double Pos(double v) => top <= 0 ? 0 : Math.Clamp(v / top * 100, 0, 100);
+        var diff = own - usual;
+        // How much worse than usual (negative: better).
+        double? worse = diff is { } d && usual is { } us
+            ? (higherBetter ? -d : d) / (tol.Relative ? Math.Max(Math.Abs(us), 0.01) : 1)
+            : null;
+        var flat = diff is { } d0 && Math.Abs(d0) < Math.Max(Math.Abs(usual ?? 0) * 0.01, 0.005);
+        var css = worse is not { } w ? "nd" : w <= tol.Ok ? "ok" : w <= tol.Warn ? "warn" : "bad";
+        <div class="emp-meter">
+            <span class="emp-meter-l">@label</span>
+            <span class="emp-meter-track" title="@($"{label} : {(own is { } o ? fmt(o) : Fmt.Missing)} · habituel {(usual is { } u ? fmt(u) : Fmt.Missing)}")">
+                @if (own is { } ov)
+                {
+                    <i class="emp-meter-fill @css" style="width:@N(Pos(ov))%"></i>
+                }
+                @if (usual is { } uv)
+                {
+                    <i class="emp-meter-usual" style="left:@N(Pos(uv))%"></i>
+                }
+            </span>
+            <span class="emp-meter-v"><b>@(own is { } o2 ? fmt(o2) : Fmt.Missing)</b><small>habituel @(usual is { } u2 ? fmt(u2) : Fmt.Missing)</small></span>
+            <span class="emp-delta @css">
+                @if (diff is { } dd)
+                {
+                    @(flat ? "= " : dd > 0 ? "▲ " : "▼ ")@(unitDiff == null ? fmt(Math.Abs(dd)) : Fmt.Num(Math.Abs(dd), 1) + " " + unitDiff)
+                }
+                else
+                {
+                    @Fmt.Missing
+                }
+            </span>
+        </div>
+    };
+
+    private RenderFragment Synthesis => __builder =>
+    {
+        <div class="emp-grid2">
+            <section class="emp-panel">
+                <h3>Verdict @(S.Target is { } t ? "· " + StaffFunctions.Label(t) : "")</h3>
+                @if (S.Checks.Count == 0)
+                {
+                    <p class="n">@(S.Target == null ? "Pas de poste supérieur pour sa fonction : à juger sur sa performance et sa présence." : "Pas de décision possible sans essai.")</p>
+                }
+                <ul class="emp-checks">
+                    @foreach (var c in S.Checks)
+                    {
+                        <li class="@(c.Ok ? "ok" : "bad")"><span aria-hidden="true">@(c.Ok ? "✓" : "✕")</span> @c.Text</li>
+                    }
+                </ul>
+                @if (S.Readiness == Readiness.Untested && S.Target is { } t2)
+                {
+                    <p class="emp-hint">Proposition : l'affecter quelques postes comme @StaffFunctions.Label(t2).ToLowerInvariant() lors des prochaines absences pour l'évaluer.</p>
+                }
+            </section>
+            <section class="emp-panel">
+                <h3>Points forts</h3>
+                @if (S.Strengths.Count == 0)
+                {
+                    <p class="n">Rien de saillant sur la période.</p>
+                }
+                <ul class="emp-list good">
+                    @foreach (var s in S.Strengths)
+                    {
+                        <li><span aria-hidden="true">▲</span> @s</li>
+                    }
+                </ul>
+                <h3>À surveiller</h3>
+                @if (S.Watch.Count == 0)
+                {
+                    <p class="n">Rien à signaler.</p>
+                }
+                <ul class="emp-list bad">
+                    @foreach (var w in S.Watch)
+                    {
+                        <li><span aria-hidden="true">▼</span> @w</li>
+                    }
+                </ul>
+            </section>
+        </div>
+        @if (P.HoldsMachines)
+        {
+            <section class="emp-panel">
+                <h3>Lui contre l'habituel des mêmes machines</h3>
+                @Meter("TRS", P.Own.Trs, P.Usual.Trs, v => Fmt.Pct(v), true, TrsPoints, Math.Max(100, Math.Max(P.Own.Trs ?? 0, P.Usual.Trs ?? 0) * 1.05), "pts")
+                @Meter("Arrêts par heure", P.Own.StopPerHour, P.Usual.StopPerHour, v => Fmt.Num(v, 1) + " min", false, Share)
+                @Meter("Sacs dans la tolérance", P.Own.Quality, P.Usual.Quality, v => Fmt.Pct(v), true, QualityPoints, 100, "pts")
+                @if (HasWaste) { @Meter("Déchets d'emballage", P.WastePerTonne, P.UsualWastePerTonne, v => Fmt.Num(v, 1) + " kg/t", false, Share) }
+                <p class="emp-legend"><i class="emp-legend-bar"></i> lui <i class="emp-legend-tick"></i> habituel des mêmes machines sur la période</p>
+            </section>
+        }
+    };
+
+    private RenderFragment PolyvalenceTab => __builder =>
+    {
+        <div class="row">
+            <KpiTile Label="Postes tenus" Value="@P.Skills.Count.ToString()" Sub="@($"{P.Skills.Count(s => s.Level != SkillLevel.Occasionnel)} formé(s) ou autonome(s)")" />
+            <KpiTile Label="Remplacements" Value="@P.Acting.Count.ToString()" Sub="@($"dont {P.StepUps} sur un poste supérieur")" />
+            <KpiTile Label="Heures sur poste supérieur" Value="@Fmt.Num(P.StepUpHours, 1)" Sub="@($"sur {Fmt.Num(P.ActingHours, 1)} h en remplacement")" />
+            <KpiTile Label="Renforts" Value="@P.RenfortPostes.ToString()" Sub="@("équipes : " + (P.TeamsWorked.Count == 0 ? Fmt.Missing : string.Join(", ", P.TeamsWorked)))" />
+        </div>
+        <section class="emp-panel">
+            <h3>Carte des compétences</h3>
+            @if (P.Skills.Count == 0)
+            {
+                <p class="n">Aucun poste tenu sur la période.</p>
+            }
+            <div class="emp-skills">
+                @foreach (var s in P.Skills)
+                {
+                    var step = (int)s.Level + 1;
+                    var higher = StaffFunctions.Rank(s.Function) > StaffFunctions.Rank(P.Function);
+                    <div class="emp-skill @(higher ? "up" : "")">
+                        <div class="emp-skill-head">
+                            <b>@PostName(s)</b>
+                            <small>@StaffFunctions.Label(s.Function) @if (higher) { <span class="chip acc">supérieur</span> }</small>
+                        </div>
+                        <div class="emp-pips" title="occasionnel : moins de @EmployeeProfiles.FormedPostes postes · formé : moins de @EmployeeProfiles.AutonomousPostes, ou TRS à plus de @EmployeeProfiles.AutonomousGap pts sous l'habituel · autonome : au-delà">
+                            @for (var k = 1; k <= 3; k++)
+                            {
+                                <i class="@(k <= step ? "on l" + step : "")"></i>
+                            }
+                            <span>@(s.Level switch { SkillLevel.Autonome => "Autonome", SkillLevel.Forme => "Formé", _ => "Occasionnel" })</span>
+                        </div>
+                        <div class="emp-skill-foot">
+                            <span>@s.Postes poste(s) · @Fmt.Num(s.Hours, 0) h</span>
+                            <span class="emp-delta @(s.Gap is { } g ? g >= -2 ? "ok" : g >= -8 ? "warn" : "bad" : "nd")">TRS @Fmt.Pct(s.Trs) @(s.Gap is { } g2 ? $"({(g2 >= 0 ? "+" : "")}{Fmt.Num(g2, 1)} pts)" : "")</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </section>
+        @if (P.Acting.Count > 0)
+        {
+            <section class="emp-panel">
+                <h3>Remplacements</h3>
+                <div class="grid-wrap">
+                    <table class="t">
+                        <thead><tr><th>Date · poste</th><th>Poste tenu</th><th>À la place de</th><th>Heures</th><th class="r">Production</th><th class="r">TRS</th><th class="r">Habituel</th><th class="r">Vitesse</th><th class="r">Habituelle</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in P.Acting)
+                            {
+                                var perf = Report.Performance.GetValueOrDefault(r);
+                                <tr>
+                                    <td class="nowrap">@r.Date.ToString("dd/MM/yyyy")<small>@Shifts.Label(r.ShiftId) · @r.Team</small></td>
+                                    <td>@StaffFunctions.Short(r.ActingFunction) · @Plant.NameOf(r.Post) @if (r.IsStepUp) { <span class="chip acc">supérieur</span> }</td>
+                                    <td class="n">@r.ReplacedName</td>
+                                    <td class="n nowrap">@r.From.ToString("HH:mm") – @r.To.ToString("HH:mm")</td>
+                                    <td class="r">@(perf == null || perf.Kg <= 0 ? "" : Fmt.Mass(perf.Kg))</td>
+                                    <td class="r">@Fmt.Pct(perf?.Trs)</td>
+                                    <td class="r">@Fmt.Pct(perf?.UsualTrs)</td>
+                                    <td class="r">@(perf?.Speed is { } sp ? Fmt.Num(sp, 1) + "/min" : Fmt.Missing)</td>
+                                    <td class="r">@(perf?.UsualSpeed is { } us ? Fmt.Num(us, 1) + "/min" : Fmt.Missing)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    };
+
+    private RenderFragment PerformanceTab => __builder =>
+    {
+        if (!P.HoldsMachines)
+        {
+            <p class="emp-empty">Aucune machine tenue sur la période (@StaffFunctions.Label(P.Function)) : pas de résultat machine à comparer.</p>
+            return;
+        }
+        var trend = P.Trend.Where(t => t.Trs != null).ToList();
+        <section class="emp-panel">
+            <h3>Lui contre l'habituel des mêmes machines</h3>
+            @Meter("TRS", P.Own.Trs, P.Usual.Trs, v => Fmt.Pct(v), true, TrsPoints, Math.Max(100, Math.Max(P.Own.Trs ?? 0, P.Usual.Trs ?? 0) * 1.05), "pts")
+            @Meter("Vitesse", P.Own.Speed, P.Usual.Speed, v => Fmt.Num(v, 1) + "/min", true, Pace)
+            @Meter("Production par heure-machine", P.Own.KgPerHour, P.Usual.KgPerHour, v => Fmt.Mass(v), true, Pace)
+            <p class="emp-legend">
+                <i class="emp-legend-bar"></i> lui <i class="emp-legend-tick"></i> habituel ·
+                production totale @Fmt.Mass(P.Own.Kg) · régularité @(P.TrsSpread is { } sd ? "± " + Fmt.Num(sd, 1) + " pts" : Fmt.Missing) d'un poste à l'autre
+            </p>
+        </section>
+        @if (trend.Count > 0)
+        {
+            <section class="emp-panel">
+                <SpigaChart Title="@($"TRS par poste · {P.Name}")" Key="poly-trs" YMin="0"
+                            Labels="@trend.Select(t => $"{t.Date:dd/MM} {Shifts.Label(t.ShiftId)[0]}").ToList()"
+                            Format="@(v => Fmt.Pct(v))"
+                            Series="@(new[]
+                                    {
+                                        new ChartSeries("TRS sous lui", trend.Select(t => t.Trs).ToList(), "var(--bar)"),
+                                        new ChartSeries("TRS habituel", trend.Select(t => t.UsualTrs).ToList(), "var(--target)", ChartKind.Line, Reference: true),
+                                    })" />
+                @if (trend.Count >= 4)
+                {
+                    var half = trend.Count / 2;
+                    var early = trend.Take(half).Average(t => t.Trs!.Value - (t.UsualTrs ?? t.Trs!.Value));
+                    var recent = trend.Skip(half).Average(t => t.Trs!.Value - (t.UsualTrs ?? t.Trs!.Value));
+                    <p class="emp-hint">
+                        Tendance : @Fmt.SignedPct(early, 1) vs habituel sur ses premiers postes, @Fmt.SignedPct(recent, 1) sur les plus récents
+                        @(recent > early + 1 ? "— en progrès." : recent < early - 1 ? "— en recul." : "— stable.")
+                    </p>
+                }
+            </section>
+        }
+        @if (P.Held.Any(h => h.Function == StaffFunction.Emballage))
+        {
+            <p class="emp-hint">Le résultat d'une machine se partage entre conducteur, ouvriers de manutention, produit et pannes : pour un ouvrier de manutention c'est un indicateur, pas un jugement individuel.</p>
+        }
+    };
+
+    private RenderFragment StopsTab => __builder =>
+    {
+        if (!P.HoldsMachines)
+        {
+            <p class="emp-empty">Aucune machine tenue sur la période.</p>
+            return;
+        }
+        <section class="emp-panel">
+            <h3>Lui contre l'habituel des mêmes machines</h3>
+            @Meter("Arrêts par heure", P.Own.StopPerHour, P.Usual.StopPerHour, v => Fmt.Num(v, 1) + " min", false, Share)
+            @Meter("Sacs dans la tolérance", P.Own.Quality, P.Usual.Quality, v => Fmt.Pct(v), true, QualityPoints, 100, "pts")
+            @Meter("Sacs sous la tolérance", P.Own.UnderPct, P.Usual.UnderPct, v => Fmt.Pct(v, 2), false, QualityPoints)
+            @Meter("Sacs au-dessus", P.Own.OverPct, P.Usual.OverPct, v => Fmt.Pct(v, 2), false, QualityPoints)
+            @if (HasWaste) { @Meter("Déchets d'emballage", P.WastePerTonne, P.UsualWastePerTonne, v => Fmt.Num(v, 1) + " kg/t", false, Share) }
+            <p class="emp-legend">
+                <i class="emp-legend-bar"></i> lui <i class="emp-legend-tick"></i> habituel ·
+                arrêts au total @ProductionStop.FormatDuration(P.Own.StoppedMinutes) ·
+                @(P.Own.GiveawayKg is { } g ? Fmt.Giveaway(g) : "poids non mesuré") ·
+                @Fmt.Num(P.Own.MetalRejects) rejet(s) métal sur @Fmt.Num(P.Own.Bags) sacs ·
+                @(HasWaste ? Fmt.Mass(P.WasteKg) + " de déchets d'emballage saisis" : "aucun déchet d'emballage saisi sur ses machines")
+            </p>
+        </section>
+        @if (P.Causes.Count > 0)
+        {
+            <section class="emp-panel">
+                <SpigaChart Title="@($"Arrêts par cause pendant qu'il tenait la machine · {P.Name}")" Key="poly-causes" Integer="true"
+                            Labels="@P.Causes.Select(c => c.Label).ToList()"
+                            Format="@(v => ProductionStop.FormatDuration(v))"
+                            Series="@FamilySeries(P.Causes)" />
+                <p class="emp-hint">Les pannes ne dépendent pas de lui ; réglages, changements de format et micro-arrêts davantage.</p>
+            </section>
+        }
+    };
+
+    private RenderFragment PresenceTab => __builder =>
+    {
+        var a = P.Presence;
+        var parts = new (string Label, int Count, string Css)[]
+        {
+            ("Présent", a.Present, "ok"), ("Absent (A)", a.A, "bad"), ("Maladie (M)", a.M, "warn"), ("Accident (AT)", a.AT, "warn2"), ("Congé (C)", a.C, "leave"),
+        };
+        var total = Math.Max(1, parts.Sum(x => x.Count));
+        <section class="emp-panel">
+            <h3>@a.Postes poste(s) sur la période · @Fmt.Num(a.WorkedHours, 1) h travaillées</h3>
+            <div class="emp-stack" role="img" aria-label="@string.Join(", ", parts.Where(x => x.Count > 0).Select(x => $"{x.Label} {x.Count}"))">
+                @foreach (var x in parts.Where(x => x.Count > 0))
+                {
+                    <i class="@x.Css" style="flex-grow:@x.Count" title="@($"{x.Label} : {x.Count}")">@(x.Count * 100 / total >= 8 ? x.Count.ToString() : "")</i>
+                }
+            </div>
+            <p class="emp-legend">
+                @foreach (var x in parts)
+                {
+                    <span class="emp-key"><i class="@x.Css"></i> @x.Label <b>@x.Count</b></span>
+                }
+            </p>
+        </section>
+        <div class="row">
+            <KpiTile Label="Taux de présence" Value="@Fmt.Pct(a.Rate)" Css="@(a.Rate is { } r ? r >= 97 ? "ok" : r >= 90 ? "warn" : "bad" : "nd")" Sub="congés exclus" />
+            <KpiTile Label="Facteur de Bradford" Value="@a.Bradford.ToString()" Css="@(a.Bradford < 50 ? "ok" : a.Bradford < 200 ? "warn" : "bad")"
+                     Sub="@($"{a.Spells} période(s)² × {a.A + a.M} jour(s) A/M · alerte dès 50")" />
+            <KpiTile Label="Retards" Value="@a.Lates.ToString()" Css="@(a.Lates == 0 ? "ok" : a.Lates < 3 ? "warn" : "bad")" Sub="@($"{Fmt.Num(a.LateMinutes)} min au total")" />
+            <KpiTile Label="Départs anticipés" Value="@a.Early.ToString()" Css="@(a.Early == 0 ? "ok" : a.Early < 3 ? "warn" : "bad")" Sub="@($"{Fmt.Num(a.EarlyMinutes)} min au total")" />
+            <KpiTile Label="Heures supplémentaires" Value="@Fmt.Num(a.OvertimeMinutes / 60, 1)" Sub="h, comme sur l'écran Heures sup." />
+        </div>
+        @if (a.Entries.Count > 0)
+        {
+            <section class="emp-panel">
+                <h3>Jour par jour</h3>
+                <div class="pf-days">
+                    @foreach (var e in a.Entries.OrderBy(e => e.Sheet.Start))
+                    {
+                        var main = PresenceCalendar.Main(new[] { e });
+                        <span class="pf-day" title="@($"{e.Date:dddd dd/MM} · {Shifts.Label(e.Sheet.ShiftId)} · {e.Sheet.Team} · {e.Describe(null, Plant.NameOf)}")">
+                            <small>@e.Date.ToString("dd/MM")</small>
+                            <span class="cal-code @CalKinds.Css(main)">@CalKinds.Code(main)</span>
+                        </span>
+                    }
+                </div>
+                <p class="emp-legend">✓ présent · R retard · D départ anticipé · A / M / AT / C absences · ⇄ renfort · ↑ remplacement · + heures sup.</p>
+            </section>
+        }
+    };
+
+    // One series per cause family (stacked), so each bar takes its family's colour.
+    private static IReadOnlyList<ChartSeries> FamilySeries(IReadOnlyList<CauseMinutes> causes)
+    {
+        var families = new (CauseFamily? Family, string Name, string Color)[]
+        {
+            (CauseFamily.Panne, "Panne", "var(--bad)"),
+            (CauseFamily.Process, "Process", "var(--warn)"),
+            (CauseFamily.Organisation, "Organisation", "var(--bar)"),
+            (CauseFamily.Planifie, "Planifié", "var(--target)"),
+            (null, "Non qualifié", "var(--off)"),
+        };
+        return families.Where(f => causes.Any(c => c.Family == f.Family))
+            .Select(f => new ChartSeries(f.Name, causes.Select(c => c.Family == f.Family ? (double?)Math.Round(c.Minutes) : null).ToList(), f.Color, Stack: "causes"))
+            .ToList();
+    }
+}

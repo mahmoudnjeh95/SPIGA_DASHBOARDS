@@ -103,6 +103,51 @@ public class EmployeeProfileTests
         Assert.Equal(120 - 60, p.Causes.Single(c => c.Code == null).Minutes, 3);
     }
 
+    // A manutention worker who held PC02 as conducteur on `postes` mornings.
+    private static EmployeeProfile ActingProfile(int postes, AbsenceCode? absentOnLastDay = null)
+    {
+        var sheets = new List<AttendanceSheet>();
+        for (var i = 0; i < postes; i++)
+        {
+            var d = Day.AddDays(i);
+            var line = Present(d, 1, StaffFunction.Emballage, "PC01");
+            line.ReplacesEmployeeId = 2;
+            line.ActingFunction = StaffFunction.Conducteur;
+            line.ActingMachineId = "PC02";
+            line.ActingFrom = d.AddHours(6);
+            sheets.Add(Sheet(d, line));
+        }
+        if (absentOnLastDay is { } code)
+            sheets.Add(Sheet(Day.AddDays(postes), Absent(Day.AddDays(postes), 1, code)));
+        return EmployeeProfiles.Build(Result(sheets), Array.Empty<WasteEntry>(), new FakePlant()).Single();
+    }
+
+    [Fact]
+    public void The_verdict_needs_enough_postes_on_the_next_post_up()
+    {
+        var once = EmployeeScore.Of(ActingProfile(1));
+        Assert.Equal(StaffFunction.Conducteur, once.Target);
+        Assert.NotEqual(Readiness.Ready, once.Readiness);
+        Assert.Contains(once.Checks, c => !c.Ok && c.Text.Contains("1 fois"));
+
+        var often = EmployeeScore.Of(ActingProfile(EmployeeProfiles.FormedPostes));
+        Assert.Contains(often.Checks, c => c.Ok && c.Text.Contains($"{EmployeeProfiles.FormedPostes} fois"));
+        Assert.Equal(100, often.Presence.Score);
+    }
+
+    [Fact]
+    public void Someone_never_tried_higher_is_untested_and_absences_lower_the_presence_score()
+    {
+        var line = Present(Day, 1, StaffFunction.Emballage, "PC01");
+        var never = EmployeeScore.Of(EmployeeProfiles.Build(Result(new[] { Sheet(Day, line) }), Array.Empty<WasteEntry>(), new FakePlant()).Single());
+        Assert.Equal(Readiness.Untested, never.Readiness);
+
+        // 5 present, 1 A: 83,3 % present -> 100 - 5 x 16,7.
+        var absent = EmployeeScore.Of(ActingProfile(5, AbsenceCode.A));
+        Assert.Equal(100 - 5 * (100 - 500.0 / 6), absent.Presence.Score!.Value, 3);
+        Assert.Contains(absent.Watch, w => w.Contains("non justifiée"));
+    }
+
     [Fact]
     public void Someone_without_a_machine_has_attendance_but_no_machine_figures()
     {

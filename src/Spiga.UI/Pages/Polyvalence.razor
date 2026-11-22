@@ -67,14 +67,16 @@
             </div>
 
             <section class="card">
-                <div class="card-head"><h2>Par personne <small>cliquez une ligne pour sa fiche</small></h2></div>
-                <GridTable TItem="EmployeeProfile" Items="people" Columns="PersonColumns" MaxHeight="@null"
-                           RowClass="@(p => _open == p.EmployeeId ? "sel" : "")" OnRowClick="@(p => _open = _open == p.EmployeeId ? null : p.EmployeeId)"
-                           IsOpen="@(p => _open == p.EmployeeId)"
-                           Empty="@(_actingOnly ? "Aucun remplacement sur cette période (feuilles validées seulement)." : "Aucune feuille validée sur cette période.")">
-                    <Detail Context="p">@Profile(p)</Detail>
-                </GridTable>
+                <div class="card-head"><h2>Par personne <small>@people.Count personne(s) · cliquez une ligne pour sa fiche</small></h2></div>
+                <GridTable TItem="EmployeeProfile" Items="people" Columns="PersonColumns" MaxHeight="calc(100vh - 190px)"
+                           RowClass="@(p => _open?.EmployeeId == p.EmployeeId ? "sel" : "")" OnRowClick="@(p => _open = p)"
+                           Empty="@(_actingOnly ? "Aucun remplacement sur cette période (feuilles validées seulement)." : "Aucune feuille validée sur cette période.")" />
             </section>
+
+            @if (_open is { } open)
+            {
+                <EmployeeCard P="open" S="@_scores[open.EmployeeId]" Report="_r" PeriodText="@PeriodText" OnClose="@(() => _open = null)" />
+            }
         }
     }
 </RequireAccess>
@@ -85,25 +87,26 @@
     private IReadOnlyList<GridColumn<EmployeeProfile>> PersonColumns => new[]
     {
         new GridColumn<EmployeeProfile>("Employé", p => p.Name),
+        new GridColumn<EmployeeProfile>("Note", p => Fmt.Num(_scores[p.EmployeeId].Overall), p => _scores[p.EmployeeId].Overall, css: "r",
+            cell: p => @<span class="chip @EmployeeScore.Band(_scores[p.EmployeeId].Overall)">@(_scores[p.EmployeeId].Overall is { } o ? o.ToString("0") : "—")</span>),
+        new GridColumn<EmployeeProfile>("Poste supérieur", p => EmployeeScore.ReadinessLabel(_scores[p.EmployeeId].Readiness), p => (int)_scores[p.EmployeeId].Readiness,
+            cell: p => @<span class="chip @EmployeeScore.ReadinessCss(_scores[p.EmployeeId].Readiness)">@EmployeeScore.ReadinessLabel(_scores[p.EmployeeId].Readiness)</span>),
         new GridColumn<EmployeeProfile>("Équipe", p => p.Team),
         new GridColumn<EmployeeProfile>("Sa fonction", p => StaffFunctions.Label(p.Function), p => StaffFunctions.Rank(p.Function), css: "n"),
         new GridColumn<EmployeeProfile>("Postes tenus", p => p.Skills.Count.ToString(), p => p.Skills.Count, css: "r"),
-        new GridColumn<EmployeeProfile>("Remplacements", p => Shown(p).Count.ToString(), p => Shown(p).Count, css: "r"),
-        new GridColumn<EmployeeProfile>("dont supérieurs", p => p.StepUps.ToString(), p => p.StepUps, css: "r"),
-        new GridColumn<EmployeeProfile>("Heures rempl.", p => Fmt.Num(Shown(p).Sum(r => r.Hours), 1), p => Shown(p).Sum(r => r.Hours), css: "r"),
+        new GridColumn<EmployeeProfile>("Remplacements", p => $"{Shown(p).Count}{(p.StepUps > 0 ? $" ({p.StepUps} sup.)" : "")}", p => Shown(p).Count, css: "r"),
         new GridColumn<EmployeeProfile>("Machines", p => string.Join(", ", p.Held.SelectMany(h => h.Machines).Distinct(StringComparer.OrdinalIgnoreCase).Select(Plant.NameOf)), css: "n"),
-        new GridColumn<EmployeeProfile>("TRS sous lui", p => Fmt.Pct(p.Own.Trs), p => p.Own.Trs, css: "r"),
-        new GridColumn<EmployeeProfile>("TRS habituel", p => Fmt.Pct(p.Usual.Trs), p => p.Usual.Trs, css: "r"),
-        new GridColumn<EmployeeProfile>("Écart", p => Fmt.SignedPct(Gap(p), 1), p => Gap(p), css: "r",
-            cell: p => @<span class="chip @GapCss(Gap(p))">@Fmt.SignedPct(Gap(p), 1)</span>),
+        new GridColumn<EmployeeProfile>("TRS vs habituel", p => Fmt.SignedPct(Gap(p), 1), p => Gap(p), css: "r",
+            cell: p => @<span class="chip @GapCss(Gap(p))" title="@($"TRS sous lui {Fmt.Pct(p.Own.Trs)} · habituel {Fmt.Pct(p.Usual.Trs)}")">@(Gap(p) is { } g ? (g > 0 ? "+" : "") + Fmt.Num(g, 1) + " pts" : Fmt.Missing)</span>),
         new GridColumn<EmployeeProfile>("Présence", p => Fmt.Pct(p.Presence.Rate, 0), p => p.Presence.Rate, css: "r",
             cell: p => @<span class="chip @RateCss(p.Presence.Rate)">@Fmt.Pct(p.Presence.Rate, 0)</span>),
     };
 
     private Period _period = default!;
     private bool _stepUpOnly;
-    private bool _actingOnly = true;
-    private int? _open;
+    private bool _actingOnly;
+    private EmployeeProfile? _open;
+    private Dictionary<int, EmployeeScore> _scores = new();
     private PresenceReport.Result? _r;
     private IReadOnlyList<EmployeeProfile>? _profiles;
 
@@ -114,23 +117,10 @@
     private static string GapCss(double? d) => d is { } v ? v >= -2 ? "ok" : v >= -8 ? "warn" : "bad" : "";
     private static string RateCss(double? r) => r is { } v ? v >= 97 ? "ok" : v >= 90 ? "warn" : "bad" : "";
 
-    // Lower is better (stops, waste, under/over weight): green up to the
-    // usual level, orange up to 25 % worse, red beyond.
-    private static string LowerCss(double? own, double? usual)
-        => own is not { } o || usual is not { } u ? "" : o <= u * 1.05 + 0.01 ? "ok" : o <= u * 1.25 + 0.01 ? "warn" : "bad";
-
-    private static string HigherCss(double? own, double? usual)
-        => own is not { } o || usual is not { } u || u <= 0 ? "" : o >= u * 0.97 ? "ok" : o >= u * 0.9 ? "warn" : "bad";
-
-    // Usual Bradford bands: under 50 nothing to say, from 200 a talk.
-    private static string BradfordCss(int b) => b < 50 ? "ok" : b < 200 ? "warn" : "bad";
-
-    private static string Usual(string text) => "habituel " + text;
-
     protected override async Task OnInitializedAsync()
     {
         var today = Shifts.ProductionDate(Now);
-        _period = new Period(PeriodKind.Month, today, today);
+        _period = new Period(PeriodKind.Last7Days, today, today);
         // Show the page and its loader first: the machine history takes seconds.
         await Task.Yield();
         await LoadAsync();
@@ -148,217 +138,19 @@
             return;
         _r = null;
         _profiles = null;
+        _open = null;
         var (first, last) = _period.Days(Now);
         await Run(async () =>
         {
             await Plant.LoadNamesAsync();
             var r = await Report.LoadAsync(Actor, Perm.Polyvalence, first, last);
             var waste = await WasteStore.ListAsync(WasteKind.Emballage, r.FromDate, r.ToDate);
-            _profiles = EmployeeProfiles.Build(r, waste, Plant);
+            var profiles = EmployeeProfiles.Build(r, waste, Plant);
+            _scores = profiles.ToDictionary(p => p.EmployeeId, EmployeeScore.Of);
+            _profiles = profiles;
             _r = r;
         });
     }
 
-    private string PostName(Skill s)
-        => s.MachineId != null ? Plant.NameOf(s.MachineId)
-            : s.LineId is { } id && _r!.Lines.TryGetValue(id, out var line) ? line.Label
-            : "sans machine";
-
-    private static string LevelLabel(SkillLevel l) => l switch
-    {
-        SkillLevel.Autonome => "autonome",
-        SkillLevel.Forme => "formé",
-        _ => "occasionnel",
-    };
-
-    private static string LevelCss(SkillLevel l) => l switch
-    {
-        SkillLevel.Autonome => "ok",
-        SkillLevel.Forme => "acc",
-        _ => "grey",
-    };
-
-    private RenderFragment Profile(EmployeeProfile p) => __builder =>
-    {
-        <div class="pf">
-            <section class="pf-sec">
-                <h3>1 · Polyvalence</h3>
-                <div class="row">
-                    <KpiTile Label="Postes tenus" Value="@p.Skills.Count.ToString()" Css="@(p.Skills.Count == 0 ? "nd" : "")"
-                             Sub="@($"{p.Skills.Select(s => s.Function).Distinct().Count()} fonction(s) · {p.Skills.Count(s => s.MachineId != null || s.LineId != null)} machine(s) ou ligne(s)")" />
-                    <KpiTile Label="Remplacements" Value="@p.Acting.Count.ToString()" Sub="@($"dont {p.StepUps} sur un poste supérieur")" />
-                    <KpiTile Label="Heures sur poste supérieur" Value="@Fmt.Num(p.StepUpHours, 1)" Sub="@($"sur {Fmt.Num(p.ActingHours, 1)} h en remplacement")" />
-                    <KpiTile Label="Renforts" Value="@p.RenfortPostes.ToString()" Sub="@("équipes : " + (p.TeamsWorked.Count == 0 ? Fmt.Missing : string.Join(", ", p.TeamsWorked)))" />
-                </div>
-                @if (p.Skills.Count > 0)
-                {
-                    <table class="t pf-skills">
-                        <thead><tr><th>Poste</th><th>Fonction</th><th class="r">Postes</th><th class="r">Heures</th><th class="r">TRS sous lui</th><th class="r">Habituel</th><th>Niveau</th></tr></thead>
-                        <tbody>
-                            @foreach (var s in p.Skills)
-                            {
-                                <tr>
-                                    <td>@PostName(s)</td>
-                                    <td class="n">@StaffFunctions.Label(s.Function) @if (StaffFunctions.Rank(s.Function) > StaffFunctions.Rank(p.Function)) { <span class="chip acc">supérieur</span> }</td>
-                                    <td class="r">@s.Postes</td>
-                                    <td class="r">@Fmt.Num(s.Hours, 1)</td>
-                                    <td class="r">@Fmt.Pct(s.Trs)</td>
-                                    <td class="r">@Fmt.Pct(s.UsualTrs)</td>
-                                    <td><span class="chip @LevelCss(s.Level)" title="occasionnel : moins de @EmployeeProfiles.FormedPostes postes · formé : moins de @EmployeeProfiles.AutonomousPostes, ou TRS à plus de @EmployeeProfiles.AutonomousGap pts sous l'habituel · autonome : au-delà">@LevelLabel(s.Level)</span></td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-                @if (p.Acting.Count > 0)
-                {
-                    <h3 class="sub">Remplacements</h3>
-                    <table class="t">
-                        <thead><tr><th>Date · poste</th><th>Poste tenu</th><th>À la place de</th><th>Heures</th><th class="r">Production</th><th class="r">TRS</th><th class="r">Habituel</th><th class="r">Vitesse</th><th class="r">Habituelle</th></tr></thead>
-                        <tbody>
-                            @foreach (var r in Shown(p))
-                            {
-                                var perf = _r!.Performance.GetValueOrDefault(r);
-                                <tr>
-                                    <td class="nowrap">@r.Date.ToString("dd/MM/yyyy")<small>@Shifts.Label(r.ShiftId) · @r.Team</small></td>
-                                    <td>@StaffFunctions.Short(r.ActingFunction) · @Plant.NameOf(r.Post) @if (r.IsStepUp) { <span class="chip acc">supérieur</span> }</td>
-                                    <td class="n">@r.ReplacedName</td>
-                                    <td class="n nowrap">@r.From.ToString("HH:mm") – @r.To.ToString("HH:mm")</td>
-                                    <td class="r" title="@(perf == null ? "" : $"{Fmt.Num(perf.Bags)} sacs")">@(perf == null || perf.Kg <= 0 ? "" : Fmt.Mass(perf.Kg))</td>
-                                    <td class="r">@Fmt.Pct(perf?.Trs)</td>
-                                    <td class="r">@Fmt.Pct(perf?.UsualTrs)</td>
-                                    <td class="r">@(perf?.Speed is { } s ? Fmt.Num(s, 1) + "/min" : Fmt.Missing)</td>
-                                    <td class="r">@(perf?.UsualSpeed is { } u ? Fmt.Num(u, 1) + "/min" : Fmt.Missing)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                }
-            </section>
-
-            <section class="pf-sec">
-                <h3>2 · Performance sur la machine</h3>
-                @if (!p.HoldsMachines)
-                {
-                    <p class="n">Aucune machine tenue sur la période (@StaffFunctions.Label(p.Function) : pas de résultat machine).</p>
-                }
-                else
-                {
-                    var trend = p.Trend.Where(t => t.Trs != null).ToList();
-                    <div class="row">
-                        <KpiTile Label="TRS sous lui" Value="@Fmt.Pct(p.Own.Trs)" Css="@GapCss(Gap(p))" Missing="@(p.Own.Trs == null)"
-                                 Sub="@(Usual(Fmt.Pct(p.Usual.Trs)) + " · écart " + Fmt.SignedPct(Gap(p), 1))" />
-                        <KpiTile Label="Vitesse" Value="@(p.Own.Speed is { } sp ? Fmt.Num(sp, 1) + "/min" : Fmt.Missing)" Css="@HigherCss(p.Own.Speed, p.Usual.Speed)"
-                                 Sub="@Usual(p.Usual.Speed is { } us ? Fmt.Num(us, 1) + "/min" : Fmt.Missing)" />
-                        <KpiTile Label="Production par heure-machine" Value="@(p.Own.KgPerHour is { } k ? Fmt.Mass(k) : Fmt.Missing)" Css="@HigherCss(p.Own.KgPerHour, p.Usual.KgPerHour)"
-                                 Sub="@(Usual(p.Usual.KgPerHour is { } uk ? Fmt.Mass(uk) : Fmt.Missing) + " · total " + Fmt.Mass(p.Own.Kg))" />
-                        <KpiTile Label="Régularité" Value="@(p.TrsSpread is { } sd ? "± " + Fmt.Num(sd, 1) + " pts" : Fmt.Missing)"
-                                 Css="@(p.TrsSpread is { } d ? d <= 5 ? "ok" : d <= 10 ? "warn" : "bad" : "")"
-                                 Sub="@($"écart-type du TRS sur {trend.Count} poste(s)")" />
-                    </div>
-                    @if (trend.Count > 0)
-                    {
-                        <SpigaChart Title="@($"TRS par poste · {p.Name}")" Key="poly-trs" YMin="0"
-                                    Labels="@trend.Select(t => $"{t.Date:dd/MM} {Shifts.Label(t.ShiftId)[0]}").ToList()"
-                                    Format="@(v => Fmt.Pct(v))"
-                                    Series="@(new[]
-                                            {
-                                                new ChartSeries("TRS sous lui", trend.Select(t => t.Trs).ToList(), "var(--bar)"),
-                                                new ChartSeries("TRS habituel", trend.Select(t => t.UsualTrs).ToList(), "var(--target)", ChartKind.Line, Reference: true),
-                                            })" />
-                    }
-                    @if (trend.Count >= 4)
-                    {
-                        var half = trend.Count / 2;
-                        var early = trend.Take(half).Average(t => t.Trs!.Value);
-                        var recent = trend.Skip(half).Average(t => t.Trs!.Value);
-                        <p class="n">
-                            Tendance : TRS @Fmt.Pct(early) sur ses premiers postes, @Fmt.Pct(recent) sur les plus récents
-                            @(recent > early + 1 ? "— en progrès." : recent < early - 1 ? "— en recul." : "— stable.")
-                        </p>
-                    }
-                    @if (p.Held.Any(h => h.Function == StaffFunction.Emballage))
-                    {
-                        <p class="n">Le résultat d'une machine se partage entre conducteur, ouvriers de manutention, produit et pannes : pour un ouvrier de manutention c'est un indicateur, pas un jugement individuel.</p>
-                    }
-                }
-            </section>
-
-            <section class="pf-sec">
-                <h3>3 · Arrêts et qualité</h3>
-                @if (!p.HoldsMachines)
-                {
-                    <p class="n">Aucune machine tenue sur la période.</p>
-                }
-                else
-                {
-                    var causes = p.Causes;
-                    <div class="row">
-                        <KpiTile Label="Arrêts par heure" Value="@(p.Own.StopPerHour is { } st ? Fmt.Num(st, 1) + " min" : Fmt.Missing)" Css="@LowerCss(p.Own.StopPerHour, p.Usual.StopPerHour)"
-                                 Sub="@(Usual(p.Usual.StopPerHour is { } ust ? Fmt.Num(ust, 1) + " min" : Fmt.Missing) + " · total " + ProductionStop.FormatDuration(p.Own.StoppedMinutes))" />
-                        <KpiTile Label="Sacs dans la tolérance" Value="@Fmt.Pct(p.Own.Quality)" Css="@HigherCss(p.Own.Quality, p.Usual.Quality)"
-                                 Sub="@($"{Usual(Fmt.Pct(p.Usual.Quality))} · sous {Fmt.Pct(p.Own.UnderPct)} · sur {Fmt.Pct(p.Own.OverPct)}")" />
-                        <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(p.Own.DeviationPct)" Css="@LowerCss(p.Own.DeviationPct is { } dv ? Math.Abs(dv) : null, p.Usual.DeviationPct is { } udv ? Math.Abs(udv) : null)"
-                                 Sub="@((p.Own.GiveawayKg is { } g ? Fmt.Giveaway(g) : "poids non mesuré") + " · " + Usual(Fmt.SignedPct(p.Usual.DeviationPct)))" />
-                        <KpiTile Label="Rejets métal" Value="@Fmt.Num(p.Own.MetalRejects)" Css="@(p.Own.MetalRejects == 0 ? "ok" : "warn")" Sub="@($"sur {Fmt.Num(p.Own.Bags)} sacs")" />
-                        <KpiTile Label="Déchets d'emballage" Value="@(p.WastePerTonne is { } w ? Fmt.Num(w, 1) + " kg/t" : Fmt.Missing)" Css="@LowerCss(p.WastePerTonne, p.UsualWastePerTonne)"
-                                 Sub="@(Usual(p.UsualWastePerTonne is { } uw ? Fmt.Num(uw, 1) + " kg/t" : Fmt.Missing) + " · " + Fmt.Mass(p.WasteKg) + " saisis")" />
-                    </div>
-                    @if (causes.Count > 0)
-                    {
-                        <SpigaChart Title="@($"Arrêts par cause · {p.Name}")" Key="poly-causes" Integer="true"
-                                    Labels="@causes.Select(c => c.Label).ToList()"
-                                    Format="@(v => ProductionStop.FormatDuration(v))"
-                                    Series="@(FamilySeries(causes))" />
-                        <p class="n">Minutes d'arrêt des machines pendant qu'il les tenait, par cause qualifiée. Les pannes ne dépendent pas de lui ; réglages, changements de format et micro-arrêts davantage.</p>
-                    }
-                }
-            </section>
-
-            <section class="pf-sec">
-                <h3>4 · Présence et fiabilité</h3>
-                @{ var a = p.Presence; }
-                <div class="row">
-                    <KpiTile Label="Taux de présence" Value="@Fmt.Pct(a.Rate)" Css="@RateCss(a.Rate)"
-                             Sub="@($"{a.Present} poste(s) présent sur {a.Present + a.A + a.M + a.AT} dus · {Fmt.Num(a.WorkedHours, 1)} h")" />
-                    <KpiTile Label="Absences" Value="@((a.A + a.M + a.AT + a.C).ToString())" Css="@(a.A + a.M + a.AT == 0 ? "ok" : a.A > 0 ? "bad" : "warn")"
-                             Sub="@($"A {a.A} · M {a.M} · AT {a.AT} · C {a.C}")" />
-                    <KpiTile Label="Facteur de Bradford" Value="@a.Bradford.ToString()" Css="@BradfordCss(a.Bradford)"
-                             Sub="@($"{a.Spells} période(s)² × {a.A + a.M} jour(s) (A, M)")" />
-                    <KpiTile Label="Retards" Value="@a.Lates.ToString()" Css="@(a.Lates == 0 ? "ok" : a.Lates < 3 ? "warn" : "bad")"
-                             Sub="@($"{Fmt.Num(a.LateMinutes)} min · départs anticipés : {a.Early} ({Fmt.Num(a.EarlyMinutes)} min)")" />
-                    <KpiTile Label="Heures supplémentaires" Value="@Fmt.Num(a.OvertimeMinutes / 60, 1)" Sub="h, comme sur l'écran Heures sup." />
-                </div>
-                @if (a.Entries.Count > 0)
-                {
-                    <div class="pf-days">
-                        @foreach (var e in a.Entries.OrderBy(e => e.Sheet.Start))
-                        {
-                            var main = PresenceCalendar.Main(new[] { e });
-                            <span class="pf-day" title="@($"{e.Date:dddd dd/MM} · {Shifts.Label(e.Sheet.ShiftId)} · {e.Sheet.Team} · {e.Describe(null, Plant.NameOf)}")">
-                                <small>@e.Date.ToString("dd/MM")</small>
-                                <span class="cal-code @CalKinds.Css(main)">@CalKinds.Code(main)</span>
-                            </span>
-                        }
-                    </div>
-                }
-            </section>
-        </div>
-    };
-
-    // One series per cause family (stacked), so each bar takes its family's colour.
-    private static IReadOnlyList<ChartSeries> FamilySeries(IReadOnlyList<CauseMinutes> causes)
-    {
-        var families = new (CauseFamily? Family, string Name, string Color)[]
-        {
-            (CauseFamily.Panne, "Panne", "var(--bad)"),
-            (CauseFamily.Process, "Process", "var(--warn)"),
-            (CauseFamily.Organisation, "Organisation", "var(--bar)"),
-            (CauseFamily.Planifie, "Planifié", "var(--target)"),
-            (null, "Non qualifié", "var(--off)"),
-        };
-        return families.Where(f => causes.Any(c => c.Family == f.Family))
-            .Select(f => new ChartSeries(f.Name, causes.Select(c => c.Family == f.Family ? (double?)Math.Round(c.Minutes) : null).ToList(), f.Color, Stack: "causes"))
-            .ToList();
-    }
+    private string PeriodText => _r == null ? "" : _r.FromDate == _r.ToDate ? $"le {_r.FromDate:dd/MM/yyyy}" : $"du {_r.FromDate:dd/MM} au {_r.ToDate:dd/MM/yyyy}";
 }

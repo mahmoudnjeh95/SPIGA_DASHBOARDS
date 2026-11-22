@@ -89,20 +89,33 @@
 
     var observer = new MutationObserver(handle);
 
+    // Each figure once per batch, after the whole batch is read: Blazor
+    // inserts a tile and sets its text in the same batch, and the second
+    // record, read after the count had started, found the count's own first
+    // frame ("0") as the new value, stopped the count and left the "0".
     function handle(records) {
+        if (reduced) return;
+        var els = [];
+        function add(el) { if (el && el.matches && el.matches(SELECTOR) && els.indexOf(el) < 0) els.push(el); }
         for (var i = 0; i < records.length; i++) {
             var r = records[i];
             if (r.type === "characterData") {
-                var el = r.target.parentNode;
-                if (el && el.matches && el.matches(SELECTOR)) countUp(el);
+                add(r.target.parentNode);
             } else {
                 for (var j = 0; j < r.addedNodes.length; j++) {
                     var n = r.addedNodes[j];
-                    if (n.nodeType === 1) scan(n);
-                    else if (n.nodeType === 3 && n.parentNode && n.parentNode.matches && n.parentNode.matches(SELECTOR)) countUp(n.parentNode);
+                    if (n.nodeType === 1) {
+                        add(n);
+                        if (n.querySelectorAll) {
+                            var list = n.querySelectorAll(SELECTOR);
+                            for (var k = 0; k < list.length; k++) add(list[k]);
+                        }
+                    }
+                    else if (n.nodeType === 3) add(n.parentNode);
                 }
             }
         }
+        for (var e = 0; e < els.length; e++) countUp(els[e]);
     }
 
     function start() {
