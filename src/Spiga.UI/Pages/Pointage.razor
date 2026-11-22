@@ -321,14 +321,14 @@
                         <label for="pt-renfort">Ajouter un renfort (autre équipe)</label>
                         <select id="pt-renfort" @bind="_renfort">
                             <option value="0">Choisir une personne…</option>
-                            @foreach (var team in _candidates.GroupBy(c => c.Posting.Team))
+                            @foreach (var team in _candidates.GroupBy(c => c.Posting.Team).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
                             {
                                 <optgroup label="@team.Key">
-                                    @foreach (var c in team)
+                                    @foreach (var c in team.OrderBy(c => (int)c.Posting.Function).ThenBy(c => c.Employee.FullName, StringComparer.CurrentCultureIgnoreCase))
                                     {
                                         var refusal = _refusals.GetValueOrDefault(c.Employee.Id);
-                                        <option value="@c.Employee.Id" disabled="@(refusal != null)" title="@refusal">
-                                            @c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)@(refusal != null ? " — " + RefusalShort(c.Employee.Id) : "")
+                                        <option value="@c.Employee.Id" disabled="@(refusal != null)" title="@($"{team.Key} · {StaffFunctions.Label(c.Posting.Function)}{(refusal != null ? " — " + refusal : "")}")">
+                                            @c.Employee.FullName · @StaffFunctions.Label(c.Posting.Function)@(refusal != null ? " — " + RefusalShort(c.Employee.Id) : "")
                                         </option>
                                     }
                                 </optgroup>
@@ -572,14 +572,7 @@
         {
             var lines = s.Lines.Where(l => !l.IsRenfort && l.Function == f).ToList();
             if (lines.Count > 0)
-                yield return (f switch
-                {
-                    StaffFunction.ChefConditionnement => "Chef de conditionnement",
-                    StaffFunction.ChefLigne => "Chefs de ligne",
-                    StaffFunction.Conducteur => "Conducteurs de ligne",
-                    StaffFunction.Emballage => "Emballage",
-                    _ => "Nettoyage",
-                }, lines);
+                yield return (StaffFunctions.Plural(f), lines);
         }
         var renforts = s.Lines.Where(l => l.IsRenfort).ToList();
         if (renforts.Count > 0)

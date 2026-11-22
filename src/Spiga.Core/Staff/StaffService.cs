@@ -211,8 +211,9 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
         if (t.Contains("cond") && t.Contains("chef") || t == "cc") return StaffFunction.ChefConditionnement;
         if (t.Contains("chef")) return StaffFunction.ChefLigne;
         if (t.StartsWith("conduc", StringComparison.Ordinal)) return StaffFunction.Conducteur;
-        if (t.StartsWith("emball", StringComparison.Ordinal)) return StaffFunction.Emballage;
-        if (t.StartsWith("nett", StringComparison.Ordinal)) return StaffFunction.Nettoyage;
+        if (t.Contains("carton")) return StaffFunction.MiseEnCarton;
+        if (t.Contains("emball") || t.Contains("manut")) return StaffFunction.Emballage;
+        if (t.Contains("nett")) return StaffFunction.Nettoyage;
         return null;
     }
 
@@ -268,7 +269,7 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
         await Write(actor, AuditActions.LineDeleted, $"Ligne {line.Name}", "", string.Join(", ", line.Machines), null);
     }
 
-    // "Equipe B · Conducteur de ligne · CC02 · dès le 01/12/2026"
+    // "Equipe B · Conducteur · CC02 · dès le 01/12/2026"
     public async Task<string> DescribeAsync(EmployeePosting p)
     {
         var post = p.MachineId ?? (p.LineId is { } l ? ProductionLine.LabelOf((await store.ListLinesAsync()).FirstOrDefault(x => x.Id == l)?.Name ?? l.ToString()) : null);

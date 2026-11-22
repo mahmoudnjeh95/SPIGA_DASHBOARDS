@@ -2,14 +2,17 @@ namespace Spiga.Core.Staff;
 
 // The functions of the packaging service, in the order of the paper
 // pointage sheet: the chef de conditionnement first (he fills the sheet),
-// then the chefs de ligne, the conducteurs, the packaging and cleaning staff.
+// then the chefs d'équipe, the conducteurs, the ouvriers de manutention, de
+// nettoyage and de mise en carton. The names are the ones stored in the
+// database: the labels below are what the screens show.
 public enum StaffFunction
 {
     ChefConditionnement,
-    ChefLigne,
+    ChefLigne,          // Chef d'équipe
     Conducteur,
-    Emballage,
-    Nettoyage,
+    Emballage,          // Ouvrier de manutention
+    Nettoyage,          // Ouvrier de nettoyage
+    MiseEnCarton,       // Ouvrier de mise en carton
 }
 
 public static class StaffFunctions
@@ -19,18 +22,31 @@ public static class StaffFunctions
     public static string Label(StaffFunction f) => f switch
     {
         StaffFunction.ChefConditionnement => "Chef de conditionnement",
-        StaffFunction.ChefLigne => "Chef de ligne",
-        StaffFunction.Conducteur => "Conducteur de ligne",
-        StaffFunction.Emballage => "Emballage",
-        _ => "Nettoyage",
+        StaffFunction.ChefLigne => "Chef d'équipe",
+        StaffFunction.Conducteur => "Conducteur",
+        StaffFunction.Emballage => "Ouvrier de manutention",
+        StaffFunction.MiseEnCarton => "Ouvrier de mise en carton",
+        _ => "Ouvrier de nettoyage",
+    };
+
+    // The heading of a group of rows on the pointage sheet.
+    public static string Plural(StaffFunction f) => f switch
+    {
+        StaffFunction.ChefConditionnement => "Chef de conditionnement",
+        StaffFunction.ChefLigne => "Chefs d'équipe",
+        StaffFunction.Conducteur => "Conducteurs",
+        StaffFunction.Emballage => "Ouvriers de manutention",
+        StaffFunction.MiseEnCarton => "Ouvriers de mise en carton",
+        _ => "Ouvriers de nettoyage",
     };
 
     public static string Short(StaffFunction f) => f switch
     {
         StaffFunction.ChefConditionnement => "Chef cond.",
-        StaffFunction.ChefLigne => "Chef de ligne",
+        StaffFunction.ChefLigne => "Chef d'équipe",
         StaffFunction.Conducteur => "Conducteur",
-        StaffFunction.Emballage => "Emballage",
+        StaffFunction.Emballage => "Manutention",
+        StaffFunction.MiseEnCarton => "Mise en carton",
         _ => "Nettoyage",
     };
 
@@ -46,7 +62,7 @@ public static class StaffFunctions
         _ => 0,
     };
 
-    // Conducteurs and emballage staff hold one machine; a chef de ligne holds
+    // Conducteurs and ouvriers de manutention hold one machine; a chef d'équipe holds
     // a ligne (a set of machines); the others have no machine.
     public static bool HoldsMachine(StaffFunction f) => f is StaffFunction.Conducteur or StaffFunction.Emballage;
 

@@ -12,8 +12,8 @@
         <div>
             <span class="pre">Administration</span><h1>Personnel et lignes</h1>
             <p>
-                Les employés du conditionnement : équipe, fonction (chef de conditionnement, chef de ligne, conducteur, emballage, nettoyage)
-                et poste (machine, ou ligne pour un chef de ligne). Une mutation ou une promotion s'enregistre comme une nouvelle affectation
+                Les employés du conditionnement : équipe, fonction (chef de conditionnement, chef d'équipe, conducteur, ouvrier de manutention, de nettoyage ou de mise en carton)
+                et poste (machine, ou ligne pour un chef d'équipe). Une mutation ou une promotion s'enregistre comme une nouvelle affectation
                 avec sa date d'effet : les pointages passés ne changent pas.
             </p>
         </div>
@@ -172,13 +172,13 @@
                 {
                     <p class="n">
                         Dans Excel, sélectionnez les lignes (colonnes dans cet ordre : <b>Nom et prénom · Matricule · Équipe · Fonction · Machine ou ligne</b>),
-                        copiez, puis collez ici. Équipe : « D » ou « Equipe D ». Fonction : chef de conditionnement, chef de ligne, conducteur, emballage, nettoyage.
-                        Machine pour un conducteur ou l'emballage, nom de la ligne pour un chef de ligne.
+                        copiez, puis collez ici. Équipe : « D » ou « Equipe D ». Fonction : chef de conditionnement, chef d'équipe, conducteur, manutention, nettoyage, mise en carton.
+                        Machine pour un conducteur ou un ouvrier de manutention, nom de la ligne pour un chef d'équipe.
                     </p>
                     <div class="form">
                         <div class="f grow" style="flex:1 1 100%">
                             <label for="pe-import">Lignes à importer</label>
-                            <textarea id="pe-import" rows="6" placeholder="BEN SAAD Med	1024	B	Emballage	CC01" @bind="_importText" @bind:event="oninput"></textarea>
+                            <textarea id="pe-import" rows="6" placeholder="BEN SAAD Med	1024	B	Manutention	CC01" @bind="_importText" @bind:event="oninput"></textarea>
                         </div>
                         <div class="f">
                             <label for="pe-import-from">Date d'effet</label>
@@ -228,7 +228,7 @@
         {
             <section class="card">
                 <div class="card-head">
-                    <h2>@(_lineId == 0 ? "Nouvelle ligne" : $"Modifier la ligne {_lineName}") <small>les machines dont un chef de ligne a la charge</small></h2>
+                    <h2>@(_lineId == 0 ? "Nouvelle ligne" : $"Modifier la ligne {_lineName}") <small>les machines dont un chef d'équipe a la charge</small></h2>
                     @if (_lineId != 0)
                     {
                         <span class="sp"></span>
@@ -275,13 +275,13 @@
             <div class="card-head"><h2>Lignes</h2></div>
             @if (_lines.Count == 0)
             {
-                <p class="empty">Aucune ligne. Une ligne regroupe les machines d'un chef de ligne.</p>
+                <p class="empty">Aucune ligne. Une ligne regroupe les machines d'un chef d'équipe.</p>
             }
             else
             {
                 var today = Shifts.ProductionDate(Now);
                 <table class="t">
-                    <thead><tr><th>Ligne</th><th>Machines</th><th>Chefs de ligne</th><th></th></tr></thead>
+                    <thead><tr><th>Ligne</th><th>Machines</th><th>Chefs d'équipe</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var l in _lines)
                         {

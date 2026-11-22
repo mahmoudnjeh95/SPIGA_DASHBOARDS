@@ -319,6 +319,29 @@ public class PointageTests
     }
 
     [Fact]
+    public async Task New_post_names_are_read_on_import_and_shown_everywhere()
+    {
+        using var app = new TestApp();
+        await TeamAsync(app);
+        var text = "Nom et prénom\tMatricule\tÉquipe\tFonction\tMachine\n"
+                   + "UN Ali\t\tB\tChef d'équipe\tpâte courte\n"
+                   + "DEUX Ali\t\tB\tOuvrier de manutention\tCC01\n"
+                   + "TROIS Ali\t\tB\tOuvrier de nettoyage\t\n"
+                   + "QUATRE Ali\t\tB\tOuvrier de mise en carton\t\n";
+        var rows = await app.Staff.ParseImportAsync(text, Today);
+        Assert.Equal(new StaffFunction?[] { StaffFunction.ChefLigne, StaffFunction.Emballage, StaffFunction.Nettoyage, StaffFunction.MiseEnCarton },
+            rows.Select(r => r.Posting?.Function));
+        Assert.All(rows, r => Assert.True(r.Ok, r.Error));
+        Assert.Equal("Chef d'équipe", StaffFunctions.Label(StaffFunction.ChefLigne));
+        Assert.Equal("Ouvrier de manutention", StaffFunctions.Label(StaffFunction.Emballage));
+        Assert.Equal("Ouvrier de nettoyage", StaffFunctions.Label(StaffFunction.Nettoyage));
+        Assert.Equal("Ouvrier de mise en carton", StaffFunctions.Label(StaffFunction.MiseEnCarton));
+        // Mise en carton sits with nettoyage: a step up to any machine post.
+        Assert.Equal(StaffFunctions.Rank(StaffFunction.Nettoyage), StaffFunctions.Rank(StaffFunction.MiseEnCarton));
+        Assert.False(StaffFunctions.HoldsMachine(StaffFunction.MiseEnCarton));
+    }
+
+    [Fact]
     public async Task Missing_postes_are_listed_until_validated()
     {
         using var app = new TestApp();

@@ -59,7 +59,7 @@
 
             <div class="row">
                 <KpiTile Label="Remplacements" Value="@records.Count.ToString()" Css="@(records.Count == 0 ? "nd" : "")" Sub="postes tenus à la place d'un autre" />
-                <KpiTile Label="Sur un poste supérieur" Value="@records.Count(r => r.IsStepUp).ToString()" Sub="ex. emballage sur la machine d'un conducteur" />
+                <KpiTile Label="Sur un poste supérieur" Value="@records.Count(r => r.IsStepUp).ToString()" Sub="ex. ouvrier de manutention sur la machine d'un conducteur" />
                 <KpiTile Label="Personnes" Value="@people.Count.ToString()" Sub="ayant remplacé au moins une fois" />
                 <KpiTile Label="Heures en remplacement" Value="@Fmt.Num(records.Sum(r => r.Hours), 1)" />
             </div>

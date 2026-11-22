@@ -1030,6 +1030,11 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 }
 .pt-add { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .pt-add select { min-height: 38px; min-width: 280px; }
+/* The team headings of the renfort list: plain browser optgroups are faint
+   or lost in a dark theme, so they get the accent, bold and a band. */
+.pt-add optgroup { font-style: normal; font-weight: 800; color: var(--accent); background: var(--btn); }
+.pt-add option { font-weight: 400; color: var(--fg); background: var(--tile); padding-left: 14px; }
+.pt-add option:disabled { color: var(--fg3); }
 .pt-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .pt-todo { display: flex; flex-direction: column; gap: 2px; color: var(--warn); font-size: 13px; }
 .pt-todo small { color: var(--fg2); }
@@ -1051,6 +1056,7 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .paper-t tr.paper-chefligne td:first-child { color: #B03A2E; }
 .paper-t tr.paper-emballage td:first-child { color: #1F618D; }
 .paper-t tr.paper-nettoyage td:first-child { color: #1E8449; }
+.paper-t tr.paper-miseencarton td:first-child { color: #7D3C98; }
 .paper-foot { font-size: 11px; margin-top: 10px; color: #222; }
 
 @media print {
