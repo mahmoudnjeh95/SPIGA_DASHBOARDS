@@ -30,7 +30,13 @@ public sealed class PresenceReport(
         IReadOnlyDictionary<ActingRecord, ActingPerformance> Performance,
         IReadOnlyList<RepeatLateness> Repeats,
         IReadOnlyDictionary<int, ProductionLine> Lines,
-        string? ProductionError);
+        string? ProductionError)
+    {
+        // The hour buckets of every machine over the period, and the causes
+        // given to their stops (the employee profiles of Polyvalence).
+        public IReadOnlyList<ProductionBucket> Lots { get; init; } = Array.Empty<ProductionBucket>();
+        public IReadOnlyList<StopQualification> Qualifications { get; init; } = Array.Empty<StopQualification>();
+    }
 
     private DateTime Today => Shifts.ProductionDate(clock.GetLocalNow().DateTime);
 
@@ -74,7 +80,11 @@ public sealed class PresenceReport(
             error == null ? PresenceAnalysis.Unstaffed(inPeriod, machines, history) : Array.Empty<UnstaffedMachine>(),
             acting, performance,
             PresenceAnalysis.Repeats(events, toDate),
-            lines, error);
+            lines, error)
+        {
+            Lots = history.Lots,
+            Qualifications = history.Qualifications,
+        };
     }
 
     // ---------- payroll export ----------
@@ -169,6 +179,9 @@ public sealed class PresenceReport(
         private readonly IReadOnlyList<(int Start, int End)> _breaks;
         private readonly AppSettings? _settings;
 
+        public IReadOnlyList<ProductionBucket> Lots { get; }
+        public IReadOnlyList<StopQualification> Qualifications { get; }
+
         public static History Empty { get; } = new(new(), new(), new(), new(), new(), Array.Empty<(int, int)>(), null);
 
         public History(List<LineSegment> segments, List<ProductionStop> stops, List<StopQualification> qualifications,
@@ -184,6 +197,8 @@ public sealed class PresenceReport(
             _lots = lots.ToLookup(l => l.MachineId, StringComparer.OrdinalIgnoreCase);
             _breaks = breaks;
             _settings = settings;
+            Lots = lots;
+            Qualifications = qualifications;
         }
 
         public double StoppedMinutes(string machineId, DateTime from, DateTime to)

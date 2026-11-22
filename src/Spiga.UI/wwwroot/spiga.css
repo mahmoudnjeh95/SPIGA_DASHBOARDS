@@ -1675,3 +1675,13 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 .dk-alert-row > span { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .dk-alert-more { display: block; margin-top: 6px; font-weight: 700; }
 .dk-cause { display: inline-block; border-radius: 99px; padding: 4px 10px; font-size: 12px; font-weight: 700; line-height: 1.3; }
+
+/* Polyvalence: an employee's profile, in four groups. */
+.pf { display: grid; gap: 14px; padding: 6px 2px; }
+.pf-sec { background: var(--tile); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.pf-sec > h3 { font-size: 13px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); margin: 0; }
+.pf-sec > h3.sub { color: var(--fg3); }
+.pf-sec .row .kpi { flex-basis: 160px; }
+.pf-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-day { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--fg3); }
+.pf-day .cal-code { cursor: default; }
