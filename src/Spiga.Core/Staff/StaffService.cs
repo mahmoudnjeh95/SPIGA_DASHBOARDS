@@ -53,17 +53,30 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
         return employee;
     }
 
-    public async Task UpdateEmployeeAsync(Actor actor, int id, EmployeeDraft draft, bool isActive)
+    // inactiveFrom: the day he left (default today), when made inactive.
+    // He stays on the sheets of the days before.
+    public async Task UpdateEmployeeAsync(Actor actor, int id, EmployeeDraft draft, bool isActive, DateTime? inactiveFrom = null)
     {
         actor.Demand(Perm.ReferentielsSaisir);
         var employee = await Load(id);
-        var before = $"{employee.FullName} · {employee.Matricule} · {(employee.IsActive ? "actif" : "inactif")}";
+        var before = State(employee);
         ApplyDraft(employee, draft, (await store.ListEmployeesAsync()).Where(e => e.Id != id).ToList());
+        if (isActive)
+            employee.InactiveFrom = null;
+        else
+        {
+            var left = (inactiveFrom ?? (employee.IsActive ? null : employee.InactiveFrom) ?? Shifts.ProductionDate(Now)).Date;
+            if (employee.Postings.Count > 0 && left < employee.Postings.Min(p => p.ValidFrom).Date)
+                throw new RuleViolationException($"{employee.FullName} est employé depuis le {employee.Postings.Min(p => p.ValidFrom):dd/MM/yyyy} : il ne peut pas être parti avant.");
+            employee.InactiveFrom = left;
+        }
         employee.IsActive = isActive;
         await store.UpdateEmployeeAsync(employee);
-        await Write(actor, AuditActions.EmployeeUpdated, employee.FullName, "", before,
-            $"{employee.FullName} · {employee.Matricule} · {(employee.IsActive ? "actif" : "inactif")}");
+        await Write(actor, AuditActions.EmployeeUpdated, employee.FullName, "", before, State(employee));
     }
+
+    private static string State(Employee e)
+        => $"{e.FullName} · {e.Matricule} · " + (e.IsActive ? "actif" : e.InactiveFrom is { } left ? $"inactif depuis le {left:dd/MM/yyyy}" : "inactif");
 
     // A transfer, a promotion or a new post, from a date on. The sheets
     // already pointed keep what they recorded.
@@ -258,7 +271,7 @@ public sealed class StaffService(IStaffStore store, IPlantReferential plant, IAu
     // "Equipe B · Conducteur de ligne · CC02 · dès le 01/12/2026"
     public async Task<string> DescribeAsync(EmployeePosting p)
     {
-        var post = p.MachineId ?? (p.LineId is { } l ? "ligne " + ((await store.ListLinesAsync()).FirstOrDefault(x => x.Id == l)?.Name ?? l.ToString()) : null);
+        var post = p.MachineId ?? (p.LineId is { } l ? ProductionLine.LabelOf((await store.ListLinesAsync()).FirstOrDefault(x => x.Id == l)?.Name ?? l.ToString()) : null);
         return $"{p.Team} · {StaffFunctions.Label(p.Function)}{(post == null ? "" : " · " + post)} · dès le {p.ValidFrom:dd/MM/yyyy}";
     }
 

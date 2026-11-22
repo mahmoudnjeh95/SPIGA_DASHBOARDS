@@ -21,7 +21,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
     {
         await OffUiThread.Switch();
         using var c = await db.OpenAsync();
-        var employees = (await c.QueryAsync<Employee>("SELECT Id, Matricule, FullName, IsActive FROM StaffEmployees")).ToList();
+        var employees = (await c.QueryAsync<Employee>("SELECT Id, Matricule, FullName, IsActive, InactiveFrom FROM StaffEmployees")).ToList();
         var postings = (await c.QueryAsync<EmployeePosting>($"SELECT {PostingColumns} FROM StaffPostings")).ToLookup(p => p.EmployeeId);
         foreach (var e in employees)
             e.Postings = postings[e.Id].OrderBy(p => p.ValidFrom).ThenBy(p => p.Id).ToList();
@@ -32,7 +32,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
     {
         await OffUiThread.Switch();
         using var c = await db.OpenAsync();
-        var e = await c.QuerySingleOrDefaultAsync<Employee>("SELECT Id, Matricule, FullName, IsActive FROM StaffEmployees WHERE Id = @id", new { id });
+        var e = await c.QuerySingleOrDefaultAsync<Employee>("SELECT Id, Matricule, FullName, IsActive, InactiveFrom FROM StaffEmployees WHERE Id = @id", new { id });
         if (e != null)
             e.Postings = (await c.QueryAsync<EmployeePosting>($"SELECT {PostingColumns} FROM StaffPostings WHERE EmployeeId = @id ORDER BY ValidFrom, Id", new { id }))
                 .ToList();
@@ -45,7 +45,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
         using var c = await db.OpenAsync();
         using var t = c.BeginTransaction();
         var id = (int)await c.ExecuteScalarAsync<long>(
-            "INSERT INTO StaffEmployees (Matricule, FullName, IsActive) VALUES (@Matricule, @FullName, @IsActive)" + db.ReturnId, employee, t);
+            "INSERT INTO StaffEmployees (Matricule, FullName, IsActive, InactiveFrom) VALUES (@Matricule, @FullName, @IsActive, @InactiveFrom)" + db.ReturnId, employee, t);
         posting.EmployeeId = id;
         await InsertPosting(c, t, posting);
         t.Commit();
@@ -56,7 +56,7 @@ public sealed class StaffStore(AppDb db) : IStaffStore
     {
         await OffUiThread.Switch();
         using var c = await db.OpenAsync();
-        await c.ExecuteAsync("UPDATE StaffEmployees SET Matricule = @Matricule, FullName = @FullName, IsActive = @IsActive WHERE Id = @Id", employee);
+        await c.ExecuteAsync("UPDATE StaffEmployees SET Matricule = @Matricule, FullName = @FullName, IsActive = @IsActive, InactiveFrom = @InactiveFrom WHERE Id = @Id", employee);
     }
 
     public async Task SavePostingAsync(EmployeePosting posting)

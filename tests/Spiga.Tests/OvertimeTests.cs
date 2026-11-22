@@ -334,4 +334,41 @@ public class OvertimeTests
         Assert.Equal(LineStatus.Ailleurs, Line(morning, t, "GUEDDICH Moez").Status);
         Assert.Equal(AbsenceCode.M, Line(morning, t, "GUEDDICH Moez").Absence);
     }
+
+    [Fact]
+    public async Task A_derogation_is_given_only_once_the_limit_is_reached_this_month()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+
+        // No limit: nothing to go over.
+        var none = await Assert.ThrowsAsync<RuleViolationException>(() => app.Overtime.AllowOverLimitAsync(t.Resp, t["TRIKI Faez"], Today, "inventaire"));
+        Assert.Contains("Aucune limite", none.Message);
+
+        await app.Overtime.SetLimitAsync(t.Resp, 2);
+        var early = await Assert.ThrowsAsync<RuleViolationException>(() => app.Overtime.AllowOverLimitAsync(t.Resp, t["TRIKI Faez"], Today, "inventaire"));
+        Assert.Contains("une fois la limite atteinte", early.Message);
+        await Assert.ThrowsAsync<RuleViolationException>(() => app.Overtime.AllowOverLimitAsync(t.Resp, t["TRIKI Faez"], Today.AddMonths(1), "inventaire"));
+
+        // 2 h yesterday: reached, the dérogation can be given.
+        await app.Attendance.SaveAsync(t.ChefB, await MorningAsync(t, Today.AddDays(-1), Today.AddDays(-1).AddHours(16)), validate: true, null);
+        await app.Overtime.AllowOverLimitAsync(t.Resp, t["TRIKI Faez"], Today, "inventaire");
+    }
+
+    [Fact]
+    public async Task Refusal_messages_end_with_a_single_period()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        await app.Overtime.BanAsync(t.Resp, t["GUEDDICH Moez"], "santé");
+        // GUEDDICH (team B, morning) as renfort in team A's afternoon: a second poste.
+        await app.Attendance.SaveAsync(t.ChefB, await MorningAsync(t, Today), validate: true, null);
+        app.Clock.Now = Today.AddHours(15);
+        var afternoon = await app.Attendance.OpenAsync(t.ChefA, Today, 2);
+        var book = await app.Attendance.OvertimeAsync(t.ChefA, afternoon);
+        var why = book.RenfortRefusal(afternoon, t.People["GUEDDICH Moez"], t.People["GUEDDICH Moez"].Postings[0]);
+        Assert.NotNull(why);
+        Assert.EndsWith("heures supplémentaires.", why);
+        Assert.DoesNotContain("..", why);
+    }
 }

@@ -110,7 +110,8 @@ public sealed class OvertimeService(
         return decision;
     }
 
-    // Lets a person who reached the limit do more, for one month.
+    // Lets a person who reached the limit do more, for the rest of the
+    // current month.
     public async Task<OvertimeDecision> AllowOverLimitAsync(Actor actor, int employeeId, DateTime month, string reason)
     {
         actor.Demand(Perm.HeuresSup);
@@ -119,8 +120,17 @@ public sealed class OvertimeService(
         if (reason.Length == 0)
             throw new RuleViolationException("Une dérogation se donne avec un motif : indiquez-le.");
         month = Overtime.MonthStart(month);
-        if (month < Overtime.MonthStart(Shifts.ProductionDate(Now)))
-            throw new RuleViolationException("Une dérogation se donne pour le mois en cours ou un mois à venir.");
+        var today = Shifts.ProductionDate(Now);
+        if (month != Overtime.MonthStart(today))
+            throw new RuleViolationException("Une dérogation se donne pour le mois en cours, à qui a atteint la limite.");
+        var book = await BookAsync(today);
+        if (book.LimitMinutes == 0)
+            throw new RuleViolationException("Aucune limite mensuelle n'est fixée : il n'y a rien à dépasser.");
+        var made = book.MonthMinutes(e.Id);
+        if (made < book.LimitMinutes)
+            throw new RuleViolationException(
+                $"{e.FullName} a fait {Overtime.Hours(made)} d'heures sup. ce mois sur {Overtime.Hours(book.LimitMinutes)} : " +
+                "une dérogation se donne une fois la limite atteinte.");
         var all = await store.ListAsync();
         if (all.Any(d => d.EmployeeId == e.Id && d.Kind == OvertimeDecisionKind.Derogation && d.Covers(month)))
             throw new RuleViolationException($"{e.FullName} a déjà une dérogation pour {month:MM/yyyy}.");

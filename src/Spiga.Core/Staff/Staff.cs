@@ -60,6 +60,13 @@ public sealed class ProductionLine
     public string Name { get; set; } = "";
     public List<string> Machines { get; set; } = new();
     public bool IsActive { get; set; } = true;
+
+    // "Ligne Couscous 1", whether or not the name already says "Ligne".
+    public string Label => LabelOf(Name);
+
+    public static string LabelOf(string? name)
+        => string.IsNullOrWhiteSpace(name) ? "Ligne"
+            : name.TrimStart().StartsWith("ligne", StringComparison.CurrentCultureIgnoreCase) ? name.Trim() : "Ligne " + name.Trim();
 }
 
 // Where an employee works from a date on: team, function and post (machine
@@ -84,6 +91,13 @@ public sealed class Employee
     public string Matricule { get; set; } = "";
     public string FullName { get; set; } = "";
     public bool IsActive { get; set; } = true;
+
+    // An inactive employee left on this day: he is still on the sheets of
+    // the days before (a past poste opened later keeps him). Null for an
+    // active one.
+    public DateTime? InactiveFrom { get; set; }
+
+    public bool ActiveOn(DateTime date) => IsActive || InactiveFrom is { } left && date.Date < left.Date;
 
     // Oldest first.
     public List<EmployeePosting> Postings { get; set; } = new();

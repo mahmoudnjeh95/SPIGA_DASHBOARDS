@@ -145,20 +145,22 @@
                                 if (shownLines.Count == 0)
                                     continue;
                                 var pending = group.Where(l => l.Status == LineStatus.AConfirmer).ToList();
+                                var mine = pending.Where(Touch).ToList();
                                 <tr class="pt-group">
                                     <td colspan="4">
                                         <b>@title</b>
                                         <small>@group.Count personne(s)@(pending.Count > 0 ? $" · {pending.Count} à confirmer" : "")</small>
-                                        @if (editable && pending.Count > 0)
+                                        @if (editable && mine.Count > 0)
                                         {
                                             <button type="button" class="pt-ok pt-all" title="Présents aux heures du poste : vérifiez d'abord les absents et les retards"
-                                                    @onclick="() => ConfirmGroup(pending)">✓ Tous présents (@pending.Count)</button>
+                                                    @onclick="() => ConfirmGroup(mine)">✓ Tous présents (@mine.Count)</button>
                                         }
                                     </td>
                                 </tr>
                                 @foreach (var l in shownLines)
                                 {
                                     var rowProblems = problems.Where(p => p.EmployeeId == l.EmployeeId).ToList();
+                                    var rowEditable = editable && Touch(l);
                                     <tr class="pt-@(l.Status.ToString().ToLowerInvariant()) @(rowProblems.Count > 0 ? "pt-bad" : "")">
                                         <td>
                                             @l.FullName
@@ -178,6 +180,10 @@
                                             {
                                                 <small class="pt-ot-left">Heures sup. ce mois : @Overtime.Hours(otl.MonthMinutes) / @Overtime.Hours(otl.LimitMinutes)</small>
                                             }
+                                            @if (editable && !rowEditable)
+                                            {
+                                                <small class="pt-other" title="Ce pointage revient au chef de conditionnement de cette plateforme">Autre plateforme · @(_rows!.Where(l))</small>
+                                            }
                                             @if (l.Status != LineStatus.Ailleurs)
                                             {
                                                 @foreach (var (os, ol) in AwayOf(l))
@@ -191,7 +197,7 @@
                                             {
                                                 <span class="chip acc">Renfort · @(AwayOf(l).FirstOrDefault().Sheet?.Team ?? "autre équipe")</span>
                                             }
-                                            else if (editable)
+                                            else if (rowEditable)
                                             {
                                                 <button type="button" class="pt-ok @(l.Status == LineStatus.Present ? "on" : "")" title="Présent aux heures indiquées"
                                                         @onclick="() => SetPresent(l)">✓ Présent</button>
@@ -241,7 +247,7 @@
                                             <td class="nowrap">
                                                 @if (l.Status is LineStatus.Present or LineStatus.AConfirmer)
                                                 {
-                                                    @if (editable && _editTimes == l.EmployeeId)
+                                                    @if (rowEditable && _editTimes == l.EmployeeId)
                                                     {
                                                         <div class="pt-times">
                                                             @{ var (earliest, latest) = Window(s, l); }
@@ -253,7 +259,7 @@
                                                             <button type="button" class="bar small" @onclick="() => _editTimes = null">OK</button>
                                                         </div>
                                                     }
-                                                    else if (editable)
+                                                    else if (rowEditable)
                                                     {
                                                         <button type="button" class="pt-hours @(l.EntryAt != s.Start || l.ExitAt != s.End ? "chg" : "")"
                                                                 title="Changer l'heure d'entrée ou de sortie" @onclick="() => _editTimes = l.EmployeeId">
@@ -279,12 +285,12 @@
                                                 }
                                             </td>
                                             <td>
-                                                @PostCell(l, editable)
+                                                @PostCell(l, rowEditable)
                                                 @if (uncovered.ContainsKey(l.EmployeeId))
                                                 {
                                                     <div class="pt-warn">
                                                         ⚠ @StaffFunctions.Short(l.Function) sur @PostName(l) : personne à ce poste
-                                                        @if (editable)
+                                                        @if (editable && AssignCandidates(l).Any())
                                                         {
                                                             <button type="button" class="bar small" @onclick="() => OpenAssign(l)">Affecter…</button>
                                                         }
@@ -322,7 +328,7 @@
                                     {
                                         var refusal = _refusals.GetValueOrDefault(c.Employee.Id);
                                         <option value="@c.Employee.Id" disabled="@(refusal != null)" title="@refusal">
-                                            @c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)@(refusal != null ? " — interdit d'heures sup." : "")
+                                            @c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)@(refusal != null ? " — " + RefusalShort(c.Employee.Id) : "")
                                         </option>
                                     }
                                 </optgroup>
@@ -437,6 +443,8 @@
     private IReadOnlyList<(AttendanceSheet Sheet, AttendanceLine Line)> _away = Array.Empty<(AttendanceSheet, AttendanceLine)>();
     private IReadOnlyList<(DateTime Date, int ShiftId, string Team, SheetStatus? Status)> _missing = Array.Empty<(DateTime, int, string, SheetStatus?)>();
     private Dictionary<int, ProductionLine> _lines = new();
+    // Which rows this account changes (its plateformes); the others are read only.
+    private AttendanceService.RowRule? _rows;
     private IReadOnlyList<PlantMachine> _machines = Array.Empty<PlantMachine>();
 
     // Temporary assignment being chosen: whose post, by whom, from when.
@@ -452,12 +460,32 @@
 
     private bool Editable => _sheet != null && (_correcting ? Attendance.CanCorrect(Actor, _sheet) : Attendance.CanEnter(Actor, _sheet));
 
+    private bool Touch(AttendanceLine l) => _rows?.Allows(l) ?? true;
+
     private bool CanCorrectNow => _sheet != null && Attendance.CanCorrect(Actor, _sheet);
+
+    // Set once the actor's poste is opened. Never left on DateTime's default
+    // (01/01/0001): the page starts on today, and opens the poste as soon as
+    // the session holds the right (it may come after the first render).
+    private bool _started;
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Session.Can(Perm.PointageVoir))
+        _date = Attendance.Today;
+        await StartAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_started)
+            await StartAsync();
+    }
+
+    private async Task StartAsync()
+    {
+        if (_started || !Session.Can(Perm.PointageVoir))
             return;
+        _started = true;
         await Run(async () =>
         {
             _machines = await Plant.GetMachinesAsync();
@@ -524,6 +552,7 @@
             if (_shift == 0)
                 return;
             _sheet = await Attendance.OpenAsync(Actor, _date, _shift);
+            _rows = await Attendance.RowsAsync(Actor, _sheet);
             _states.Clear();
             _book = await Attendance.OvertimeAsync(Actor, _sheet);
             _accidents = await Attendance.AccidentElsewhereAsync(Actor, _sheet);
@@ -688,6 +717,15 @@
                 _refusals[c.Employee.Id] = why;
     }
 
+    // Why a renfort is greyed out, in a few words: a ban, or the limit.
+    private string RefusalShort(int employeeId) => StateOf(employeeId) switch
+    {
+        { Ban: not null } => "interdit d'heures sup.",
+        { LimitReached: true } => "limite d'heures sup. atteinte",
+        { Remaining: { } left } => $"plus que {Overtime.Hours(left)} d'heures sup. ce mois",
+        _ => "heures sup. refusées",
+    };
+
     private OvertimeState? StateOf(int employeeId)
     {
         if (_book == null || _sheet == null)
@@ -717,7 +755,7 @@
     // ---------- temporary assignment ----------
 
     private IEnumerable<AttendanceLine> AssignCandidates(AttendanceLine target)
-        => _sheet!.Lines.Where(x => x.EmployeeId != target.EmployeeId && x.Status is LineStatus.Present or LineStatus.AConfirmer && !x.IsActing);
+        => _sheet!.Lines.Where(x => x.EmployeeId != target.EmployeeId && x.Status is LineStatus.Present or LineStatus.AConfirmer && !x.IsActing && Touch(x));
 
     private void OpenAssign(AttendanceLine target)
     {
@@ -789,7 +827,7 @@
     };
 
     private string PostName(AttendanceLine l)
-        => l.MachineId is { } machine ? Plant.NameOf(machine) : (l.LineId is { } id && _lines.TryGetValue(id, out var line) ? "la ligne " + line.Name : "son poste");
+        => l.MachineId is { } machine ? Plant.NameOf(machine) : (l.LineId is { } id && _lines.TryGetValue(id, out var line) ? line.Label : "son poste");
 
     private RenderFragment PostCell(AttendanceLine l, bool editable) => __builder =>
     {
@@ -803,7 +841,7 @@
                     {
                         <option value="">Machine…</option>
                     }
-                    @foreach (var m in _machines)
+                    @foreach (var m in _machines.Where(m => m.Id == l.MachineId || (_rows?.AllowsMachine(m.Id) ?? true)))
                     {
                         <option value="@m.Id">@m.Name</option>
                     }
@@ -816,13 +854,13 @@
         }
         else if (l.LineId is { } lid && _lines.TryGetValue(lid, out var line))
         {
-            <span class="n">Ligne @line.Name</span>
+            <span class="n">@line.Label</span>
         }
         @if (l.IsActing)
         {
             var replaced = _sheet!.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId);
             <div class="pt-acting">
-                ↳ @StaffFunctions.Short(l.ActingFunction!.Value) sur @(l.ActingMachineId is { } am ? Plant.NameOf(am) : (l.ActingLineId is { } al && _lines.TryGetValue(al, out var aline) ? "ligne " + aline.Name : "?"))
+                ↳ @StaffFunctions.Short(l.ActingFunction!.Value) sur @(l.ActingMachineId is { } am ? Plant.NameOf(am) : (l.ActingLineId is { } al && _lines.TryGetValue(al, out var aline) ? aline.Label : "?"))
                 à la place de @(replaced?.FullName ?? "?")
                 @if (editable)
                 {
@@ -881,6 +919,22 @@
             var message = Error;
             await LoadAsync();
             Error = message;
+        }
+        else if (!ok)
+        {
+            // The rules may have changed since the sheet opened (a ban, a
+            // lower limit): reload them so the refused rows show in red.
+            var message = Error;
+            await Run(async () =>
+            {
+                _states.Clear();
+                _book = await Attendance.OvertimeAsync(Actor, _sheet);
+                _rows = await Attendance.RowsAsync(Actor, _sheet);
+                Refusals();
+            });
+            Error = message;
+            if (_book != null && _book.Problems(_sheet).Count > 0)
+                _show = 1;
         }
         return ok;
     }

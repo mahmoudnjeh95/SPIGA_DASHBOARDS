@@ -100,6 +100,65 @@ public sealed class AttendanceService(
         return null;
     }
 
+    // ---------- the rows of a plateforme ----------
+
+    // A team's sheet holds the people of every plateforme. An account given
+    // plateformes changes only the rows of their machines: the people whose
+    // machine, ligne or replaced post is on one of them, and those with no
+    // machine (chef de conditionnement, nettoyage, an emballage worker not
+    // placed yet). The other rows are shown, read only: the chef of the
+    // other plateforme points them.
+    public async Task<RowRule> RowsAsync(Actor actor, AttendanceSheet sheet)
+    {
+        var permission = sheet.Status == SheetStatus.Validee ? Perm.PointageCorriger : Perm.PointageSaisir;
+        return new RowRule(actor, permission, sheet.Team, await plant.GetMachinesAsync(), await staff.ListLinesAsync());
+    }
+
+    public sealed class RowRule
+    {
+        private readonly Actor _actor;
+        private readonly string _permission;
+        private readonly string _team;
+        private readonly Dictionary<string, PlantMachine> _machines;
+        private readonly Dictionary<int, ProductionLine> _lines;
+
+        internal RowRule(Actor actor, string permission, string team, IEnumerable<PlantMachine> machines, IEnumerable<ProductionLine> lines)
+        {
+            _actor = actor;
+            _permission = permission;
+            _team = team;
+            _machines = machines.DistinctBy(m => m.Id, StringComparer.OrdinalIgnoreCase).ToDictionary(m => m.Id, StringComparer.OrdinalIgnoreCase);
+            _lines = lines.ToDictionary(l => l.Id);
+        }
+
+        private IEnumerable<string> MachinesOf(AttendanceLine l)
+        {
+            if (l.MachineId != null)
+                yield return l.MachineId;
+            if (l.ActingMachineId != null)
+                yield return l.ActingMachineId;
+            foreach (var id in new[] { l.LineId, l.ActingLineId })
+                if (id is { } lid && _lines.TryGetValue(lid, out var line))
+                    foreach (var m in line.Machines)
+                        yield return m;
+        }
+
+        // The machine may be chosen for a row (a floating emballage worker).
+        public bool AllowsMachine(string machineId)
+            => _machines.TryGetValue(machineId, out var m) && _actor.Allows(_permission, m.Sector, m.Id, _team);
+
+        public bool Allows(AttendanceLine l)
+        {
+            var machines = MachinesOf(l).ToList();
+            return machines.Count == 0 || machines.Any(AllowsMachine);
+        }
+
+        // "CC03 · CC04" in display names: where a row the actor may not change works.
+        public string Where(AttendanceLine l)
+            => string.Join(", ", MachinesOf(l).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(m => _machines.TryGetValue(m, out var pm) ? pm.Name : m));
+    }
+
     // ---------- reading ----------
 
     // The stored sheet, or a new one prefilled with the team (not saved
@@ -171,7 +230,7 @@ public sealed class AttendanceService(
     {
         actor.Demand(Perm.PointageVoir);
         return (await staff.ListEmployeesAsync())
-            .Where(e => e.IsActive && sheet.Lines.All(l => l.EmployeeId != e.Id))
+            .Where(e => e.ActiveOn(sheet.ProductionDate) && sheet.Lines.All(l => l.EmployeeId != e.Id))
             .Select(e => (Employee: e, Posting: e.PostingAt(sheet.ProductionDate)))
             .Where(x => x.Posting != null)
             .Select(x => (x.Employee, x.Posting!))
@@ -429,6 +488,7 @@ public sealed class AttendanceService(
             sheet.ValidatedAt = Now;
         }
         sheet.Lines = await NormalizeAsync(sheet, draft.Lines);
+        await CheckRowsAsync(actor, stored ?? draft, stored, sheet);
         await TransferredAwayAsync(sheet);
         await CheckAsync(sheet, sheet.Status == SheetStatus.Validee);
 
@@ -590,7 +650,7 @@ public sealed class AttendanceService(
         => new("Cette feuille a été modifiée entre-temps par quelqu'un d'autre. Elle est rechargée : vérifiez-la, puis recommencez.");
 
     private static IEnumerable<Employee> Members(IEnumerable<Employee> employees, DateTime date, string team)
-        => employees.Where(e => e.IsActive && e.PostingAt(date) is { } p && string.Equals(p.Team, team, StringComparison.OrdinalIgnoreCase));
+        => employees.Where(e => e.ActiveOn(date) && e.PostingAt(date) is { } p && string.Equals(p.Team, team, StringComparison.OrdinalIgnoreCase));
 
     private static AttendanceLine NewLine(AttendanceSheet sheet, Employee e, EmployeePosting p, bool renfort,
         Dictionary<int, (AttendanceSheet Sheet, AttendanceLine Line)> elsewhere)
@@ -684,6 +744,38 @@ public sealed class AttendanceService(
         }
         return Order(result);
     }
+
+    // Only the rows of the actor's plateformes change: a row he may not
+    // touch must stay as stored (as the sheet opened, for a new sheet).
+    private async Task CheckRowsAsync(Actor actor, AttendanceSheet scopeOf, AttendanceSheet? stored, AttendanceSheet sheet)
+    {
+        var rule = await RowsAsync(actor, scopeOf);
+        var before = stored?.Lines.ToDictionary(l => l.EmployeeId) ?? new Dictionary<int, AttendanceLine>();
+        var employees = (await staff.ListEmployeesAsync()).ToDictionary(e => e.Id);
+        foreach (var l in sheet.Lines)
+        {
+            // "En renfort ailleurs" rows follow the other sheets, not the chef.
+            if (l.Status == LineStatus.Ailleurs)
+                continue;
+            var old = before.GetValueOrDefault(l.EmployeeId)
+                      ?? (!l.IsRenfort && employees.TryGetValue(l.EmployeeId, out var e) && e.PostingAt(sheet.ProductionDate) is { } p
+                          ? NewLine(sheet, e, p, renfort: false, new())
+                          : null);
+            if (old != null && Same(old, l))
+                continue;
+            if (!rule.Allows(l) || old != null && !rule.Allows(old))
+                throw new AccessDeniedException(
+                    $"{l.FullName} travaille sur {rule.Where(old != null && !rule.Allows(old) ? old : l)} : hors de vos plateformes, " +
+                    "son pointage revient au chef de conditionnement de cette plateforme.");
+        }
+        foreach (var o in before.Values.Where(o => sheet.Lines.All(l => l.EmployeeId != o.EmployeeId)))
+            if (!rule.Allows(o))
+                throw new AccessDeniedException($"{o.FullName} travaille sur {rule.Where(o)} : hors de vos plateformes, vous ne pouvez pas le retirer.");
+    }
+
+    private static bool Same(AttendanceLine a, AttendanceLine b)
+        => a.Status == b.Status && a.Absence == b.Absence && a.EntryAt == b.EntryAt && a.ExitAt == b.ExitAt
+           && a.MachineId == b.MachineId && a.LineId == b.LineId && a.ReplacesEmployeeId == b.ReplacesEmployeeId && a.ActingFrom == b.ActingFrom;
 
     private async Task CheckAsync(AttendanceSheet sheet, bool validating)
     {

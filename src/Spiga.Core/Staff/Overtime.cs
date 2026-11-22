@@ -251,8 +251,8 @@ public sealed class OvertimeBook
             var why = outside > 0
                 ? $"heures du poste seulement ({sheet.Start:HH:mm} – {sheet.End:HH:mm})"
                 : Overtime.Allowance(_plant, date, l.HomeTeam) == 0
-                    ? "son équipe ne travaille pas ce jour-là : ce poste serait en heures sup."
-                    : "il a déjà fait son poste ce jour-là : un deuxième poste serait en heures sup.";
+                    ? "son équipe ne travaille pas ce jour-là : ce poste serait en heures supplémentaires"
+                    : "il a déjà fait son poste ce jour-là : un deuxième poste serait en heures supplémentaires";
             if (ban != null)
             {
                 list.Add((l.EmployeeId, $"{l.FullName} est interdit d'heures supplémentaires" + (ban.Reason.Length > 0 ? $" (« {ban.Reason} »)" : "") + $" : {why}."));

@@ -1066,6 +1066,7 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .pt td small.pt-away-note { color: var(--accent); font-weight: 600; }
 .pt td small.pt-ot-ban { color: var(--bad); font-weight: 600; white-space: normal; }
 .pt td small.pt-ot-left { color: var(--fg2); }
+.pt td small.pt-other { color: var(--fg2); font-style: italic; }
 .form .f .check input, .f .check input { min-height: 0; min-width: 0; width: 18px; height: 18px; padding: 0; }
 .paper-t small.paper-renfort { display: block; font-size: 10px; font-weight: 700; color: #6C3483; }
 .paper-t td.paper-away { text-align: center; font-style: italic; color: #6C3483; }

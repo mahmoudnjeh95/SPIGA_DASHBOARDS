@@ -235,7 +235,7 @@ public static class PresenceAnalysis
             foreach (var l in s.Lines.Where(l => l.Status == LineStatus.Present && l.IsActing && l.ActingFunction != null))
             {
                 var replaced = s.Lines.FirstOrDefault(x => x.EmployeeId == l.ReplacesEmployeeId);
-                var post = l.ActingMachineId ?? (l.ActingLineId is { } id && lines.TryGetValue(id, out var line) ? "Ligne " + line.Name : "Ligne");
+                var post = l.ActingMachineId ?? (l.ActingLineId is { } id && lines.TryGetValue(id, out var line) ? line.Label : "Ligne");
                 list.Add(new ActingRecord(s.ProductionDate, s.ShiftId, s.Team, l.EmployeeId, l.FullName, l.Function, l.ActingFunction!.Value,
                     Machines(l, lines, l.ActingFrom), post, replaced?.FullName ?? "?", l.ActingFrom ?? s.Start, l.ExitAt ?? s.End));
             }

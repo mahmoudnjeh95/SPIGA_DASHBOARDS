@@ -63,6 +63,15 @@
                             <span>État</span>
                             <label class="check"><input type="checkbox" @bind="_active" /> actif</label>
                         </div>
+                        @if (!_active)
+                        {
+                            <div class="f">
+                                <label for="pe-left">Inactif à partir du</label>
+                                <input id="pe-left" type="date" value="@_inactiveFrom?.ToString("yyyy-MM-dd")"
+                                       @onchange="e => _inactiveFrom = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d) ? d : null" />
+                                <small>il reste sur les feuilles des jours d'avant</small>
+                            </div>
+                        }
                         <button type="button" class="bar" @onclick="SaveIdentityAsync">Enregistrer</button>
                     }
                 </div>
@@ -306,6 +315,7 @@
     private string _name = "";
     private string _matricule = "";
     private bool _active = true;
+    private DateTime? _inactiveFrom;
     private string _pTeam = "";
     private StaffFunction _pFunction = StaffFunction.Conducteur;
     private string _pMachine = "";
@@ -339,7 +349,7 @@
 
     private IReadOnlyList<GridColumn<Employee>> EmployeeColumns => new[]
     {
-        new GridColumn<Employee>("Nom et prénom", e => e.FullName + (e.IsActive ? "" : " (inactif)")),
+        new GridColumn<Employee>("Nom et prénom", e => e.FullName + (e.IsActive ? "" : e.InactiveFrom is { } left ? $" (inactif depuis le {left:dd/MM/yyyy})" : " (inactif)")),
         new GridColumn<Employee>("Matricule", e => e.Matricule, css: "n"),
         new GridColumn<Employee>("Équipe", e => e.Current(Today)?.Team ?? ""),
         new GridColumn<Employee>("Fonction", e => e.Current(Today) is { } p ? StaffFunctions.Label(p.Function) : "",
@@ -380,7 +390,7 @@
     }
 
     private string Post(EmployeePosting p)
-        => p.MachineId is { } machine ? Plant.NameOf(machine) : (p.LineId is { } id ? "Ligne " + (_lines.FirstOrDefault(l => l.Id == id)?.Name ?? "?") : "—");
+        => p.MachineId is { } machine ? Plant.NameOf(machine) : (p.LineId is { } id ? ProductionLine.LabelOf(_lines.FirstOrDefault(l => l.Id == id)?.Name ?? "?") : "—");
 
     private void NewEmployee()
     {
@@ -396,6 +406,7 @@
         _name = e.FullName;
         _matricule = e.Matricule;
         _active = e.IsActive;
+        _inactiveFrom = e.IsActive ? null : e.InactiveFrom;
         var p = e.Current(Shifts.ProductionDate(Now));
         _pTeam = p?.Team ?? "";
         _pFunction = p?.Function ?? StaffFunction.Conducteur;
@@ -418,7 +429,7 @@
 
     private async Task SaveIdentityAsync()
     {
-        if (_edit != null && await Run(() => Staff.UpdateEmployeeAsync(Actor, _edit.Id, new EmployeeDraft(_name, _matricule), _active), "Employé enregistré."))
+        if (_edit != null && await Run(() => Staff.UpdateEmployeeAsync(Actor, _edit.Id, new EmployeeDraft(_name, _matricule), _active, _inactiveFrom), "Employé enregistré."))
             await LoadAsync();
     }
 

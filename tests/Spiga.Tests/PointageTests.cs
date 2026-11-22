@@ -13,6 +13,7 @@ public class PointageTests
     private sealed class Setup
     {
         public required TestApp App { get; init; }
+        public required Actor Admin { get; init; }
         public required Actor Resp { get; init; }
         public required Actor ChefB { get; init; }
         public required Actor ChefA { get; init; }
@@ -42,7 +43,7 @@ public class PointageTests
         await Add("GUEDDICH Moez", "Equipe B", StaffFunction.Emballage, "CC01");
         await Add("CHOURA Wassim", "Equipe B", StaffFunction.Nettoyage);
         await Add("AYADI Khalil", "Equipe A", StaffFunction.Conducteur, "PL01");
-        return new Setup { App = app, Resp = resp, ChefB = chefB, ChefA = chefA, People = people };
+        return new Setup { App = app, Admin = admin, Resp = resp, ChefB = chefB, ChefA = chefA, People = people };
     }
 
     private static AttendanceLine Line(AttendanceSheet s, Setup t, string name) => s.Lines.Single(l => l.EmployeeId == t[name].Id);
@@ -334,6 +335,88 @@ public class PointageTests
         ConfirmAll(sheet);
         await app.Attendance.SaveAsync(t.ChefB, sheet, true, null);
         Assert.Empty(await app.Attendance.MissingAsync(t.ChefB, Today.AddDays(-1)));
+    }
+
+    [Fact]
+    public async Task An_inactive_employee_stays_on_the_sheets_of_the_days_before_he_left()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var choura = t["CHOURA Wassim"];
+        await app.Staff.UpdateEmployeeAsync(t.Resp, choura.Id, new EmployeeDraft(choura.FullName, ""), isActive: false, inactiveFrom: Today);
+        var stored = (await app.Staff.EmployeesAsync(t.Resp)).Single(e => e.Id == choura.Id);
+        Assert.Equal(Today, stored.InactiveFrom);
+
+        // Yesterday's morning, never pointed, opened now: he is on it.
+        var yesterday = await app.Attendance.OpenAsync(t.Resp, Today.AddDays(-1), 1);
+        Assert.Contains(yesterday.Lines, l => l.EmployeeId == choura.Id);
+        ConfirmAll(yesterday);
+        await app.Attendance.SaveAsync(t.Resp, yesterday, validate: true, null);
+
+        // From the day he left: off the sheet, and not offered as a renfort.
+        var today = await app.Attendance.OpenAsync(t.ChefB, Today, 1);
+        Assert.DoesNotContain(today.Lines, l => l.EmployeeId == choura.Id);
+        Assert.DoesNotContain(await app.Attendance.RenfortCandidatesAsync(t.ChefB, today), c => c.Employee.Id == choura.Id);
+
+        // Active again: back on the sheets, the date forgotten.
+        await app.Staff.UpdateEmployeeAsync(t.Resp, choura.Id, new EmployeeDraft(choura.FullName, ""), isActive: true);
+        Assert.Null((await app.Staff.EmployeesAsync(t.Resp)).Single(e => e.Id == choura.Id).InactiveFrom);
+        Assert.Contains((await app.Attendance.OpenAsync(t.ChefB, Today, 1)).Lines, l => l.EmployeeId == choura.Id);
+    }
+
+    [Fact]
+    public async Task A_plateforme_chef_changes_only_the_rows_of_his_plateforme()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var admin = t.Admin;
+        static PlatformChange Change(string name, params (string Id, string Sector)[] machines)
+            => new(name, "", true, machines.Select(m => new PlatformMachine(m.Id, m.Sector)).ToList());
+        var p1 = await app.Admin.CreatePlatformAsync(admin, Change("Plateforme 1", ("PC01", Spiga.Core.Plant.Sectors.PateCourte)));
+        var p2 = await app.Admin.CreatePlatformAsync(admin, Change("Plateforme 2",
+            ("PC02", Spiga.Core.Plant.Sectors.PateCourte), ("CC01", Spiga.Core.Plant.Sectors.Couscous)));
+        var chef1 = await app.UserAsync(admin, "chef.p1", "chef-equipe", DataScope.Of("Equipe B", new[] { p1 }));
+        var chef2 = await app.UserAsync(admin, "chef.p2", "chef-equipe", DataScope.Of("Equipe B", new[] { p2 }));
+
+        var sheet = await app.Attendance.OpenAsync(chef1, Today, 1);
+        var rows = await app.Attendance.RowsAsync(chef1, sheet);
+        Assert.True(rows.Allows(Line(sheet, t, "TRIKI Faez")));       // PC01
+        Assert.False(rows.Allows(Line(sheet, t, "BABBOU Firas")));    // PC02
+        Assert.False(rows.Allows(Line(sheet, t, "GUEDDICH Moez")));   // CC01
+        Assert.True(rows.Allows(Line(sheet, t, "CHOURA Wassim")));    // no machine
+        Assert.True(rows.Allows(Line(sheet, t, "BEN HSEN Mondher"))); // ligne PC01 + PC02
+        Assert.True(rows.AllowsMachine("PC01"));
+        Assert.False(rows.AllowsMachine("CC01"));
+
+        // The other plateforme's row: refused.
+        var babbou = Line(sheet, t, "BABBOU Firas");
+        babbou.Status = LineStatus.Absent;
+        babbou.Absence = AbsenceCode.A;
+        var refused = await Assert.ThrowsAsync<AccessDeniedException>(() => app.Attendance.SaveAsync(chef1, sheet, validate: false, null));
+        Assert.Contains("BABBOU Firas", refused.Message);
+        Assert.Contains("hors de vos plateformes", refused.Message);
+
+        // His own: saved, the others' rows stay as they opened.
+        sheet = await app.Attendance.OpenAsync(chef1, Today, 1);
+        Line(sheet, t, "TRIKI Faez").Status = LineStatus.Present;
+        Line(sheet, t, "CHOURA Wassim").Status = LineStatus.Present;
+        sheet = await app.Attendance.SaveAsync(chef1, sheet, validate: false, null);
+        Assert.Equal(LineStatus.AConfirmer, Line(sheet, t, "BABBOU Firas").Status);
+
+        // The second chef points his rows, cannot undo the first one's.
+        sheet = await app.Attendance.OpenAsync(chef2, Today, 1);
+        Line(sheet, t, "TRIKI Faez").Status = LineStatus.Absent;
+        Line(sheet, t, "TRIKI Faez").Absence = AbsenceCode.M;
+        await Assert.ThrowsAsync<AccessDeniedException>(() => app.Attendance.SaveAsync(chef2, sheet, validate: false, null));
+        // His rows and the shared ones confirmed: every row is, he validates.
+        sheet = await app.Attendance.OpenAsync(chef2, Today, 1);
+        ConfirmAll(sheet);
+        var validated = await app.Attendance.SaveAsync(chef2, sheet, validate: true, null);
+        Assert.Equal(SheetStatus.Validee, validated.Status);
+
+        // A team-wide chef still changes every row.
+        var all = await app.Attendance.RowsAsync(t.ChefB, validated);
+        Assert.All(validated.Lines, l => Assert.True(all.Allows(l)));
     }
 }
 

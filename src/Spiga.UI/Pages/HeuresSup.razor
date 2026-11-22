@@ -311,7 +311,7 @@
                                @onchange="e => _until = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d) ? d : null" />
                     </div>
                     <button type="button" class="bar danger" @onclick="() => BanAsync(r)">Interdire d'heures sup.</button>
-                    @if (_limit > 0 && st.Derogation == null && _month >= Overtime.MonthStart(Shifts.ProductionDate(Now)))
+                    @if (st.LimitReached && st.Derogation == null && _month == Overtime.MonthStart(Shifts.ProductionDate(Now)))
                     {
                         <button type="button" class="bar" disabled="@string.IsNullOrWhiteSpace(_reason)" title="Avec un motif"
                                 @onclick="() => AllowAsync(r)">Autoriser à dépasser la limite en @_month.ToString("MM/yyyy")</button>
