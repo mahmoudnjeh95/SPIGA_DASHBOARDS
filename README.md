@@ -42,6 +42,15 @@ allowed to change the tables, as on sites installed before 2.1, updates
 the base itself; `spiga_suivi.sql` takes that right back.) Browser host:
 `--update-database` with `Spiga:AppDatabase:AdminSqlServer`.
 
+Finished production days are kept in the application database
+(`ProductionDayCache`, version 11): per machine and day, the hour buckets
+read from `stats`, so a month or a year opens without running the slow query
+for each day again, on every PC. A stored day is checked against `stats`
+(snapshots, lots), Planification (planned stops), the planned breaks and the
+product table each time, and read again when any of them changed; nominal
+rates and empty bag weights are applied on reading. It is only a cache: the
+table can be emptied at any time (about 2-5 KB per machine and day).
+
 The SQL password of the PCs is encrypted for the Windows account that
 saved it (DPAPI user scope); a password saved by an older version, readable
 by any account of the PC, is re-encrypted at the next start. Windows

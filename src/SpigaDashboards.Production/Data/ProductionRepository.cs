@@ -32,7 +32,7 @@ public enum BucketSize
 //
 // Weights come from Stiavelli's lotto table (real lot averages) when the
 // line has lots in the range, otherwise from produzione.media_totale when it
-// looks sane (see LoadWeightPartsAsync).
+// looks sane (see WeightParts).
 //
 // Line status (connected / belt running / availability) is derived from the
 // same snapshots -- Stiavelli doesn't store it anywhere.
@@ -40,7 +40,7 @@ public enum BucketSize
 // Date bounds are always DateTime parameters, never strings: a 'yyyy-MM-dd'
 // string compared to a SQL Server DATETIME is parsed with the login's
 // language (French = DMY on this site) and silently swaps day/month.
-public class ProductionRepository
+public partial class ProductionRepository
 {
     // How far before/after the requested range snapshots are read. Covers the
     // interval crossing each boundary as long as Stiavelli wasn't silent for
@@ -122,6 +122,7 @@ public class ProductionRepository
     {
         _hasLotTable = null;
         ClearDayCache();
+        ResetDayStore();
         _connectionFactory.ResetPool();
     }
 
@@ -287,7 +288,7 @@ public class ProductionRepository
         await OffUiThread.Switch();
         if (!(await Access.FilterAsync(_connectionFactory))(machineId))
             return new List<ProductionBucket>();
-        return await QueryBucketsAsync("{0} = @machineId", BucketSize.Hour, from, to, new { machineId = Line(machineId) }, includeWeights);
+        return await QueryBucketsAsync(new[] { machineId }, BucketSize.Hour, from, to, includeWeights);
     }
 
     // Buckets for a set of machines (synthesis slides, history, exports). Day
@@ -301,11 +302,7 @@ public class ProductionRepository
         machineIds = machineIds.Where(allowed).ToList();
         if (machineIds.Count == 0)
             return new List<ProductionBucket>();
-        // Compared through Machines (small table), so the produzione side
-        // still seeks its index instead of converting numero_linea.
-        return await QueryBucketsAsync(
-            "{0} IN (SELECT MachineId FROM Machines WHERE MachineId IN @machineIds)",
-            size, from, to, new { machineIds = machineIds.ToList() }, includeWeights: true);
+        return await QueryBucketsAsync(machineIds.ToList(), size, from, to, includeWeights: true);
     }
 
     // One production's share of one bucket, as aggregated by the server.
@@ -611,12 +608,12 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
     private const int ParallelDays = 4;
 
     private async Task<List<ProductionBucket>> QueryBucketsAsync(
-        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+        IReadOnlyList<string> machines, BucketSize size, DateTime from, DateTime to, bool includeWeights)
     {
         if (from < _settings.DataStartDate)
             from = _settings.DataStartDate;
         if (to - from <= TimeSpan.FromDays(1))
-            return await QueryDayAsync(lineFilter, size, from, to, filterParams, includeWeights);
+            return await QueryDayAsync(machines, size, from, to, includeWeights);
         var days = new List<(DateTime Start, DateTime End)>();
         for (var start = from; start < to;)
         {
@@ -638,8 +635,8 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
                             && day.Start.Minute == 0 && day.Start.Second == 0 && day.Start.Millisecond == 0
                             && day.End == day.Start.Date.AddDays(1) && day.Start.Date >= _settings.DataStartDate;
                 if (!whole)
-                    return await QueryDayAsync(lineFilter, size, day.Start, day.End, filterParams, includeWeights);
-                var all = await QueryDayAsync(lineFilter, size, day.Start.Date, day.End, filterParams, includeWeights);
+                    return await QueryDayAsync(machines, size, day.Start, day.End, includeWeights);
+                var all = await QueryDayAsync(machines, size, day.Start.Date, day.End, includeWeights);
                 return all.Where(b => b.StartTime >= day.Start).ToList();
             }
             finally
@@ -659,7 +656,8 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
     // SnapshotMargin has passed too, as its last intervals are read up to
     // then. Planned stops given afterwards in Planification show within
     // DayCacheFor, like the synthesis cache. Buckets are shared, never
-    // changed by their readers.
+    // changed by their readers. Past this memory, closed days are also kept
+    // in the application database for every PC (StoredDayAsync).
     private static readonly TimeSpan DayCacheFor = TimeSpan.FromMinutes(30);
     private const int DayCacheMax = 20000;
     private static readonly ConcurrentDictionary<string, (DateTime ReadAt, List<ProductionBucket> Buckets)> DayCache = new();
@@ -668,19 +666,20 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
     public static void ClearDayCache() => DayCache.Clear();
 
     private async Task<List<ProductionBucket>> QueryDayAsync(
-        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+        IReadOnlyList<string> machines, BucketSize size, DateTime from, DateTime to, bool includeWeights)
     {
         var closed = from == from.Date && to == from.AddDays(1) && to + SnapshotMargin <= DateTime.Now;
         if (!closed)
-            return await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+            return BuildBuckets(await QueryRawAsync(machines, size, from, to, includeWeights), size);
 
-        var key = string.Join("|", _connectionFactory.Provider, lineFilter, size, from.ToString("yyyyMMdd"), includeWeights,
-            ParamsKey(filterParams));
+        var key = string.Join("|", _connectionFactory.Provider, size, from.ToString("yyyyMMdd"), includeWeights,
+            string.Join(",", machines.Select(m => m.Trim().ToUpperInvariant()).Order(StringComparer.Ordinal)));
         var now = DateTime.UtcNow;
         if (DayCache.TryGetValue(key, out var hit) && now - hit.ReadAt < DayCacheFor)
             return new List<ProductionBucket>(hit.Buckets);
 
-        var buckets = await QueryRangeAsync(lineFilter, size, from, to, filterParams, includeWeights);
+        var buckets = BuildBuckets(await StoredDayAsync(machines, size, from, includeWeights)
+                                   ?? await QueryRawAsync(machines, size, from, to, includeWeights), size);
         if (DayCache.Count >= DayCacheMax)
         {
             foreach (var old in DayCache.Where(e => now - e.Value.ReadAt >= DayCacheFor).Select(e => e.Key).ToList())
@@ -692,26 +691,38 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
         return new List<ProductionBucket>(buckets);
     }
 
-    // { machineId = "PL03" } -> "machineId=PL03"; lists joined.
-    private static string ParamsKey(object filterParams)
-        => string.Join(";", filterParams.GetType().GetProperties().Select(p => p.Name + "=" + (p.GetValue(filterParams) switch
-        {
-            string s => s,
-            System.Collections.IEnumerable list => string.Join(",", list.Cast<object>()),
-            var v => Convert.ToString(v, CultureInfo.InvariantCulture),
-        })));
+    // SQL condition on the line code of these machines ({0} = the column or
+    // expression holding it) and its parameters. Several are compared
+    // through Machines (small table), so the produzione side still seeks its
+    // index instead of converting numero_linea.
+    private static (string Filter, object Params) LineFilter(IReadOnlyList<string> machines)
+        => machines.Count == 1
+            ? ("{0} = @machineId", new { machineId = Line(machines[0]) })
+            : ("{0} IN (SELECT MachineId FROM Machines WHERE MachineId IN @machineIds)", new { machineIds = machines.ToList() });
 
-    // lineFilter: SQL condition on the line code, {0} = the column/expression holding it.
-    private async Task<List<ProductionBucket>> QueryRangeAsync(
-        string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
+    // What the bucket query returned for a range: its rows and, with weights,
+    // the lots (target found, empty bag weight not deducted yet). The
+    // settings of Paramètres (nominal rates, empty bag weights) are applied
+    // after (BuildBuckets), so a stored day follows them.
+    private sealed class RawBuckets
     {
+        public bool Weights { get; set; }
+        public List<BucketPartRow> Parts { get; set; } = new();
+        public List<LotRow> Lots { get; set; } = new();
+    }
+
+    private async Task<RawBuckets> QueryRawAsync(
+        IReadOnlyList<string> machines, BucketSize size, DateTime from, DateTime to, bool includeWeights)
+    {
+        var raw = new RawBuckets { Weights = includeWeights };
         // Nothing before DataStartDate is read, not even as the baseline of the
         // first interval: that interval is then dropped (unknown baseline).
         var dataStart = _settings.DataStartDate;
         if (from < dataStart)
             from = dataStart;
-        if (to <= from)
-            return new List<ProductionBucket>();
+        if (to <= from || machines.Count == 0)
+            return raw;
+        var (lineFilter, filterParams) = LineFilter(machines);
 
         var d = Dialect.For(_connectionFactory.Provider);
         var bucket = size == BucketSize.Hour ? d.Hour("x.mid_t") : d.Day("x.mid_t");
@@ -860,13 +871,20 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
         parameters.Add("readTo", readTo);
 
         using var connection = _connectionFactory.CreateConnection();
-        var parts = (await connection.QueryAsync<BucketPartRow>(sql, parameters)).ToList();
-        foreach (var p in parts)
+        raw.Parts = (await connection.QueryAsync<BucketPartRow>(sql, parameters)).ToList();
+        foreach (var p in raw.Parts)
             // CHAR(4) numero_linea comes back padded if a code is ever shorter.
             p.MachineId = p.MachineId.TrimEnd();
+        if (includeWeights)
+            raw.Lots = await LoadLotsAsync(connection, d, lineFilter, size, parameters, raw.Parts);
+        return raw;
+    }
 
-        var weights = includeWeights
-            ? await LoadWeightPartsAsync(connection, d, lineFilter, size, parameters, parts)
+    private List<ProductionBucket> BuildBuckets(RawBuckets raw, BucketSize size)
+    {
+        var parts = raw.Parts;
+        var weights = raw.Weights
+            ? WeightParts(raw)
             : new List<(string MachineId, DateTime StartTime, WeightPart Part)>();
 
         var length = size == BucketSize.Hour ? TimeSpan.FromHours(1) : TimeSpan.FromDays(1);
@@ -939,7 +957,7 @@ LEFT JOIN Products pr ON pr.Code = a.ProductCode";
 
     // Stiavelli lots of one line overlapping [from, to), each with its own
     // time span (ora_inizio -> ora_fine), for the weight-over-time chart.
-    // Net averages (empty bag deducted, as LoadWeightPartsAsync). Target =
+    // Net averages (empty bag deducted, as WeightParts). Target =
     // peso_netto_impostato of the production's first snapshot at or after
     // the lot end, else its last one before (lot closed after the latest
     // snapshot). null = no lotto table (SQLite dev DB): caller falls back.
@@ -1007,17 +1025,17 @@ ORDER BY l.ora_fine",
     // production); lots of a production with no snapshot in the read range
     // are left out. Line = first 4 characters of ID_produzione (odd codes
     // like "PL 3" match no machine).
-    // The empty bag weight set in Parametres for the line and target is
-    // deducted from every average (Stiavelli weighs the full bag).
-    private async Task<List<(string MachineId, DateTime StartTime, WeightPart Part)>> LoadWeightPartsAsync(
+    // Read here: the lots, each with its target. The empty bag weight set in
+    // Parametres for the line and target is deducted after, in WeightParts
+    // (Stiavelli weighs the full bag).
+    private async Task<List<LotRow>> LoadLotsAsync(
         IDbConnection connection, Dialect d, string lineFilter, BucketSize size, DynamicParameters parameters, List<BucketPartRow> parts)
     {
-        var result = new List<(string MachineId, DateTime StartTime, WeightPart Part)>();
+        var result = new List<LotRow>();
         var targets = parts.Where(p => p.TargetNetWeight > 0)
             .GroupBy(p => p.ProductionId)
             .ToDictionary(g => g.Key, g => g.Max(p => p.TargetNetWeight));
 
-        var linesWithLots = new HashSet<string>();
         if (await HasLotTableAsync(connection, d))
         {
             const string lineOfLot = "SUBSTRING(l.ID_produzione, 1, 4)";
@@ -1047,13 +1065,29 @@ GROUP BY t.MachineId, t.ProductionId, t.StartTime, t.Target", parameters);
                 // No later snapshot read: the production's own target.
                 if (!targets.TryGetValue(lot.ProductionId, out var productionTarget))
                     continue;
-                var target = lot.Target is > 0 ? lot.Target.Value : productionTarget;
-                linesWithLots.Add(machineId);
-                var tare = _settings.FindTare(machineId, target);
-                result.Add((machineId, lot.StartTime, new WeightPart(lot.ProductionId, target, lot.Bags, lot.WeightSum - tare * lot.Bags)));
+                lot.MachineId = machineId;
+                lot.Target = lot.Target is > 0 ? lot.Target.Value : productionTarget;
+                result.Add(lot);
             }
         }
+        return result;
+    }
 
+    // The weight data of the buckets, empty bag weight (Parametres) deducted:
+    // the lots, or the sane running averages on the lines with none.
+    private List<(string MachineId, DateTime StartTime, WeightPart Part)> WeightParts(RawBuckets raw)
+    {
+        var result = new List<(string MachineId, DateTime StartTime, WeightPart Part)>();
+        var linesWithLots = new HashSet<string>();
+        foreach (var lot in raw.Lots)
+        {
+            var target = lot.Target ?? 0;
+            linesWithLots.Add(lot.MachineId);
+            var tare = _settings.FindTare(lot.MachineId, target);
+            result.Add((lot.MachineId, lot.StartTime, new WeightPart(lot.ProductionId, target, lot.Bags, lot.WeightSum - tare * lot.Bags)));
+        }
+
+        var parts = raw.Parts;
         var fallback = parts.Where(p => p.MediaBags > 0 && !linesWithLots.Contains(p.MachineId)).ToList();
         if (fallback.Count == 0)
             return result;
