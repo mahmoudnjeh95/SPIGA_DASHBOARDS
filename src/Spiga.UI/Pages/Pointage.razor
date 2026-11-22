@@ -317,23 +317,50 @@
             @if (editable)
             {
                 <div class="pt-add">
-                    <div class="f">
+                    @* The other teams side by side, one column each: a plain select
+                       can only stack them. *@
+                    <div class="f pt-pick">
                         <label for="pt-renfort">Ajouter un renfort (autre équipe)</label>
-                        <select id="pt-renfort" @bind="_renfort">
-                            <option value="0">Choisir une personne…</option>
-                            @foreach (var team in _candidates.GroupBy(c => c.Posting.Team).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
-                            {
-                                <optgroup label="@team.Key">
-                                    @foreach (var c in team.OrderBy(c => (int)c.Posting.Function).ThenBy(c => c.Employee.FullName, StringComparer.CurrentCultureIgnoreCase))
+                        <button type="button" id="pt-renfort" class="pt-pick-btn @(_pickOpen ? "open" : "")" aria-expanded="@(_pickOpen ? "true" : "false")"
+                                @onclick="() => { _pickOpen = !_pickOpen; _pickFilter = string.Empty; }">
+                            <span>@(_candidates.FirstOrDefault(c => c.Employee.Id == _renfort) is { Employee: not null } sel
+                                    ? $"{sel.Employee.FullName} · {sel.Posting.Team}"
+                                    : "Choisir une personne…")</span>
+                            <span class="pt-pick-caret" aria-hidden="true">▾</span>
+                        </button>
+                        @if (_pickOpen)
+                        {
+                            <div class="pt-pick-shade" @onclick="() => _pickOpen = false"></div>
+                            <div class="pt-pick-panel" role="dialog" aria-label="Choisir un renfort">
+                                <input class="input pt-pick-find" placeholder="Rechercher un nom…" aria-label="Rechercher un nom"
+                                       @bind="_pickFilter" @bind:event="oninput" />
+                                <div class="pt-pick-cols">
+                                    @foreach (var team in _candidates.GroupBy(c => c.Posting.Team).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
                                     {
-                                        var refusal = _refusals.GetValueOrDefault(c.Employee.Id);
-                                        <option value="@c.Employee.Id" disabled="@(refusal != null)" title="@($"{team.Key} · {StaffFunctions.Label(c.Posting.Function)}{(refusal != null ? " — " + refusal : "")}")">
-                                            @c.Employee.FullName · @StaffFunctions.Label(c.Posting.Function)@(refusal != null ? " — " + RefusalShort(c.Employee.Id) : "")
-                                        </option>
+                                        var people = team.Where(c => _pickFilter.Length == 0 || c.Employee.FullName.Contains(_pickFilter, StringComparison.CurrentCultureIgnoreCase))
+                                                         .OrderBy(c => (int)c.Posting.Function).ThenBy(c => c.Employee.FullName, StringComparer.CurrentCultureIgnoreCase).ToList();
+                                        <section class="pt-pick-col">
+                                            <h4>@team.Key <small>@people.Count</small></h4>
+                                            @foreach (var c in people)
+                                            {
+                                                var refusal = _refusals.GetValueOrDefault(c.Employee.Id);
+                                                var id = c.Employee.Id;
+                                                <button type="button" class="pt-pick-item @(id == _renfort ? "on" : "")" disabled="@(refusal != null)"
+                                                        title="@($"{team.Key} · {StaffFunctions.Label(c.Posting.Function)}{(refusal != null ? " — " + refusal : "")}")"
+                                                        @onclick="() => { _renfort = id; _pickOpen = false; }">
+                                                    <b>@c.Employee.FullName</b>
+                                                    <small>@StaffFunctions.Label(c.Posting.Function)@(refusal != null ? " — " + RefusalShort(c.Employee.Id) : "")</small>
+                                                </button>
+                                            }
+                                            @if (people.Count == 0)
+                                            {
+                                                <p class="pt-pick-none">Personne</p>
+                                            }
+                                        </section>
                                     }
-                                </optgroup>
-                            }
-                        </select>
+                                </div>
+                            </div>
+                        }
                     </div>
                     <button type="button" class="bar" disabled="@(_renfort == 0)" @onclick="AddRenfortAsync">Ajouter</button>
                 </div>
@@ -430,6 +457,8 @@
     private bool _correcting;
     private string _reason = "";
     private int _renfort;
+    private bool _pickOpen;
+    private string _pickFilter = string.Empty;
     private (DateTime Date, int? Shift)? _switchTo;
     private IReadOnlyList<(Employee Employee, EmployeePosting Posting)> _candidates = Array.Empty<(Employee, EmployeePosting)>();
     private IReadOnlyList<AttendanceRevision> _history = Array.Empty<AttendanceRevision>();
