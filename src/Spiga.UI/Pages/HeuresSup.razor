@@ -1,0 +1,327 @@
+@page "/equipes/heures-sup"
+@inherits SpigaPage
+@inject OvertimeService Overtimes
+
+@* The chef de production's heures supplémentaires: how much each person did
+   this month (from the pointage sheets), the monthly limit per person (who
+   reaches it is forbidden until the next month), who is forbidden by hand,
+   and the dérogations. The chef de conditionnement then sees all of it on
+   his sheet and cannot point extra hours to a forbidden person. *@
+<RequireAccess Module="@Modules.Pointage">
+    @if (!Session.Can(Perm.HeuresSup))
+    {
+        <div class="card" style="max-width:640px">
+            <h2>Accès refusé</h2>
+            <p>Vos rôles (@Actor.RoleNames) ne donnent pas le droit « @PermissionCatalog.Label(Perm.HeuresSup) ».</p>
+        </div>
+    }
+    else
+    {
+        <div class="head">
+            <div>
+                <span class="pre">Équipes</span><h1>Heures supplémentaires</h1>
+                <p>
+                    Calculées des feuilles de pointage : le temps avant ou après le poste, et un poste en plus le même jour
+                    ou un jour de repos de l'équipe (renfort). Un changement de poste à la place du sien n'en est pas.
+                    Une personne <b>interdite</b>, ou qui a atteint la <b>limite du mois</b>, ne peut être pointée qu'aux heures de son poste.
+                </p>
+            </div>
+        </div>
+
+        <Flash Error="@Error" Info="@Info" />
+
+        <section class="card">
+            <div class="card-head"><h2>Règle <small>pour toutes les personnes</small></h2></div>
+            <div class="filters" style="margin:0">
+                <div class="f">
+                    <label for="hs-limit">Limite d'heures sup. par personne et par mois</label>
+                    <input id="hs-limit" type="number" min="0" max="@OvertimeService.MaxLimitHours" step="1" style="width:110px" @bind="_limitInput" />
+                </div>
+                <button type="button" class="bar acc" disabled="@(_limitInput == _limit)" @onclick="SaveLimitAsync">Enregistrer</button>
+                <p class="n" style="margin:0;align-self:center">
+                    @(_limit == 0 ? "Aucune limite pour l'instant (0 = sans limite)." : $"Qui atteint {_limit} h dans le mois est interdit d'heures sup. jusqu'au 1er du mois suivant, sauf dérogation.")
+                </p>
+            </div>
+        </section>
+
+        <div class="filters">
+            <div class="f">
+                <label for="hs-month">Mois</label>
+                <input id="hs-month" type="month" value="@_month.ToString("yyyy-MM")" @onchange="OnMonthAsync" />
+            </div>
+            @if (_rows.Select(r => r.Posting?.Team).Distinct().Count() > 1)
+            {
+                <div class="f">
+                    <label for="hs-team">Équipe</label>
+                    <select id="hs-team" @bind="_team">
+                        <option value="">Toutes</option>
+                        @foreach (var t in _rows.Select(r => r.Posting?.Team ?? "").Distinct().Order())
+                        {
+                            <option value="@t">@t</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="f">
+                <span>Afficher</span>
+                <div class="segs" role="group" aria-label="Afficher">
+                    <button type="button" class="seg @(_show == 0 ? "on" : "")" @onclick="() => _show = 0">Tout le personnel</button>
+                    <button type="button" class="seg @(_show == 1 ? "on" : "")" @onclick="() => _show = 1">Avec heures sup.</button>
+                    <button type="button" class="seg @(_show == 2 ? "on" : "")" @onclick="() => _show = 2">Interdits</button>
+                </div>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Loader Text="Calcul des heures supplémentaires…" />
+        }
+        else
+        {
+            var rows = Shown();
+            var all = _rows.Where(r => _team == "" || r.Posting?.Team == _team).ToList();
+            var total = all.Sum(r => r.MonthMinutes);
+            <div class="row">
+                <KpiTile Label="Heures sup. du mois" Value="@Overtime.Hours(total)" Css="@(total == 0 ? "nd" : "")" Sub="@_month.ToString("MMMM yyyy", Fmt.French)" />
+                <KpiTile Label="Personnes" Value="@all.Count(r => r.MonthMinutes > 0).ToString()" Sub="ayant fait des heures sup." />
+                <KpiTile Label="Interdits" Value="@all.Count(r => r.State.Ban != null).ToString()" Sub="par le chef de production" />
+                <KpiTile Label="Limite atteinte" Value="@all.Count(r => r.State.Ban == null && r.State.LimitReached).ToString()"
+                         Css="@(all.Any(r => r.State.Ban == null && r.State.LimitReached) ? "warn" : "")" Sub="@(_limit == 0 ? "pas de limite fixée" : $"{_limit} h par mois")" />
+            </div>
+
+            var top = all.Where(r => r.MonthMinutes > 0).Take(25).ToList();
+            @if (top.Count > 0)
+            {
+                <section class="card">
+                    <SpigaChart Title="Heures sup. par personne (h)" Key="heures-sup-personne" Labels="@top.Select(r => r.Employee.FullName).ToList()"
+                                Series="@PersonSeries(top)" YMin="0" Format="@(v => v.ToString("0.#"))" />
+                </section>
+                var days = Enumerable.Range(0, (Overtime.MonthEnd(_month) - _month).Days + 1).Select(i => _month.AddDays(i)).ToList();
+                <section class="card">
+                    <SpigaChart Title="Heures sup. par jour (h)" Key="heures-sup-jour" Labels="@days.Select(d => d.ToString("dd/MM")).ToList()"
+                                Series="@DaySeries(all, days)" YMin="0" Format="@(v => v.ToString("0.#"))" />
+                </section>
+            }
+
+            <section class="card">
+                <div class="card-head"><h2>Par personne <small>cliquez une ligne pour le détail, interdire ou autoriser</small></h2></div>
+                <GridTable TItem="OvertimeRow" Items="rows" Columns="Columns" MaxHeight="@null"
+                           RowClass="@(r => _open == r.Employee.Id ? "sel" : "")" OnRowClick="@(r => Toggle(r))"
+                           IsOpen="@(r => _open == r.Employee.Id)" Empty="Personne à afficher.">
+                    <Detail Context="r">
+                        @RowDetail(r)
+                    </Detail>
+                </GridTable>
+            </section>
+
+            @if (_decisions.Count > 0)
+            {
+                <section class="card">
+                    <div class="card-head"><h2>Interdictions et dérogations <small>historique</small></h2></div>
+                    <table class="t">
+                        <thead><tr><th>Employé</th><th>Décision</th><th>Période</th><th>Motif</th><th>Par</th><th>État</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in _decisions)
+                            {
+                                <tr>
+                                    <td>@(_names.GetValueOrDefault(d.EmployeeId) ?? "?")</td>
+                                    <td class="n">@(d.Kind == OvertimeDecisionKind.Interdiction ? "Interdit d'heures sup." : "Dérogation à la limite")</td>
+                                    <td class="n nowrap">@Period(d)</td>
+                                    <td class="wrap">@d.Reason</td>
+                                    <td class="n nowrap">@d.CreatedBy<small>@Fmt.Date(d.CreatedAt)</small></td>
+                                    <td class="n nowrap">
+                                        @if (d.IsActive)
+                                        {
+                                            <span class="chip @(d.Kind == OvertimeDecisionKind.Interdiction ? "bad" : "acc")">en vigueur</span>
+                                            <button type="button" class="link" @onclick="() => LiftAsync(d)">Lever</button>
+                                        }
+                                        else
+                                        {
+                                            <span>levée par @d.LiftedBy</span><small>@Fmt.Date(d.LiftedAt)</small>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        }
+    }
+</RequireAccess>
+
+@code {
+    private DateTime _month;
+    private int _limit;
+    private int _limitInput;
+    private string _team = "";
+    private int _show;
+    private bool _loading = true;
+    private int? _open;
+    private string _reason = "";
+    private DateTime? _until;
+    private IReadOnlyList<OvertimeRow> _rows = Array.Empty<OvertimeRow>();
+    private IReadOnlyList<OvertimeDecision> _decisions = Array.Empty<OvertimeDecision>();
+    private Dictionary<int, string> _names = new();
+
+    private IReadOnlyList<GridColumn<OvertimeRow>> Columns => new[]
+    {
+        new GridColumn<OvertimeRow>("Employé", r => r.Employee.FullName),
+        new GridColumn<OvertimeRow>("Équipe", r => r.Posting?.Team ?? ""),
+        new GridColumn<OvertimeRow>("Fonction", r => r.Posting is { } p ? StaffFunctions.Short(p.Function) : "", r => r.Posting is { } p ? StaffFunctions.Rank(p.Function) : -1, css: "n"),
+        new GridColumn<OvertimeRow>("Heures sup.", r => r.MonthMinutes == 0 ? "" : Overtime.Hours(r.MonthMinutes), r => r.MonthMinutes, css: "r"),
+        new GridColumn<OvertimeRow>("Jours", r => r.Days.Count == 0 ? "" : r.Days.Count.ToString(), r => r.Days.Count, css: "r"),
+        new GridColumn<OvertimeRow>("Limite", r => _limit == 0 ? "" : $"{Fmt.Num(100.0 * r.MonthMinutes / (_limit * 60), 0)} %", r => r.MonthMinutes, css: "r",
+            cell: r => @<span class="nowrap">@if (_limit > 0) { <meter min="0" max="@(_limit * 60)" value="@Math.Min(r.MonthMinutes, _limit * 60)" style="width:80px;vertical-align:middle"></meter> <small style="display:inline">@Overtime.Hours(r.MonthMinutes) / @_limit h</small> }</span>),
+        new GridColumn<OvertimeRow>("Statut", r => r.State.Label, r => r.State.Ban != null ? 0 : r.State.LimitReached ? 1 : 2,
+            cell: r => @<span class="chip @(r.State.Ban != null ? "bad" : r.State.LimitReached ? "warn" : r.State.Derogation != null ? "acc" : "ok")" title="@r.State.Detail">@r.State.Label</span>),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _month = Overtime.MonthStart(Shifts.ProductionDate(Now));
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.Can(Perm.HeuresSup))
+            return;
+        _loading = true;
+        await Run(async () =>
+        {
+            _limit = _limitInput = (await Overtimes.RuleAsync()).MonthlyLimitHours;
+            var (_, rows) = await Overtimes.MonthAsync(Actor, _month);
+            _rows = rows;
+            _decisions = await Overtimes.DecisionsAsync(Actor);
+            _names = rows.ToDictionary(r => r.Employee.Id, r => r.Employee.FullName);
+        });
+        _loading = false;
+    }
+
+    private List<OvertimeRow> Shown() => _rows
+        .Where(r => _team == "" || r.Posting?.Team == _team)
+        .Where(r => _show switch { 1 => r.MonthMinutes > 0, 2 => r.State.Restricted, _ => r.Employee.IsActive || r.MonthMinutes > 0 })
+        .ToList();
+
+    private async Task OnMonthAsync(ChangeEventArgs e)
+    {
+        if (DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out var m))
+        {
+            _month = m;
+            _open = null;
+            await LoadAsync();
+        }
+    }
+
+    private void Toggle(OvertimeRow r)
+    {
+        _open = _open == r.Employee.Id ? null : r.Employee.Id;
+        _reason = "";
+        _until = null;
+    }
+
+    private async Task SaveLimitAsync()
+    {
+        if (await Run(() => Overtimes.SetLimitAsync(Actor, _limitInput),
+                _limitInput == 0 ? "Limite supprimée : plus de limite mensuelle." : $"Limite enregistrée : {_limitInput} h par personne et par mois."))
+            await LoadAsync();
+    }
+
+    private async Task BanAsync(OvertimeRow r)
+    {
+        if (await Run(() => Overtimes.BanAsync(Actor, r.Employee.Id, _reason, null, _until),
+                $"{r.Employee.FullName} est interdit d'heures supplémentaires."))
+        {
+            _reason = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task AllowAsync(OvertimeRow r)
+    {
+        if (await Run(() => Overtimes.AllowOverLimitAsync(Actor, r.Employee.Id, _month, _reason),
+                $"{r.Employee.FullName} peut dépasser la limite en {_month:MM/yyyy}."))
+        {
+            _reason = "";
+            await LoadAsync();
+        }
+    }
+
+    private async Task LiftAsync(OvertimeDecision d)
+    {
+        if (await Run(() => Overtimes.LiftAsync(Actor, d.Id), "Décision levée."))
+            await LoadAsync();
+    }
+
+    private static string Period(OvertimeDecision d)
+        => d.Kind == OvertimeDecisionKind.Derogation ? d.FromDate.ToString("MM/yyyy")
+            : d.ToDate is { } to ? $"du {d.FromDate:dd/MM/yyyy} au {to:dd/MM/yyyy}" : $"depuis le {d.FromDate:dd/MM/yyyy}";
+
+    private IReadOnlyList<ChartSeries> PersonSeries(List<OvertimeRow> rows)
+    {
+        var list = new List<ChartSeries>
+        {
+            new("Heures sup.", rows.Select(r => (double?)Math.Round(r.MonthMinutes / 60.0, 2)).ToList(), "var(--bar)"),
+        };
+        if (_limit > 0)
+            list.Add(new ChartSeries($"Limite {_limit} h", rows.Select(_ => (double?)_limit).ToList(), "var(--bad)", Reference: true));
+        return list;
+    }
+
+    private static IReadOnlyList<ChartSeries> DaySeries(List<OvertimeRow> rows, List<DateTime> days)
+    {
+        var teams = rows.Where(r => r.MonthMinutes > 0).GroupBy(r => r.Posting?.Team ?? "").OrderBy(g => g.Key).ToList();
+        string[] colors = { "var(--bar)", "var(--accent2)", "var(--warn)", "var(--ok)", "var(--bar2)" };
+        return teams.Select((g, i) => new ChartSeries(g.Key == "" ? "Sans équipe" : g.Key,
+                days.Select(d => (double?)Math.Round(g.Sum(r => r.Days.GetValueOrDefault(d)) / 60.0, 2)).ToList(),
+                colors[i % colors.Length], Stack: "equipes"))
+            .ToList();
+    }
+
+    private RenderFragment RowDetail(OvertimeRow r) => __builder =>
+    {
+        var st = r.State;
+        <div class="hs-detail">
+            <p class="n" style="margin:0 0 8px">@st.Detail</p>
+            @if (r.Days.Count > 0)
+            {
+                <p class="n" style="margin:0 0 8px">
+                    <b>Jours :</b>
+                    @foreach (var (d, m) in r.Days.OrderBy(x => x.Key))
+                    {
+                        <span class="chip" style="margin:2px">@d.ToString("ddd dd/MM", Fmt.French) · @Overtime.Hours(m)</span>
+                    }
+                </p>
+            }
+            <div class="filters" style="margin:0">
+                @if (st.Ban != null)
+                {
+                    <button type="button" class="bar acc" @onclick="() => LiftAsync(st.Ban)">Autoriser à nouveau (lever l'interdiction)</button>
+                }
+                else
+                {
+                    <div class="f" style="flex:1 1 260px">
+                        <label for="hs-reason-@r.Employee.Id">Motif</label>
+                        <input id="hs-reason-@r.Employee.Id" maxlength="200" placeholder="ex. trop d'heures ce trimestre, santé, demande RH" @bind="_reason" @bind:event="oninput" />
+                    </div>
+                    <div class="f">
+                        <label for="hs-until-@r.Employee.Id">Jusqu'au (facultatif)</label>
+                        <input id="hs-until-@r.Employee.Id" type="date" value="@_until?.ToString("yyyy-MM-dd")"
+                               @onchange="e => _until = DateTime.TryParse(e.Value?.ToString(), CultureInfo.InvariantCulture, out var d) ? d : null" />
+                    </div>
+                    <button type="button" class="bar danger" @onclick="() => BanAsync(r)">Interdire d'heures sup.</button>
+                    @if (_limit > 0 && st.Derogation == null && _month >= Overtime.MonthStart(Shifts.ProductionDate(Now)))
+                    {
+                        <button type="button" class="bar" disabled="@string.IsNullOrWhiteSpace(_reason)" title="Avec un motif"
+                                @onclick="() => AllowAsync(r)">Autoriser à dépasser la limite en @_month.ToString("MM/yyyy")</button>
+                    }
+                    else if (st.Derogation != null)
+                    {
+                        <button type="button" class="bar" @onclick="() => LiftAsync(st.Derogation)">Retirer la dérogation</button>
+                    }
+                }
+            </div>
+        </div>
+    };
+}

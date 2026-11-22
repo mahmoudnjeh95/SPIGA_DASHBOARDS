@@ -65,4 +65,9 @@ public static class AuditActions
     public const string SheetSaved = "Pointage enregistré";
     public const string SheetValidated = "Pointage validé";
     public const string SheetCorrected = "Pointage validé corrigé";
+    public const string OvertimeRuleChanged = "Limite d'heures sup. modifiée";
+    public const string OvertimeBanned = "Heures sup. interdites";
+    public const string OvertimeBanLifted = "Interdiction d'heures sup. levée";
+    public const string OvertimeDerogation = "Dérogation à la limite d'heures sup.";
+    public const string OvertimeDerogationLifted = "Dérogation d'heures sup. levée";
 }

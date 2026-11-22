@@ -108,6 +108,8 @@ public static class ModuleCatalog
             "Mois, machine", "Nouveau (cahier des charges 4.7), GMAO"),
 
         new NavItem("pointage", "Pointage", "Équipes", Modules.Pointage, "saisie/pointage", true),
+        new NavItem("heures-sup", "Heures supplémentaires", "Équipes", Modules.Pointage, "equipes/heures-sup", true,
+            Permission: Perm.HeuresSup),
         new NavItem("absences", "Absences et retards", "Équipes", Modules.Rh, "rh/absences", true),
         new NavItem("calendrier", "Calendrier des présences", "Équipes", Modules.RhNominatif, "rh/calendrier", true),
         new NavItem("polyvalence", "Polyvalence", "Équipes", Modules.RhNominatif, "rh/polyvalence", true,

@@ -229,3 +229,32 @@ public sealed class AttendanceStore(AppDb db) : IAttendanceStore
             @"INSERT INTO AttendanceRevisions (SheetId, Version, At, UserLogin, Action, Changes, Note)
               VALUES (@SheetId, @Version, @At, @UserLogin, @Action, @Changes, @Note)", r, t);
 }
+
+public sealed class OvertimeStore(AppDb db) : IOvertimeStore
+{
+    private const string Columns = "Id, EmployeeId, Kind, FromDate, ToDate, Reason, CreatedBy, CreatedAt, LiftedBy, LiftedAt";
+
+    public async Task<IReadOnlyList<OvertimeDecision>> ListAsync()
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return (await c.QueryAsync<OvertimeDecision>($"SELECT {Columns} FROM OvertimeDecisions")).ToList();
+    }
+
+    public async Task<long> InsertAsync(OvertimeDecision d)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return await c.ExecuteScalarAsync<long>(
+            @"INSERT INTO OvertimeDecisions (EmployeeId, Kind, FromDate, ToDate, Reason, CreatedBy, CreatedAt)
+              VALUES (@EmployeeId, @Kind, @FromDate, @ToDate, @Reason, @CreatedBy, @CreatedAt)" + db.ReturnId,
+            new { d.EmployeeId, Kind = d.Kind.ToString(), FromDate = d.FromDate.Date, ToDate = d.ToDate?.Date, d.Reason, d.CreatedBy, d.CreatedAt });
+    }
+
+    public async Task<bool> LiftAsync(long id, string by, DateTime at)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return await c.ExecuteAsync("UPDATE OvertimeDecisions SET LiftedBy = @by, LiftedAt = @at WHERE Id = @id AND LiftedAt IS NULL", new { id, by, at }) == 1;
+    }
+}

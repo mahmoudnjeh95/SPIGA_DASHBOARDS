@@ -92,7 +92,9 @@
     {
         var s = _sheet;
         var editable = Editable;
-        var problems = AttendanceService.Problems(s, validating: false);
+        // Bans and the monthly limit of overtime, beside the sheet's own checks.
+        var overtimeProblems = _book?.Problems(s) ?? Array.Empty<(int EmployeeId, string Message)>();
+        var problems = AttendanceService.Problems(s, validating: false).Concat(overtimeProblems).ToList();
         var uncovered = AttendanceService.Uncovered(s).ToDictionary(u => u.Line.EmployeeId);
 
         <section class="card pt-card">
@@ -164,6 +166,14 @@
                                             {
                                                 <small>@StaffFunctions.Short(l.Function) · <span class="chip acc">Renfort · @l.HomeTeam</span></small>
                                             }
+                                            @if (StateOf(l.EmployeeId) is { Restricted: true } ot)
+                                            {
+                                                <small class="pt-ot-ban" title="@ot.Detail"><span class="chip bad">⛔ @ot.Label</span> @ot.Detail</small>
+                                            }
+                                            else if (StateOf(l.EmployeeId) is { HasLimit: true, MonthMinutes: > 0 } otl)
+                                            {
+                                                <small class="pt-ot-left">Heures sup. ce mois : @Overtime.Hours(otl.MonthMinutes) / @Overtime.Hours(otl.LimitMinutes)</small>
+                                            }
                                             @if (l.Status != LineStatus.Ailleurs)
                                             {
                                                 @foreach (var (os, ol) in AwayOf(l))
@@ -226,11 +236,12 @@
                                                     @if (editable && _editTimes == l.EmployeeId)
                                                     {
                                                         <div class="pt-times">
+                                                            @{ var (earliest, latest) = Window(s, l); }
                                                             <TimePicker Label="Entrée" Value="l.EntryAt" ValueChanged="t => SetEntry(l, t)"
-                                                                        Min="AttendanceService.Earliest(s)" Max="AttendanceService.Latest(s)" />
+                                                                        Min="earliest" Max="latest" />
                                                             <b>→</b>
                                                             <TimePicker Label="Sortie" Value="l.ExitAt" ValueChanged="t => SetExit(l, t)"
-                                                                        Min="AttendanceService.Earliest(s)" Max="AttendanceService.Latest(s)" />
+                                                                        Min="earliest" Max="latest" />
                                                             <button type="button" class="bar small" @onclick="() => _editTimes = null">OK</button>
                                                         </div>
                                                     }
@@ -301,7 +312,10 @@
                                 <optgroup label="@team.Key">
                                     @foreach (var c in team)
                                     {
-                                        <option value="@c.Employee.Id">@c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)</option>
+                                        var refusal = _refusals.GetValueOrDefault(c.Employee.Id);
+                                        <option value="@c.Employee.Id" disabled="@(refusal != null)" title="@refusal">
+                                            @c.Employee.FullName · @StaffFunctions.Short(c.Posting.Function)@(refusal != null ? " — interdit d'heures sup." : "")
+                                        </option>
                                     }
                                 </optgroup>
                             }
@@ -313,7 +327,7 @@
 
             @if (editable || CanCorrectNow)
             {
-                var blocking = AttendanceService.Problems(s, validating: true);
+                var blocking = AttendanceService.Problems(s, validating: true).Concat(overtimeProblems).ToList();
                 <div class="savebar pt-save">
                     @if (_correcting)
                     {
@@ -405,6 +419,11 @@
     private (DateTime Date, int? Shift)? _switchTo;
     private IReadOnlyList<(Employee Employee, EmployeePosting Posting)> _candidates = Array.Empty<(Employee, EmployeePosting)>();
     private IReadOnlyList<AttendanceRevision> _history = Array.Empty<AttendanceRevision>();
+    // Overtime: bans, the monthly limit, the hours already made (without
+    // this sheet); the renforts refused for it.
+    private OvertimeBook? _book;
+    private readonly Dictionary<int, OvertimeState> _states = new();
+    private Dictionary<int, string> _refusals = new();
     private IReadOnlyList<(AttendanceSheet Sheet, AttendanceLine Line)> _away = Array.Empty<(AttendanceSheet, AttendanceLine)>();
     private IReadOnlyList<(DateTime Date, int ShiftId, string Team, SheetStatus? Status)> _missing = Array.Empty<(DateTime, int, string, SheetStatus?)>();
     private Dictionary<int, ProductionLine> _lines = new();
@@ -495,9 +514,12 @@
             if (_shift == 0)
                 return;
             _sheet = await Attendance.OpenAsync(Actor, _date, _shift);
+            _states.Clear();
+            _book = await Attendance.OvertimeAsync(Actor, _sheet);
             _away = await Attendance.AwayAsync(Actor, _sheet.Team, _sheet.ProductionDate.AddDays(-1), _sheet.ProductionDate.AddDays(1));
             _history = await Attendance.HistoryAsync(Actor, _sheet);
             _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);
+            Refusals();
         });
     }
 
@@ -638,8 +660,47 @@
     private async Task RefreshCandidatesAsync()
     {
         if (_sheet != null)
+        {
             _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);
+            Refusals();
+        }
         StateHasChanged();
+    }
+
+    private void Refusals()
+    {
+        _refusals = new();
+        if (_book == null || _sheet == null)
+            return;
+        foreach (var c in _candidates)
+            if (_book.RenfortRefusal(_sheet, c.Employee, c.Posting) is { } why)
+                _refusals[c.Employee.Id] = why;
+    }
+
+    private OvertimeState? StateOf(int employeeId)
+    {
+        if (_book == null || _sheet == null)
+            return null;
+        if (!_states.TryGetValue(employeeId, out var st))
+            _states[employeeId] = st = _book.State(employeeId, _sheet.ProductionDate, _sheet);
+        return st;
+    }
+
+    // Hours the pickers offer: the poste's window, narrowed to the overtime
+    // the person may still do (none when forbidden).
+    private (DateTime Earliest, DateTime Latest) Window(AttendanceSheet s, AttendanceLine l)
+    {
+        var earliest = AttendanceService.Earliest(s);
+        var latest = AttendanceService.Latest(s);
+        if (StateOf(l.EmployeeId)?.Remaining is { } left)
+        {
+            var late = l.ExitAt is { } x && x > s.End ? (int)(x - s.End).TotalMinutes : 0;
+            var early = l.EntryAt is { } n && n < s.Start ? (int)(s.Start - n).TotalMinutes : 0;
+            earliest = Max(earliest, s.Start.AddMinutes(-Math.Max(0, left - late) / AttendanceService.StepMinutes * AttendanceService.StepMinutes));
+            var cap = s.End.AddMinutes(Math.Max(0, left - early) / AttendanceService.StepMinutes * AttendanceService.StepMinutes);
+            latest = latest < cap ? latest : cap;
+        }
+        return (earliest, latest);
     }
 
     // ---------- temporary assignment ----------

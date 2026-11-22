@@ -38,4 +38,5 @@ public interface ISettingsStore
 public static class SettingKeys
 {
     public const string SecurityPolicy = "security.policy";
+    public const string OvertimeRule = "pointage.heures-sup";
 }

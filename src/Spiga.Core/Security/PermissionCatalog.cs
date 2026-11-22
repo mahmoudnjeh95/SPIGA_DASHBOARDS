@@ -41,6 +41,8 @@ public static class Perm
     public const string PointageSaisir = "pointage:saisir";
     public const string PointageCorriger = "pointage:corriger";
     public const string PointageAnciens = "pointage:anciens";
+    // Heures supplémentaires: interdire, limite mensuelle, statistiques.
+    public const string HeuresSup = "pointage:heures-sup";
     public const string ReferentielsSaisir = "referentiels:saisir";
     public const string Polyvalence = "rh-nominatif:polyvalence";
 
@@ -126,6 +128,8 @@ public static class PermissionCatalog
         Add(Modules.Pointage, "saisir", "Pointer son équipe", "Feuille du poste de son équipe, d'hier ou d'aujourd'hui");
         Add(Modules.Pointage, "corriger", "Corriger un pointage validé", "Avec un motif, gardé dans l'historique de la feuille");
         Add(Modules.Pointage, "anciens", "Pointer et corriger avant hier", "Sans ce droit : uniquement les postes d'hier et d'aujourd'hui");
+        Add(Modules.Pointage, "heures-sup", "Gérer les heures supplémentaires",
+            "Chef de production : interdire des personnes, fixer la limite mensuelle par personne, statistiques par personne");
 
         View(Modules.SaisieDechets, "Consulter les saisies");
         Add(Modules.SaisieDechets, "saisir", "Saisir les déchets emballage", "Par machine ; créer, modifier et soumettre à nouveau ses brouillons");

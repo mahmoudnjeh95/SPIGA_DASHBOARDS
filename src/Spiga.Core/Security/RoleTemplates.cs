@@ -36,7 +36,7 @@ public static class RoleTemplates
                 Perm.EquipesMultiples, "vue-ensemble:exporter", "conditionnement:exporter", Perm.TableauDetaille, Perm.EcranTv, Perm.NoteEcran, "rendement:exporter", "dechets:exporter",
                 Perm.DechetsSaisir, Perm.DechetsProduit, Perm.DechetsAutresPostes, Perm.DechetsValider, Perm.DechetsCorriger, Perm.DechetsAutrui, Perm.DechetsTardif,
                 "saisie-quantites:saisir", "saisie-quantites:valider", "objectifs:saisir", Perm.ComptesGerer, Perm.ComptesDebloquer,
-                Perm.PointageVoir, Perm.PointageSaisir, Perm.PointageCorriger, Perm.PointageAnciens, Perm.ReferentielsSaisir,
+                Perm.PointageVoir, Perm.PointageSaisir, Perm.PointageCorriger, Perm.PointageAnciens, Perm.HeuresSup, Perm.ReferentielsSaisir,
                 Perm.View(Modules.RhNominatif), "rh-nominatif:exporter", "rh:exporter", Perm.Polyvalence,
             }).ToArray(),
             new[] { "chef-equipe", "operateur" }),

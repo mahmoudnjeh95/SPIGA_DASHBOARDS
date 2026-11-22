@@ -19,7 +19,8 @@ namespace Spiga.Core.Staff;
 // "Corriger un pointage validé" and a reason. Every save writes a revision
 // with what changed, and an audit entry.
 public sealed class AttendanceService(
-    IAttendanceStore store, IStaffStore staff, IPlantReferential plant, IAuditLog audit, TimeProvider clock, ClientInfo client)
+    IAttendanceStore store, IStaffStore staff, IPlantReferential plant, IAuditLog audit, TimeProvider clock, ClientInfo client,
+    OvertimeService overtime)
 {
     public const int StepMinutes = 5;
 
@@ -134,8 +135,28 @@ public sealed class AttendanceService(
             foreach (var e in Members(employees, date, team).Where(e => sheet.Lines.All(l => l.EmployeeId != e.Id)))
                 sheet.Lines.Add(NewLine(sheet, e, e.PostingAt(date)!, renfort: false, elsewhere));
         }
+        if (sheet.Status == SheetStatus.Brouillon)
+        {
+            // A member forbidden overtime who already works another poste
+            // that day was moved there: not expected on his own poste.
+            var book = await overtime.BookAsync(date);
+            foreach (var l in sheet.Lines.Where(l => l.Status == LineStatus.AConfirmer && !l.IsRenfort))
+                if (book.State(l.EmployeeId, date, sheet).Restricted && book.WorksElsewhere(l.EmployeeId, sheet))
+                {
+                    l.Status = LineStatus.Ailleurs;
+                    l.EntryAt = l.ExitAt = null;
+                }
+        }
         sheet.Lines = Order(sheet.Lines);
         return sheet;
+    }
+
+    // What each person of the sheet may still do in overtime (bans, the
+    // monthly limit): the screen checks the rows with it as the chef types.
+    public async Task<OvertimeBook> OvertimeAsync(Actor actor, AttendanceSheet sheet)
+    {
+        actor.Demand(Perm.PointageVoir);
+        return await overtime.BookAsync(sheet.ProductionDate);
     }
 
     public static List<AttendanceLine> Order(IEnumerable<AttendanceLine> lines)
@@ -545,7 +566,7 @@ public sealed class AttendanceService(
 
     private async Task CheckAsync(AttendanceSheet sheet, bool validating)
     {
-        var problems = Problems(sheet, validating);
+        var problems = Problems(sheet, validating).Concat((await overtime.BookAsync(sheet.ProductionDate)).Problems(sheet)).ToList();
         if (problems.Count > 0)
             throw new RuleViolationException(problems[0].Message + (problems.Count > 1 ? $" (et {problems.Count - 1} autre(s) point(s) à corriger)" : ""));
 
@@ -576,8 +597,9 @@ public sealed class AttendanceService(
             }
             else if (l.Status == LineStatus.Ailleurs)
             {
+                // Over these hours, or moved to another poste of the same day.
                 var away = others.Any(s => s.Lines.Any(x => x.EmployeeId == l.EmployeeId && x.Status == LineStatus.Present
-                                                           && x.EntryAt < sheet.End && x.ExitAt > sheet.Start));
+                                                           && (x.EntryAt < sheet.End && x.ExitAt > sheet.Start || s.ProductionDate == sheet.ProductionDate)));
                 if (!away)
                     throw new RuleViolationException($"{l.FullName} n'est plus pointé dans une autre équipe : confirmez sa présence ou son absence ici.");
             }

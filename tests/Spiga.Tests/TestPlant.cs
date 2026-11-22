@@ -53,7 +53,9 @@ public sealed class TestApp : IDisposable
         StaffStore = new StaffStore(Db);
         AttendanceStore = new AttendanceStore(Db);
         Staff = new StaffService(StaffStore, new FakePlant(), Audit, Clock, client);
-        Attendance = new AttendanceService(AttendanceStore, StaffStore, new FakePlant(), Audit, Clock, client);
+        OvertimeStore = new OvertimeStore(Db);
+        Overtime = new OvertimeService(OvertimeStore, AttendanceStore, StaffStore, Settings, new FakePlant(), Audit, Clock, client);
+        Attendance = new AttendanceService(AttendanceStore, StaffStore, new FakePlant(), Audit, Clock, client, Overtime);
     }
 
     public FixedClock Clock { get; } = new(new DateTime(2026, 11, 17, 10, 0, 0));
@@ -76,6 +78,8 @@ public sealed class TestApp : IDisposable
     public AttendanceStore AttendanceStore { get; }
     public StaffService Staff { get; }
     public AttendanceService Attendance { get; }
+    public OvertimeStore OvertimeStore { get; }
+    public OvertimeService Overtime { get; }
 
     public const string AdminPassword = "Admin2026secure";
 

@@ -237,6 +237,7 @@ public static class SpigaServices
         services.AddSingleton<IWasteStore, WasteStore>();
         services.AddSingleton<IStaffStore, StaffStore>();
         services.AddSingleton<IAttendanceStore, AttendanceStore>();
+        services.AddSingleton<IOvertimeStore, OvertimeStore>();
 
         services.AddSingleton(productionSettings);
         services.AddSingleton(production);
@@ -259,6 +260,7 @@ public static class SpigaServices
         services.AddSingleton(sp => new PlantDataLocation(AppData.ConnectionFor(appDb), production));
         services.AddScoped<WasteService>();
         services.AddScoped<StaffService>();
+        services.AddScoped<OvertimeService>();
         services.AddScoped<AttendanceService>();
         services.AddScoped<PresenceReport>();
         services.AddScoped<UserSession>();
