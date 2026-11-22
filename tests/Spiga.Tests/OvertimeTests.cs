@@ -397,5 +397,12 @@ public class OvertimeTests
         var book = await app.Overtime.BookAsync(day);
         foreach (var name in new[] { "TRIKI Faez", "GUEDDICH Moez", "HAJ BRAHIM Makrem", "AYADI Khalil" })
             Assert.Equal(book.MonthMinutes(t[name]), entries.Where(e => e.Line.EmployeeId == t[name]).Sum(e => e.OvertimeMinutes));
+
+        // The export carries the same figures.
+        var csv = System.Text.Encoding.UTF8.GetString(Spiga.UI.Services.PresenceCalendar.Csv(entries, _ => null, "test"))
+            .TrimStart('\uFEFF').Split('\n').Select(l => l.TrimEnd('\r').Split(';')).ToList();
+        var col = Array.IndexOf(csv[1], "Heures sup. (min)");
+        Assert.Contains(csv, c => c.Length > col && c[3] == "GUEDDICH Moez" && c[1] == "Après-midi" && c[col] == "480");
+        Assert.Contains(csv, c => c.Length > col && c[3] == "TRIKI Faez" && c[col] == "120");
     }
 }
