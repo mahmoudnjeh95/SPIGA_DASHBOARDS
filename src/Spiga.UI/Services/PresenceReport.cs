@@ -13,6 +13,18 @@ namespace Spiga.UI.Services;
 // Performance of the machines a replacement held: TRS and speed while the
 // person held them, against the same machines on the other postes of the
 // period (their usual level).
+// What LoadAsync reads from the production database. Full: everything
+// (Absences: the stop timeline of the machines of the people missing, for
+// the impact). Lots: the hour buckets and stop causes only, no timeline
+// (Polyvalence: much faster over months). None: the pointage sheets only,
+// at once (Polyvalence shows its list with them first).
+public enum ProductionRead
+{
+    Full,
+    Lots,
+    None,
+}
+
 public sealed record ActingPerformance(double? Trs, double? UsualTrs, double? Speed, double? UsualSpeed, long Bags, double Kg = 0);
 
 // The validated pointage sheets of a period, with what the machines did:
@@ -42,7 +54,8 @@ public sealed class PresenceReport(
 
     // permission: the right the page needs (Absences: rh:voir, Polyvalence:
     // rh-nominatif:polyvalence); only the teams where it is held count.
-    public async Task<Result> LoadAsync(Actor actor, string permission, DateTime fromDate, DateTime toDate)
+    public async Task<Result> LoadAsync(Actor actor, string permission, DateTime fromDate, DateTime toDate,
+        ProductionRead read = ProductionRead.Full, CancellationToken cancel = default)
     {
         fromDate = fromDate.Date;
         toDate = toDate.Date > Today ? Today : toDate.Date;
@@ -54,15 +67,19 @@ public sealed class PresenceReport(
 
         History history;
         string? error = null;
+        if (read == ProductionRead.None)
+            history = History.Empty;
+        else
         try
         {
             // Machine history for the period shown only: the days before it
             // only count lateness (repeats), not its impact.
-            history = await HistoryAsync(PresenceAnalysis.MachinesConcerned(inPeriod, lines),
+            cancel.ThrowIfCancellationRequested();
+            history = await HistoryAsync(read == ProductionRead.Full ? PresenceAnalysis.MachinesConcerned(inPeriod, lines) : Array.Empty<string>(),
                 Shifts.Start(fromDate, 1).AddHours(-AttendanceService.EarlyHours),
                 Shifts.Start(toDate, 3).AddHours(8 + AttendanceService.OvertimeHours));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppLogger.Log("Pointage : historique des machines illisible : " + ex.Message);
             history = History.Empty;
@@ -77,7 +94,7 @@ public sealed class PresenceReport(
         var performance = acting.ToDictionary(a => a, a => history.Performance(a, acting));
         return new Result(fromDate, toDate, inPeriod,
             events.Where(e => e.Date >= fromDate).ToList(),
-            error == null ? PresenceAnalysis.Unstaffed(inPeriod, machines, history) : Array.Empty<UnstaffedMachine>(),
+            error == null && read != ProductionRead.None ? PresenceAnalysis.Unstaffed(inPeriod, machines, history) : Array.Empty<UnstaffedMachine>(),
             acting, performance,
             PresenceAnalysis.Repeats(events, toDate),
             lines, error)

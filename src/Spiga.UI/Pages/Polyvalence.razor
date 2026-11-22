@@ -1,5 +1,6 @@
 @page "/rh/polyvalence"
 @inherits SpigaPage
+@implements IDisposable
 @inject PresenceReport Report
 @inject IWasteStore WasteStore
 @inject UiState Ui
@@ -53,6 +54,10 @@
             {
                 <div class="notice warn">@_r.ProductionError</div>
             }
+            @if (_machinesPending)
+            {
+                <div class="notice poly-pending"><span class="poly-spin" aria-hidden="true"></span> Lecture des résultats des machines (TRS, arrêts, qualité) @PeriodText… La présence et la polyvalence sont déjà à jour ; notes et verdicts se complètent ensuite.</div>
+            }
             var records = _r.Acting.Where(a => !_stepUpOnly || a.IsStepUp).ToList();
             var people = _profiles
                 .Where(p => (!_actingOnly || p.Acting.Count > 0) && (!_stepUpOnly || p.StepUps > 0))
@@ -75,29 +80,29 @@
 
             @if (_open is { } open)
             {
-                <EmployeeCard P="open" S="@_scores[open.EmployeeId]" Report="_r" PeriodText="@PeriodText" OnClose="@(() => _open = null)" />
+                <EmployeeCard P="open" S="@_scores[open.EmployeeId]" Report="_r" PeriodText="@PeriodText" Pending="_machinesPending" OnClose="@(() => _open = null)" />
             }
         }
     }
 </RequireAccess>
 
 @code {
-    private static readonly PeriodKind[] Kinds = { PeriodKind.Last7Days, PeriodKind.Month, PeriodKind.Custom };
+    private static readonly PeriodKind[] Kinds = { PeriodKind.Last7Days, PeriodKind.Month, PeriodKind.Last3Months, PeriodKind.Last12Months, PeriodKind.Custom };
 
     private IReadOnlyList<GridColumn<EmployeeProfile>> PersonColumns => new[]
     {
         new GridColumn<EmployeeProfile>("Employé", p => p.Name),
         new GridColumn<EmployeeProfile>("Note", p => Fmt.Num(_scores[p.EmployeeId].Overall), p => _scores[p.EmployeeId].Overall, css: "r",
-            cell: p => @<span class="chip @EmployeeScore.Band(_scores[p.EmployeeId].Overall)">@(_scores[p.EmployeeId].Overall is { } o ? o.ToString("0") : "—")</span>),
+            cell: p => _machinesPending ? Waiting : @<span class="chip @EmployeeScore.Band(_scores[p.EmployeeId].Overall)">@(_scores[p.EmployeeId].Overall is { } o ? o.ToString("0") : "—")</span>),
         new GridColumn<EmployeeProfile>("Poste supérieur", p => EmployeeScore.ReadinessLabel(_scores[p.EmployeeId].Readiness), p => (int)_scores[p.EmployeeId].Readiness,
-            cell: p => @<span class="chip @EmployeeScore.ReadinessCss(_scores[p.EmployeeId].Readiness)">@EmployeeScore.ReadinessLabel(_scores[p.EmployeeId].Readiness)</span>),
+            cell: p => _machinesPending ? Waiting : @<span class="chip @EmployeeScore.ReadinessCss(_scores[p.EmployeeId].Readiness)">@EmployeeScore.ReadinessLabel(_scores[p.EmployeeId].Readiness)</span>),
         new GridColumn<EmployeeProfile>("Équipe", p => p.Team),
         new GridColumn<EmployeeProfile>("Sa fonction", p => StaffFunctions.Label(p.Function), p => StaffFunctions.Rank(p.Function), css: "n"),
         new GridColumn<EmployeeProfile>("Postes tenus", p => p.Skills.Count.ToString(), p => p.Skills.Count, css: "r"),
         new GridColumn<EmployeeProfile>("Remplacements", p => $"{Shown(p).Count}{(p.StepUps > 0 ? $" ({p.StepUps} sup.)" : "")}", p => Shown(p).Count, css: "r"),
         new GridColumn<EmployeeProfile>("Machines", p => string.Join(", ", p.Held.SelectMany(h => h.Machines).Distinct(StringComparer.OrdinalIgnoreCase).Select(Plant.NameOf)), css: "n"),
         new GridColumn<EmployeeProfile>("TRS vs habituel", p => Fmt.SignedPct(Gap(p), 1), p => Gap(p), css: "r",
-            cell: p => @<span class="chip @GapCss(Gap(p))" title="@($"TRS sous lui {Fmt.Pct(p.Own.Trs)} · habituel {Fmt.Pct(p.Usual.Trs)}")">@(Gap(p) is { } g ? (g > 0 ? "+" : "") + Fmt.Num(g, 1) + " pts" : Fmt.Missing)</span>),
+            cell: p => _machinesPending ? Waiting : @<span class="chip @GapCss(Gap(p))" title="@($"TRS sous lui {Fmt.Pct(p.Own.Trs)} · habituel {Fmt.Pct(p.Usual.Trs)}")">@(Gap(p) is { } g ? (g > 0 ? "+" : "") + Fmt.Num(g, 1) + " pts" : Fmt.Missing)</span>),
         new GridColumn<EmployeeProfile>("Présence", p => Fmt.Pct(p.Presence.Rate, 0), p => p.Presence.Rate, css: "r",
             cell: p => @<span class="chip @RateCss(p.Presence.Rate)">@Fmt.Pct(p.Presence.Rate, 0)</span>),
     };
@@ -106,6 +111,11 @@
     private bool _stepUpOnly;
     private bool _actingOnly;
     private EmployeeProfile? _open;
+    private bool _machinesPending;
+
+    // A figure that waits for the machines' results.
+    private static readonly RenderFragment Waiting = @<span class="chip poly-wait" title="Résultats des machines en cours de lecture">…</span>;
+    private CancellationTokenSource? _cancel;
     private Dictionary<int, EmployeeScore> _scores = new();
     private PresenceReport.Result? _r;
     private IReadOnlyList<EmployeeProfile>? _profiles;
@@ -136,21 +146,67 @@
     {
         if (!Session.Can(Perm.Polyvalence))
             return;
+        // A new period stops the reading of the one before.
+        _cancel?.Cancel();
+        var cancel = _cancel = new CancellationTokenSource();
         _r = null;
         _profiles = null;
         _open = null;
+        _machinesPending = false;
         var (first, last) = _period.Days(Now);
-        await Run(async () =>
+        // First the pointage sheets alone (a second or two): the list,
+        // attendance and polyvalence; then the machines' hour buckets, which
+        // take long over months, fill in performance, stops and quality.
+        var ok = await Run(async () =>
         {
             await Plant.LoadNamesAsync();
-            var r = await Report.LoadAsync(Actor, Perm.Polyvalence, first, last);
-            var waste = await WasteStore.ListAsync(WasteKind.Emballage, r.FromDate, r.ToDate);
-            var profiles = EmployeeProfiles.Build(r, waste, Plant);
-            _scores = profiles.ToDictionary(p => p.EmployeeId, EmployeeScore.Of);
-            _profiles = profiles;
-            _r = r;
+            var r = await Report.LoadAsync(Actor, Perm.Polyvalence, first, last, ProductionRead.None, cancel.Token);
+            await ShowAsync(r, Array.Empty<WasteEntry>(), cancel.Token);
         });
+        if (!ok || cancel.IsCancellationRequested)
+            return;
+        _machinesPending = true;
+        StateHasChanged();
+        try
+        {
+            var r = await Report.LoadAsync(Actor, Perm.Polyvalence, first, last, ProductionRead.Lots, cancel.Token);
+            var waste = await WasteStore.ListAsync(WasteKind.Emballage, r.FromDate, r.ToDate);
+            await ShowAsync(r, waste, cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            SpigaDashboards.App.Services.AppLogger.Log("Polyvalence : résultats des machines illisibles : " + ex.Message);
+            Error = "Résultats des machines illisibles : " + ex.Message;
+        }
+        finally
+        {
+            if (!cancel.IsCancellationRequested)
+                _machinesPending = false;
+        }
     }
 
-    private string PeriodText => _r == null ? "" : _r.FromDate == _r.ToDate ? $"le {_r.FromDate:dd/MM/yyyy}" : $"du {_r.FromDate:dd/MM} au {_r.ToDate:dd/MM/yyyy}";
+    // The profiles are worked out off the circuit's thread (a year of hour
+    // buckets takes a moment); the open card follows the new figures.
+    private async Task ShowAsync(PresenceReport.Result r, IReadOnlyList<WasteEntry> waste, CancellationToken cancel)
+    {
+        var (profiles, scores) = await Task.Run(() =>
+        {
+            var list = EmployeeProfiles.Build(r, waste, Plant);
+            return (list, list.ToDictionary(p => p.EmployeeId, EmployeeScore.Of));
+        }, cancel);
+        if (cancel.IsCancellationRequested)
+            return;
+        _scores = scores;
+        _profiles = profiles;
+        _r = r;
+        if (_open != null)
+            _open = profiles.FirstOrDefault(p => p.EmployeeId == _open.EmployeeId);
+    }
+
+    public void Dispose() => _cancel?.Cancel();
+
+    private string PeriodText => _r == null ? "" : _r.FromDate == _r.ToDate ? $"le {_r.FromDate:dd/MM/yyyy}" : _r.FromDate.Year == _r.ToDate.Year ? $"du {_r.FromDate:dd/MM} au {_r.ToDate:dd/MM/yyyy}" : $"du {_r.FromDate:dd/MM/yyyy} au {_r.ToDate:dd/MM/yyyy}";
 }

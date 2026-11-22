@@ -10,6 +10,8 @@ public enum PeriodKind
     Last7Days,
     Month,
     Custom,
+    Last3Months,
+    Last12Months,
 }
 
 // A period of the screens, in production days: a production day runs from
@@ -35,6 +37,8 @@ public sealed record Period(PeriodKind Kind, DateTime CustomFrom, DateTime Custo
             PeriodKind.Yesterday => (today.AddDays(-1), today.AddDays(-1)),
             PeriodKind.Last7Days => (today.AddDays(-6), today),
             PeriodKind.Month => (new DateTime(today.Year, today.Month, 1), today),
+            PeriodKind.Last3Months => (today.AddMonths(-3).AddDays(1), today),
+            PeriodKind.Last12Months => (today.AddYears(-1).AddDays(1), today),
             _ => (CustomFrom.Date, (CustomTo < CustomFrom ? CustomFrom : CustomTo).Date),
         };
     }
@@ -87,6 +91,8 @@ public sealed record Period(PeriodKind Kind, DateTime CustomFrom, DateTime Custo
         PeriodKind.Yesterday => "Hier",
         PeriodKind.Last7Days => "7 jours",
         PeriodKind.Month => "Mois",
+        PeriodKind.Last3Months => "3 mois",
+        PeriodKind.Last12Months => "12 mois",
         _ => "Dates",
     };
 }

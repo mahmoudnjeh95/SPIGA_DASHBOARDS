@@ -160,3 +160,15 @@ public class EmployeeProfileTests
         Assert.Single(p.Skills);
     }
 }
+
+public class LongPeriodTests
+{
+    [Fact]
+    public void Three_and_twelve_months_end_today_and_start_the_day_after_the_same_date()
+    {
+        var now = new DateTime(2026, 11, 22, 15, 0, 0);
+        Assert.Equal((new DateTime(2026, 8, 23), new DateTime(2026, 11, 22)), new Period(PeriodKind.Last3Months, now, now).Days(now));
+        Assert.Equal((new DateTime(2025, 11, 23), new DateTime(2026, 11, 22)), new Period(PeriodKind.Last12Months, now, now).Days(now));
+        Assert.Equal("12 mois", Period.KindLabel(PeriodKind.Last12Months));
+    }
+}

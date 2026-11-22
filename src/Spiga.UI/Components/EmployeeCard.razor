@@ -29,6 +29,10 @@
         </header>
 
         @* ---------- the four scores (each opens its tab) ---------- *@
+        @if (Pending)
+        {
+            <div class="notice poly-pending"><span class="poly-spin" aria-hidden="true"></span> Lecture des résultats des machines… performance, arrêts et verdict se complètent dans un instant.</div>
+        }
         <nav class="emp-scores">
             @for (var i = 0; i < 4; i++)
             {
@@ -62,6 +66,10 @@
     [Parameter, EditorRequired] public PresenceReport.Result Report { get; set; } = null!;
     [Parameter] public string PeriodText { get; set; } = "";
     [Parameter] public EventCallback OnClose { get; set; }
+
+    // The machines' results are still being read: the scores that need
+    // them wait.
+    [Parameter] public bool Pending { get; set; }
 
     private int _tab;
     private ElementReference _box;

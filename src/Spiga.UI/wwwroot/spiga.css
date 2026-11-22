@@ -1790,6 +1790,12 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
     .emp-meter-track { grid-column: 1 / -1; order: 3; }
 }
 
+.poly-pending { background: var(--accent-soft); color: var(--accent); align-items: center; }
+.poly-spin { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: poly-spin .8s linear infinite; }
+@keyframes poly-spin { to { transform: rotate(360deg); } }
+.chip.poly-wait { animation: poly-blink 1.2s ease-in-out infinite; }
+@keyframes poly-blink { 50% { opacity: .35; } }
+
 .pf-days { display: flex; flex-wrap: wrap; gap: 6px; }
 .pf-day { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--fg3); }
 .pf-day .cal-code { cursor: default; }
