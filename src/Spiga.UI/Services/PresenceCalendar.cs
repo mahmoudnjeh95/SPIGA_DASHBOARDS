@@ -67,14 +67,13 @@ public static class CalKinds
 }
 
 // One person on one poste: the line of a sheet, with what it means.
-public sealed record CalEntry(AttendanceSheet Sheet, AttendanceLine Line, IReadOnlySet<CalKind> Kinds)
+// OvertimeMinutes: this poste's share of the day's overtime, by the rules of
+// the Heures supplémentaires screen (PresenceCalendar.Entries).
+public sealed record CalEntry(AttendanceSheet Sheet, AttendanceLine Line, IReadOnlySet<CalKind> Kinds, double OvertimeMinutes = 0)
 {
     public DateTime Date => Sheet.ProductionDate;
     public double LateMinutes => Line.EntryAt is { } e && e > Sheet.Start ? (e - Sheet.Start).TotalMinutes : 0;
     public double EarlyMinutes => Line.ExitAt is { } x && x < Sheet.End ? (Sheet.End - x).TotalMinutes : 0;
-    public double OvertimeMinutes
-        => Line.Status != LineStatus.Present ? 0
-            : Math.Max(0, (Sheet.Start - Line.EntryAt!.Value).TotalMinutes) + Math.Max(0, (Line.ExitAt!.Value - Sheet.End).TotalMinutes);
     public double WorkedHours => Line.Status == LineStatus.Present && Line.EntryAt is { } e && Line.ExitAt is { } x ? (x - e).TotalHours : 0;
 
     // "18/11 Matin · Equipe B · 06:40–14:00 · retard 40 min · remplace KERDMINE Salem sur CC04"
@@ -99,7 +98,7 @@ public sealed record CalEntry(AttendanceSheet Sheet, AttendanceLine Line, IReadO
 
 public static class PresenceCalendar
 {
-    public static CalEntry Entry(AttendanceSheet s, AttendanceLine l)
+    public static CalEntry Entry(AttendanceSheet s, AttendanceLine l, int overtimeMinutes = 0)
     {
         var kinds = new HashSet<CalKind>();
         switch (l.Status)
@@ -108,7 +107,7 @@ public static class PresenceCalendar
                 kinds.Add(CalKind.Present);
                 if (l.EntryAt > s.Start) kinds.Add(CalKind.Retard);
                 if (l.ExitAt < s.End) kinds.Add(CalKind.Depart);
-                if (l.EntryAt < s.Start || l.ExitAt > s.End) kinds.Add(CalKind.HeuresSup);
+                if (overtimeMinutes > 0) kinds.Add(CalKind.HeuresSup);
                 if (l.IsRenfort) kinds.Add(CalKind.Renfort);
                 if (l.IsActing) kinds.Add(CalKind.Remplacement);
                 break;
@@ -119,13 +118,30 @@ public static class PresenceCalendar
                 kinds.Add(CalKind.AConfirmer);
                 break;
         }
-        return new CalEntry(s, l, kinds);
+        return new CalEntry(s, l, kinds, overtimeMinutes);
     }
 
     // Every line of the sheets but "en renfort ailleurs" (the other team's
-    // sheet holds that day).
-    public static List<CalEntry> Entries(IEnumerable<AttendanceSheet> sheets)
-        => sheets.SelectMany(s => s.Lines.Where(l => l.Status != LineStatus.Ailleurs).Select(l => Entry(s, l))).ToList();
+    // sheet holds that day). Overtime as Overtime.Day counts it: the minutes
+    // outside each poste, and the postes beyond those his own team works that
+    // day (a renfort on a rest day, a second poste), the later ones first.
+    public static List<CalEntry> Entries(IEnumerable<AttendanceSheet> sheets, IPlantReferential plant)
+    {
+        var rows = sheets.SelectMany(s => s.Lines.Where(l => l.Status != LineStatus.Ailleurs).Select(l => (Sheet: s, Line: l))).ToList();
+        var overtime = new int[rows.Count];
+        foreach (var day in Enumerable.Range(0, rows.Count).GroupBy(i => (rows[i].Line.EmployeeId, rows[i].Sheet.ProductionDate.Date)))
+        {
+            var left = Overtime.Allowance(plant, day.Key.Date, rows[day.First()].Line.HomeTeam);
+            foreach (var i in day.OrderBy(i => rows[i].Sheet.Start))
+            {
+                var (inside, outside) = Overtime.Split(rows[i].Sheet, rows[i].Line);
+                var allowed = Math.Min(inside, left);
+                left -= allowed;
+                overtime[i] = outside + inside - allowed;
+            }
+        }
+        return rows.Select((r, i) => Entry(r.Sheet, r.Line, overtime[i])).ToList();
+    }
 
     // The most telling kind of a day's entries, for the cell's colour.
     public static CalKind Main(IEnumerable<CalEntry> day)

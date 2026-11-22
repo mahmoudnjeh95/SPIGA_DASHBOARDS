@@ -261,16 +261,16 @@
                     <table class="cal">
                         <thead>
                             <tr>
-                                <th class="cal-name sortable" @onclick="() => SortBy(0)">Nom@Mark(0)</th>
+                                <th class="cal-name sortable" @onclick="() => SortBy(0)">Nom@(Mark(0))</th>
                                 @foreach (var d in days)
                                 {
                                     <th class="@(d.DayOfWeek == DayOfWeek.Sunday ? "sun" : "")" title="@d.ToString("dddd d MMMM", Fmt.French)">@d.ToString("dd")<small>@d.ToString("ddd", Fmt.French)[..2]</small></th>
                                 }
-                                <th class="cal-sum sortable" title="Présences" @onclick="() => SortBy(1)">✓@Mark(1)</th>
-                                <th class="cal-sum sortable" title="Retards" @onclick="() => SortBy(2)">R@Mark(2)</th>
-                                <th class="cal-sum sortable" title="Absences (A, M, AT)" @onclick="() => SortBy(3)">Abs@Mark(3)</th>
-                                <th class="cal-sum sortable" title="Congés" @onclick="() => SortBy(4)">C@Mark(4)</th>
-                                <th class="cal-sum sortable" title="Heures travaillées" @onclick="() => SortBy(5)">h@Mark(5)</th>
+                                <th class="cal-sum sortable" title="Présences" @onclick="() => SortBy(1)">✓@(Mark(1))</th>
+                                <th class="cal-sum sortable" title="Retards" @onclick="() => SortBy(2)">R@(Mark(2))</th>
+                                <th class="cal-sum sortable" title="Absences (A, M, AT)" @onclick="() => SortBy(3)">Abs@(Mark(3))</th>
+                                <th class="cal-sum sortable" title="Congés" @onclick="() => SortBy(4)">C@(Mark(4))</th>
+                                <th class="cal-sum sortable" title="Heures travaillées" @onclick="() => SortBy(5)">h@(Mark(5))</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -458,7 +458,7 @@
             await Plant.LoadNamesAsync();
             var sheets = await Attendance.SheetsAsync(Actor, Perm.View(Modules.RhNominatif), _from, _to);
             _names = sheets.SelectMany(s => s.Lines).GroupBy(l => l.EmployeeId).ToDictionary(g => g.Key, g => g.First().FullName);
-            _entries = PresenceCalendar.Entries(sheets);
+            _entries = PresenceCalendar.Entries(sheets, Plant);
         });
     }
 

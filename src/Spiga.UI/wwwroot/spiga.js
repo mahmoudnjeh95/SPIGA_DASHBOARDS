@@ -44,8 +44,11 @@
         if (!node || node.nodeType !== 3 || el.childNodes.length !== 1) return;
         var target = node.nodeValue;
         var prev = running.get(el);
-        // The final value, or a frame this script wrote itself: nothing new.
-        if (prev && (target === prev.target || target === prev.written)) return;
+        // The value it is already counting to: nothing new. (Its own frames
+        // never come back here: write() drops their mutation records. Telling
+        // them apart by text did not work: a new "0" from Blazor looked like
+        // the first frame of the old count, which then went on to the old value.)
+        if (prev && target === prev.target) return;
         if (prev) { cancelAnimationFrame(prev.raf); clearTimeout(prev.timer); }
         var p = parse(target);
         if (!p || p.value === 0) { running.delete(el); return; }
@@ -58,11 +61,11 @@
             var t = Math.max(0, Math.min(1, (performance.now() - start) / dur));
             var e = 1 - Math.pow(1 - t, 4);
             state.current = from + (p.value - from) * e;
-            node.nodeValue = state.written = t < 1 ? format(p, state.current) : target;
+            write(node, state.written = t < 1 ? format(p, state.current) : target);
             if (t < 1) state.raf = requestAnimationFrame(frame);
             else { cancelAnimationFrame(state.raf); clearTimeout(state.timer); }
         }
-        node.nodeValue = state.written = format(p, from);
+        write(node, state.written = format(p, from));
         state.raf = requestAnimationFrame(frame);
         // Frames are paused while the view is hidden: the true value is
         // always written at the end, whatever happened in between.
@@ -76,7 +79,17 @@
         for (var i = 0; i < list.length; i++) countUp(list[i]);
     }
 
-    var observer = new MutationObserver(function (records) {
+    // A frame of the count: written, and its mutation record dropped so the
+    // observer only ever sees Blazor's own changes.
+    function write(node, text) {
+        node.nodeValue = text;
+        var others = observer.takeRecords().filter(function (r) { return r.target !== node; });
+        if (others.length) handle(others);
+    }
+
+    var observer = new MutationObserver(handle);
+
+    function handle(records) {
         for (var i = 0; i < records.length; i++) {
             var r = records[i];
             if (r.type === "characterData") {
@@ -90,7 +103,7 @@
                 }
             }
         }
-    });
+    }
 
     function start() {
         observer.observe(document.body, { childList: true, subtree: true, characterData: true });

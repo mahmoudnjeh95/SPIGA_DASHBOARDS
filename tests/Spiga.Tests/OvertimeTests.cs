@@ -371,4 +371,31 @@ public class OvertimeTests
         Assert.EndsWith("heures supplémentaires.", why);
         Assert.DoesNotContain("..", why);
     }
+
+    [Fact]
+    public async Task The_presence_calendar_counts_overtime_like_the_overtime_screen()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var day = Today.AddDays(-1);
+        // TRIKI stays to 16:00; GUEDDICH works his morning, then team A's afternoon as renfort.
+        var morning = await app.Attendance.SaveAsync(t.ChefB, await MorningAsync(t, day, day.AddHours(16)), validate: true, null);
+        var afternoon = await app.Attendance.OpenAsync(t.ChefA, day, 2);
+        ConfirmAll(afternoon);
+        var renfort = await app.Attendance.RenfortLineAsync(afternoon, t["GUEDDICH Moez"]);
+        renfort.Status = LineStatus.Present;
+        afternoon.Lines.Add(renfort);
+        afternoon = await app.Attendance.SaveAsync(t.ChefA, afternoon, validate: true, null);
+
+        var entries = Spiga.UI.Services.PresenceCalendar.Entries(new[] { morning, afternoon }, new FakePlant());
+        double Of(string name, AttendanceSheet s) => entries.Single(e => e.Sheet.Id == s.Id && e.Line.EmployeeId == t[name]).OvertimeMinutes;
+        Assert.Equal(120, Of("TRIKI Faez", morning));
+        Assert.Equal(0, Of("GUEDDICH Moez", morning));
+        Assert.Equal(480, Of("GUEDDICH Moez", afternoon));
+        Assert.Contains(Spiga.UI.Services.CalKind.HeuresSup, entries.Single(e => e.Sheet.Id == afternoon.Id && e.Line.EmployeeId == t["GUEDDICH Moez"]).Kinds);
+
+        var book = await app.Overtime.BookAsync(day);
+        foreach (var name in new[] { "TRIKI Faez", "GUEDDICH Moez", "HAJ BRAHIM Makrem", "AYADI Khalil" })
+            Assert.Equal(book.MonthMinutes(t[name]), entries.Where(e => e.Line.EmployeeId == t[name]).Sum(e => e.OvertimeMinutes));
+    }
 }
