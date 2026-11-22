@@ -249,4 +249,89 @@ public class OvertimeTests
         var g = rows.Single(r => r.Employee.Id == t["GUEDDICH Moez"]);
         Assert.Equal("Interdit d'heures sup.", g.State.Label);
     }
+
+    // Team B's morning of the 16th with GUEDDICH absent (code), validated;
+    // then team A's afternoon with him present as renfort.
+    private static async Task<(AttendanceSheet Morning, AttendanceSheet Afternoon)> MovedAsync(Setup t, AbsenceCode code)
+    {
+        var day = Today.AddDays(-1);
+        var morning = await MorningAsync(t, day);
+        var g = Line(morning, t, "GUEDDICH Moez");
+        g.Status = LineStatus.Absent;
+        g.Absence = code;
+        await t.App.Attendance.SaveAsync(t.ChefB, morning, validate: true, null);
+        var afternoon = await t.App.Attendance.OpenAsync(t.ChefA, day, 2);
+        ConfirmAll(afternoon);
+        var renfort = await t.App.Attendance.RenfortLineAsync(afternoon, t["GUEDDICH Moez"]);
+        renfort.Status = LineStatus.Present;
+        afternoon.Lines.Add(renfort);
+        afternoon = await t.App.Attendance.SaveAsync(t.ChefA, afternoon, validate: true, null);
+        return (await t.App.Attendance.OpenAsync(t.ChefB, day, 1), afternoon);
+    }
+
+    [Theory]
+    [InlineData(AbsenceCode.A)]
+    [InlineData(AbsenceCode.M)]
+    [InlineData(AbsenceCode.C)]
+    public async Task Absent_on_his_poste_and_present_on_another_the_same_day_is_a_transfer(AbsenceCode code)
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var (morning, afternoon) = await MovedAsync(t, code);
+
+        var g = Line(morning, t, "GUEDDICH Moez");
+        Assert.Equal(LineStatus.Ailleurs, g.Status);
+        Assert.Equal(code, g.Absence);
+        Assert.Equal(SheetStatus.Validee, morning.Status);
+        var history = await app.Attendance.HistoryAsync(t.ChefB, morning);
+        Assert.Equal(AuditActions.SheetTransfer, history[^1].Action);
+        Assert.Contains($"GUEDDICH Moez : {code} ({AbsenceCodes.Label(code)}) → transféré au poste Après-midi du 16/11 · Equipe A", history[^1].Changes);
+        Assert.Contains(await app.AuditAsync(), e => e.Action == AuditActions.SheetTransfer);
+        // Not overtime, and the morning sheet still saves.
+        Assert.Equal(0, (await app.Overtime.BookAsync(morning.ProductionDate)).MonthMinutes(t["GUEDDICH Moez"]));
+        Line(morning, t, "TRIKI Faez").EntryAt = morning.Start.AddMinutes(10);
+        morning = await app.Attendance.SaveAsync(t.ChefB, morning, validate: false, "retard");
+        Assert.Equal(LineStatus.Ailleurs, Line(morning, t, "GUEDDICH Moez").Status);
+
+        // Taken off the afternoon: absent again, with his code.
+        afternoon.Lines.RemoveAll(l => l.EmployeeId == t["GUEDDICH Moez"]);
+        await app.Attendance.SaveAsync(t.ChefA, afternoon, validate: false, "erreur de personne");
+        morning = await app.Attendance.OpenAsync(t.ChefB, morning.ProductionDate, 1);
+        Assert.Equal(LineStatus.Absent, Line(morning, t, "GUEDDICH Moez").Status);
+        Assert.Equal(code, Line(morning, t, "GUEDDICH Moez").Absence);
+    }
+
+    [Fact]
+    public async Task An_accident_de_travail_is_not_turned_into_a_transfer()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var (morning, afternoon) = await MovedAsync(t, AbsenceCode.AT);
+        Assert.Equal(LineStatus.Absent, Line(morning, t, "GUEDDICH Moez").Status);
+        Assert.Equal(AbsenceCode.AT, Line(morning, t, "GUEDDICH Moez").Absence);
+        var at = await app.Attendance.AccidentElsewhereAsync(t.ChefA, afternoon);
+        Assert.Equal(1, at[t["GUEDDICH Moez"]].ShiftId);
+    }
+
+    [Fact]
+    public async Task Pointed_absent_after_the_other_poste_he_is_transferred_at_once()
+    {
+        using var app = new TestApp();
+        var t = await TeamAsync(app);
+        var day = Today.AddDays(-1);
+        var afternoon = await app.Attendance.OpenAsync(t.ChefA, day, 2);
+        ConfirmAll(afternoon);
+        var renfort = await app.Attendance.RenfortLineAsync(afternoon, t["GUEDDICH Moez"]);
+        renfort.Status = LineStatus.Present;
+        afternoon.Lines.Add(renfort);
+        await app.Attendance.SaveAsync(t.ChefA, afternoon, validate: true, null);
+
+        var morning = await MorningAsync(t, day);
+        var g = Line(morning, t, "GUEDDICH Moez");
+        g.Status = LineStatus.Absent;
+        g.Absence = AbsenceCode.M;
+        morning = await app.Attendance.SaveAsync(t.ChefB, morning, validate: true, null);
+        Assert.Equal(LineStatus.Ailleurs, Line(morning, t, "GUEDDICH Moez").Status);
+        Assert.Equal(AbsenceCode.M, Line(morning, t, "GUEDDICH Moez").Absence);
+    }
 }

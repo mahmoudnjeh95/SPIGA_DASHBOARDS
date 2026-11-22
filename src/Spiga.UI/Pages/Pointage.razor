@@ -166,6 +166,10 @@
                                             {
                                                 <small>@StaffFunctions.Short(l.Function) · <span class="chip acc">Renfort · @l.HomeTeam</span></small>
                                             }
+                                            @if (l.Status != LineStatus.Absent && _accidents.TryGetValue(l.EmployeeId, out var atSheet))
+                                            {
+                                                <small class="pt-ot-ban">⚠ Pointé AT (accident de travail) au poste @Shifts.Label(atSheet.ShiftId) · @atSheet.Team ce jour-là</small>
+                                            }
                                             @if (StateOf(l.EmployeeId) is { Restricted: true } ot)
                                             {
                                                 <small class="pt-ot-ban" title="@ot.Detail"><span class="chip bad">⛔ @ot.Label</span> @ot.Detail</small>
@@ -221,6 +225,10 @@
                                                     <span>@Shifts.Label(away.Sheet.ShiftId) du @away.Sheet.ProductionDate.ToString("dd/MM")</span>
                                                     <span>@away.Line.EntryAt?.ToString("HH:mm") – @away.Line.ExitAt?.ToString("HH:mm")</span>
                                                     <span>@PostHeld(away.Line)</span>
+                                                }
+                                                @if (l.Absence is { } was)
+                                                {
+                                                    <small class="pt-away-note">Transféré : pointé @was (@AbsenceCodes.Label(was)) ici, présent sur ce poste-là</small>
                                                 }
                                                 else
                                                 {
@@ -424,6 +432,8 @@
     private OvertimeBook? _book;
     private readonly Dictionary<int, OvertimeState> _states = new();
     private Dictionary<int, string> _refusals = new();
+    // Accident de travail on another poste of the day (not a transfer).
+    private IReadOnlyDictionary<int, AttendanceSheet> _accidents = new Dictionary<int, AttendanceSheet>();
     private IReadOnlyList<(AttendanceSheet Sheet, AttendanceLine Line)> _away = Array.Empty<(AttendanceSheet, AttendanceLine)>();
     private IReadOnlyList<(DateTime Date, int ShiftId, string Team, SheetStatus? Status)> _missing = Array.Empty<(DateTime, int, string, SheetStatus?)>();
     private Dictionary<int, ProductionLine> _lines = new();
@@ -516,6 +526,7 @@
             _sheet = await Attendance.OpenAsync(Actor, _date, _shift);
             _states.Clear();
             _book = await Attendance.OvertimeAsync(Actor, _sheet);
+            _accidents = await Attendance.AccidentElsewhereAsync(Actor, _sheet);
             _away = await Attendance.AwayAsync(Actor, _sheet.Team, _sheet.ProductionDate.AddDays(-1), _sheet.ProductionDate.AddDays(1));
             _history = await Attendance.HistoryAsync(Actor, _sheet);
             _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);

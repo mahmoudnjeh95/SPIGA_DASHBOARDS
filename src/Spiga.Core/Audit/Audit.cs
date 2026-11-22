@@ -65,6 +65,7 @@ public static class AuditActions
     public const string SheetSaved = "Pointage enregistré";
     public const string SheetValidated = "Pointage validé";
     public const string SheetCorrected = "Pointage validé corrigé";
+    public const string SheetTransfer = "Pointage : transfert de poste";
     public const string OvertimeRuleChanged = "Limite d'heures sup. modifiée";
     public const string OvertimeBanned = "Heures sup. interdites";
     public const string OvertimeBanLifted = "Interdiction d'heures sup. levée";

@@ -429,6 +429,7 @@ public sealed class AttendanceService(
             sheet.ValidatedAt = Now;
         }
         sheet.Lines = await NormalizeAsync(sheet, draft.Lines);
+        await TransferredAwayAsync(sheet);
         await CheckAsync(sheet, sheet.Status == SheetStatus.Validee);
 
         var action = correcting ? AuditActions.SheetCorrected : sheet.Status == SheetStatus.Validee ? AuditActions.SheetValidated : AuditActions.SheetSaved;
@@ -461,7 +462,126 @@ public sealed class AttendanceService(
             OldValue = stored?.Summary(), NewValue = sheet.Summary() + (changes.Count == 0 ? "" : " · " + string.Join(" ; ", changes.Take(20))),
             Workstation = client.Workstation,
         });
+        await SyncTransfersAsync(actor, sheet, stored);
         return (await store.GetAsync(sheet.Id))!;
+    }
+
+    // ---------- transfers ----------
+
+    // Pointed absent on his poste (A, M or C) but present on another poste
+    // of the same production day: he was moved there. His absent row
+    // becomes "en renfort ailleurs" (keeping the code it had, to go back to
+    // it if the other poste is undone). An accident de travail stays.
+    public static readonly IReadOnlyList<AbsenceCode> TransferCodes = new[] { AbsenceCode.A, AbsenceCode.M, AbsenceCode.C };
+
+    private static bool SameSheet(AttendanceSheet a, AttendanceSheet b)
+        => a.Id != 0 && a.Id == b.Id
+           || a.ProductionDate.Date == b.ProductionDate.Date && a.ShiftId == b.ShiftId && string.Equals(a.Team, b.Team, StringComparison.OrdinalIgnoreCase);
+
+    private async Task<List<AttendanceSheet>> SameDayAsync(AttendanceSheet sheet)
+        => (await store.ListAsync(sheet.ProductionDate, sheet.ProductionDate)).Where(s => !SameSheet(s, sheet)).ToList();
+
+    private static AttendanceSheet? PresentIn(IEnumerable<AttendanceSheet> sheets, int employeeId)
+        => sheets.FirstOrDefault(s => s.Lines.Any(l => l.EmployeeId == employeeId && l.Status == LineStatus.Present));
+
+    private static string Moved(AttendanceLine l, AbsenceCode was, AttendanceSheet to)
+        => $"{l.FullName} : {was} ({AbsenceCodes.Label(was)}) → transféré au poste {Shifts.Label(to.ShiftId)} du {to.ProductionDate:dd/MM} · {to.Team}";
+
+    // The sheet being saved: its absents already present on another poste.
+    private async Task TransferredAwayAsync(AttendanceSheet sheet)
+    {
+        var absents = sheet.Lines.Where(l => l.Status == LineStatus.Absent && l.Absence is { } a && TransferCodes.Contains(a)).ToList();
+        if (absents.Count == 0)
+            return;
+        var others = await SameDayAsync(sheet);
+        foreach (var l in absents)
+            if (PresentIn(others, l.EmployeeId) != null)
+            {
+                l.Status = LineStatus.Ailleurs;
+                l.EntryAt = l.ExitAt = null;
+                ClearActingOf(l);
+            }
+    }
+
+    private static void ClearActingOf(AttendanceLine l)
+    {
+        l.ReplacesEmployeeId = null;
+        l.ActingFunction = null;
+        l.ActingMachineId = null;
+        l.ActingLineId = null;
+        l.ActingFrom = null;
+    }
+
+    // After a save: the other sheets of the day follow. Present here and
+    // absent (A, M, C) there = transferred; no longer present here and
+    // transferred there = absent again with the code he had.
+    private async Task SyncTransfersAsync(Actor actor, AttendanceSheet sheet, AttendanceSheet? stored)
+    {
+        var present = sheet.Lines.Where(l => l.Status == LineStatus.Present).Select(l => l.EmployeeId).ToHashSet();
+        var concerned = present.Concat(stored?.Lines.Where(l => l.Status == LineStatus.Present).Select(l => l.EmployeeId) ?? Array.Empty<int>()).ToHashSet();
+        if (concerned.Count == 0)
+            return;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var others = await SameDayAsync(sheet);
+            var conflict = false;
+            foreach (var other in others.Where(o => o.Lines.Any(l => concerned.Contains(l.EmployeeId))))
+            {
+                var copy = other.Clone();
+                var changes = new List<string>();
+                foreach (var l in copy.Lines.Where(l => concerned.Contains(l.EmployeeId)))
+                {
+                    if (l.Status == LineStatus.Absent && l.Absence is { } was && TransferCodes.Contains(was) && present.Contains(l.EmployeeId))
+                    {
+                        l.Status = LineStatus.Ailleurs;
+                        l.EntryAt = l.ExitAt = null;
+                        ClearActingOf(l);
+                        changes.Add(Moved(l, was, sheet));
+                    }
+                    else if (l.Status == LineStatus.Ailleurs && l.Absence is { } code && !present.Contains(l.EmployeeId)
+                             && PresentIn(others.Where(o => o.Id != other.Id), l.EmployeeId) == null)
+                    {
+                        l.Status = LineStatus.Absent;
+                        changes.Add($"{l.FullName} : transfert au poste {Shifts.Label(sheet.ShiftId)} · {sheet.Team} annulé → {code} ({AbsenceCodes.Label(code)})");
+                    }
+                }
+                if (changes.Count == 0)
+                    continue;
+                copy.Version = other.Version + 1;
+                copy.UpdatedBy = actor.Login;
+                copy.UpdatedAt = Now;
+                var revision = new AttendanceRevision
+                {
+                    SheetId = other.Id, Version = copy.Version, At = Now, UserLogin = actor.Login, Action = AuditActions.SheetTransfer,
+                    Changes = string.Join("\n", changes), Note = $"Automatique : pointage {sheet.Poste}",
+                };
+                if (!await store.UpdateAsync(copy, other.Version, revision))
+                {
+                    conflict = true;
+                    break;
+                }
+                await audit.WriteAsync(new AuditEntry
+                {
+                    At = Now, UserLogin = actor.Login, Module = Modules.Pointage, Action = AuditActions.SheetTransfer,
+                    Target = $"Pointage {other.Poste}", Details = revision.Note, OldValue = other.Summary(),
+                    NewValue = copy.Summary() + " · " + string.Join(" ; ", changes), Workstation = client.Workstation,
+                });
+            }
+            if (!conflict)
+                return;
+        }
+    }
+
+    // People pointed "accident de travail" on another poste of the day: not
+    // transferred, the sheet warns.
+    public async Task<IReadOnlyDictionary<int, AttendanceSheet>> AccidentElsewhereAsync(Actor actor, AttendanceSheet sheet)
+    {
+        actor.Demand(Perm.PointageVoir);
+        var result = new Dictionary<int, AttendanceSheet>();
+        foreach (var s in await SameDayAsync(sheet))
+            foreach (var l in s.Lines.Where(l => l.Status == LineStatus.Absent && l.Absence == AbsenceCode.AT))
+                result[l.EmployeeId] = s;
+        return result;
     }
 
     // ---------- internals ----------
@@ -533,7 +653,8 @@ public sealed class AttendanceService(
                 HomeTeam = posting.Team,
                 IsRenfort = renfort,
                 Status = d.Status,
-                Absence = d.Status == LineStatus.Absent ? d.Absence : null,
+                // An "ailleurs" row keeps the code it had before a transfer.
+                Absence = d.Status is LineStatus.Absent or LineStatus.Ailleurs ? d.Absence : null,
                 EntryAt = d.Status == LineStatus.Present || d.Status == LineStatus.AConfirmer ? d.EntryAt : null,
                 ExitAt = d.Status == LineStatus.Present || d.Status == LineStatus.AConfirmer ? d.ExitAt : null,
                 MachineId = StaffFunctions.HoldsMachine(posting.Function) ? d.MachineId ?? posting.MachineId : null,
