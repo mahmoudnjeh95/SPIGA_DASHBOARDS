@@ -606,7 +606,10 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
     // cost grows faster than the range (the month Cumul of 10 lines passed
     // the 60 s timeout on 29/10 while each day takes 2-4 s). Buckets never
     // cross midnight and each day reads its own SnapshotMargin, so the result
-    // is the same.
+    // is the same. The days are read ParallelDays at a time, each on its own
+    // connection (a month was 30 queries one after the other).
+    private const int ParallelDays = 4;
+
     private async Task<List<ProductionBucket>> QueryBucketsAsync(
         string lineFilter, BucketSize size, DateTime from, DateTime to, object filterParams, bool includeWeights)
     {
@@ -614,13 +617,39 @@ FROM Machines m WHERE m.MachineId IN @machineIds",
             from = _settings.DataStartDate;
         if (to - from <= TimeSpan.FromDays(1))
             return await QueryDayAsync(lineFilter, size, from, to, filterParams, includeWeights);
-        var buckets = new List<ProductionBucket>();
+        var days = new List<(DateTime Start, DateTime End)>();
         for (var start = from; start < to;)
         {
             var end = start.Date.AddDays(1) < to ? start.Date.AddDays(1) : to;
-            buckets.AddRange(await QueryDayAsync(lineFilter, size, start, end, filterParams, includeWeights));
+            days.Add((start, end));
             start = end;
         }
+        using var gate = new SemaphoreSlim(ParallelDays);
+        var reads = days.Select(async day =>
+        {
+            await gate.WaitAsync();
+            try
+            {
+                // A first day started on the hour (a poste minus its early
+                // margin) is read whole, so it comes from the day cache like
+                // the others, and cut: an hour bucket holds the intervals
+                // whose midpoint falls in it, so the result is the same.
+                var whole = size == BucketSize.Hour && day.Start != day.Start.Date
+                            && day.Start.Minute == 0 && day.Start.Second == 0 && day.Start.Millisecond == 0
+                            && day.End == day.Start.Date.AddDays(1) && day.Start.Date >= _settings.DataStartDate;
+                if (!whole)
+                    return await QueryDayAsync(lineFilter, size, day.Start, day.End, filterParams, includeWeights);
+                var all = await QueryDayAsync(lineFilter, size, day.Start.Date, day.End, filterParams, includeWeights);
+                return all.Where(b => b.StartTime >= day.Start).ToList();
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }).ToList();
+        var buckets = new List<ProductionBucket>();
+        foreach (var day in await Task.WhenAll(reads))
+            buckets.AddRange(day);
         return buckets;
     }
 

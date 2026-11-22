@@ -120,7 +120,12 @@ public static class EmployeeProfiles
             .Where(b => Shifts.ProductionDate(b.StartTime) is var d && d >= r.FromDate && d <= r.ToDate)
             .ToLookup(b => b.MachineId, StringComparer.OrdinalIgnoreCase);
         var packaging = waste.Where(w => w.Counts && w.Kind == WasteKind.Emballage && w.MachineId != null).ToList();
+        // What each machine made per poste, and its waste entries: the same
+        // for every person, so worked out once.
+        var madePerPoste = new Dictionary<string, List<(DateTime Date, int ShiftId, double Kg)>>(StringComparer.OrdinalIgnoreCase);
+        var wasteByMachine = packaging.ToLookup(w => w.MachineId!, StringComparer.OrdinalIgnoreCase);
         var actingBy = r.Acting.ToLookup(a => a.EmployeeId);
+        var qualifications = r.Qualifications.ToLookup(q => q.MachineId, StringComparer.OrdinalIgnoreCase);
         var profiles = new List<EmployeeProfile>();
         foreach (var person in entries.GroupBy(e => e.Line.EmployeeId))
         {
@@ -131,7 +136,8 @@ public static class EmployeeProfiles
             var ownSet = buckets.Values.SelectMany(b => b).ToHashSet();
             var usual = UsualByMachine(ownSet, lotsByMachine);
             var (perPoste, spread) = Trend(held, buckets, usual);
-            var (wasteKg, wastePerTonne, usualWaste) = Waste(held, packaging, lotsByMachine, ownSet);
+            var (wasteKg, wastePerTonne, usualWaste) = Waste(held, wasteByMachine, m => MadePerPoste(m, lotsByMachine, madePerPoste));
+            var own = Of(ownSet);
             profiles.Add(new EmployeeProfile
             {
                 EmployeeId = person.Key,
@@ -143,11 +149,11 @@ public static class EmployeeProfiles
                 Skills = Skills(held, buckets, usual),
                 RenfortPostes = mine.Count(e => e.Line.IsRenfort && e.Line.Status == LineStatus.Present),
                 TeamsWorked = mine.Where(e => e.Line.Status == LineStatus.Present).Select(e => e.Sheet.Team).Distinct().Order().ToList(),
-                Own = Of(ownSet),
+                Own = own,
                 Usual = Weighted(ownSet, usual),
                 TrsSpread = spread,
                 Trend = perPoste,
-                Causes = Causes(held, r.Qualifications, Of(ownSet).StoppedMinutes),
+                Causes = Causes(held, qualifications, own.StoppedMinutes),
                 WasteKg = wasteKg,
                 WastePerTonne = wastePerTonne,
                 UsualWastePerTonne = usualWaste,
@@ -254,11 +260,11 @@ public static class EmployeeProfiles
 
     // The qualified stops of the held machines, cut to the held stretches;
     // what is left of the stopped minutes is "non qualifié".
-    private static List<CauseMinutes> Causes(List<HeldPost> held, IReadOnlyList<StopQualification> qualifications, double stoppedMinutes)
+    private static List<CauseMinutes> Causes(List<HeldPost> held, ILookup<string, StopQualification> qualifications, double stoppedMinutes)
     {
         var byCode = new Dictionary<string, double>();
         foreach (var h in held.Where(h => h.Machines.Count > 0))
-            foreach (var q in qualifications.Where(q => h.Machines.Contains(q.MachineId, StringComparer.OrdinalIgnoreCase)))
+            foreach (var q in h.Machines.Distinct(StringComparer.OrdinalIgnoreCase).SelectMany(m => qualifications[m]))
             {
                 var a = q.StopStart > h.From ? q.StopStart : h.From;
                 var b = q.StopEnd < h.To ? q.StopEnd : h.To;
@@ -275,8 +281,17 @@ public static class EmployeeProfiles
     // Packaging waste entered for the held machines on the postes the
     // person held them, per tonne those machines made then; usual: the same
     // machines on their other postes, weighted by what the person made on each.
+    private static List<(DateTime Date, int ShiftId, double Kg)> MadePerPoste(
+        string machine, ILookup<string, ProductionBucket> lots, Dictionary<string, List<(DateTime Date, int ShiftId, double Kg)>> cache)
+    {
+        if (!cache.TryGetValue(machine, out var made))
+            cache[machine] = made = lots[machine].GroupBy(b => (Date: Shifts.ProductionDate(b.StartTime), b.ShiftId))
+                .Select(g => (g.Key.Date, g.Key.ShiftId, Kg: KpiCalculator.Summarize(g.ToList(), 0).ProductionKg)).ToList();
+        return made;
+    }
+
     private static (double Kg, double? PerTonne, double? Usual) Waste(
-        List<HeldPost> held, List<WasteEntry> waste, ILookup<string, ProductionBucket> lots, HashSet<ProductionBucket> own)
+        List<HeldPost> held, ILookup<string, WasteEntry> waste, Func<string, List<(DateTime Date, int ShiftId, double Kg)>> madePerPoste)
     {
         var postes = held.SelectMany(h => h.Machines.Select(m => (h.Date.Date, h.ShiftId, Machine: m.ToUpperInvariant()))).ToHashSet();
         if (postes.Count == 0)
@@ -289,9 +304,8 @@ public static class EmployeeProfiles
         foreach (var m in machines)
         {
             bool Mine(DateTime date, int shift) => postes.Contains((date.Date, shift, m));
-            var entries = waste.Where(w => string.Equals(w.MachineId, m, StringComparison.OrdinalIgnoreCase)).ToList();
-            var production = lots[m].GroupBy(b => (Date: Shifts.ProductionDate(b.StartTime), b.ShiftId))
-                .Select(g => (g.Key.Date, g.Key.ShiftId, Kg: KpiCalculator.Summarize(g.ToList(), 0).ProductionKg)).ToList();
+            var entries = waste[m].ToList();
+            var production = madePerPoste(m);
             var myKg = entries.Where(w => Mine(w.ProductionDate, w.ShiftId)).Sum(w => w.QuantityKg);
             var myMade = production.Where(p => Mine(p.Date, p.ShiftId)).Sum(p => p.Kg);
             var otherKg = entries.Where(w => !Mine(w.ProductionDate, w.ShiftId)).Sum(w => w.QuantityKg);
