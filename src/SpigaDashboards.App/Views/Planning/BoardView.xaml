@@ -346,6 +346,7 @@
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="#403987E5" Stroke="#3987E5"/><TextBlock Text="Couscous"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="#40199E70" Stroke="#199E70"/><TextBlock Text="Pâte courte"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="#409085E9" Stroke="#9085E9"/><TextBlock Text="Pâte longue"/>
+                        <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="#40E08E3C" Stroke="#E08E3C"/><TextBlock Text="Pâte"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource MaintStripes}"/><TextBlock Text="Maintenance"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource LateFill}" Stroke="{StaticResource LateStroke}" StrokeDashArray="3 2"/><TextBlock Text="Non validée"/>
                         <Rectangle Width="18" Height="12" RadiusX="3" RadiusY="3" Fill="{StaticResource StopStripes}"/><TextBlock Text="Arrêt planifié"/>

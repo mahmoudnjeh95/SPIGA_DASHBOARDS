@@ -255,6 +255,8 @@
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate courte'}"/>
                             <RadioButton GroupName="Sector" Content="Pâte longue" Style="{StaticResource Seg}"
                                          IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter='Pate longue'}"/>
+                            <RadioButton GroupName="Sector" Content="Pâte" Style="{StaticResource Seg}"
+                                         IsChecked="{Binding FilterSector, Converter={StaticResource ValueToBool}, ConverterParameter=Pate}"/>
                         </StackPanel>
                     </StackPanel>
 
