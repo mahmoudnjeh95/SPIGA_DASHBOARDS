@@ -39,6 +39,18 @@ keyed by `ID_produzione` + `ora_inizio`. SOL field 0 only toggles 0/1 on PC01, s
 time ~25 s later so fewer lots are missed (fixed 19/11/2026: keying on field 0 overwrote
 every lot and left the Poids moyen chart empty).
 
+## Installed by the setup .exe (since 1.5.28)
+`SpigaDashboards-<version>-Setup.exe` asks **Poste personnel** or **Serveur** on its first
+page. *Poste personnel* installs the app only (no admin prompt, no task). *Serveur* also runs
+`tools/server-setup/SpigaServerSetup` elevated (one UAC prompt), which carries these two
+scripts and checks the bridge: task present, enabled, ran in the last 5 min without error,
+and the deployed script identical to this version's (line endings ignored). Healthy →
+nothing changes. Otherwise it lists the problems and asks before running
+`install_pc01_collector.ps1`. Uninstalling the app leaves the bridge running.
+- Silent server install: `Setup.exe /quiet InstallRole=server` (the Yes/No prompt still shows)
+- Check only, no change: `SpigaServerSetup.exe -check` (exit 0 = healthy, 1 = action needed)
+- Log of each server-setup run: `C:\ProgramData\SpigaPC01Collector\server-setup.log`
+
 ## Operate
 - Status:      `Get-ScheduledTask 'SPIGA - PC01 Collector' | Get-ScheduledTaskInfo`
 - Run once:    `powershell -File C:\ProgramData\SpigaPC01Collector\pc01_collector.ps1 -Once`

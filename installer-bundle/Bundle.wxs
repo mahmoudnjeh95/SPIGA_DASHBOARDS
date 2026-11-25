@@ -9,14 +9,41 @@
           UpgradeCode="7C4E2B91-3F5A-4D8E-9A61-0B2C7D8E4F15"
           IconSourceFile="..\src\SpigaDashboards.App\Assets\spiga.ico">
 
+    <!-- Theme.xml / Theme.wxl: the stock "hyperlink" theme plus the
+         Serveur / Poste personnel choice on the first page. -->
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication Theme="hyperlinkLicense"
+                                              ThemeFile="Theme.xml"
+                                              LocalizationFile="Theme.wxl"
                                               LicenseUrl=""
                                               LogoFile="..\src\SpigaDashboards.App\Assets\spiga-logo.png" />
     </BootstrapperApplication>
 
+    <!-- Set by the radio buttons; persisted so a repair keeps the choice.
+         Overridable for silent installs: Setup.exe /quiet InstallRole=server -->
+    <Variable Name="InstallRole" Type="string" Value="personal" Persisted="yes" bal:Overridable="yes" />
+
     <Chain>
       <MsiPackage SourceFile="$(var.MsiFile)" Compressed="yes" />
+
+      <!-- Server only: check the PC01 bridge (scheduled task "SPIGA - PC01
+           Collector") and, with the user's OK, create or repair it. Per-machine
+           so Burn runs it elevated (the UAC prompt); skipped entirely on an
+           office PC, which then needs no administrator rights. Permanent: the
+           bridge keeps collecting if the app is uninstalled. Not vital and
+           always exits 0, so a refused bridge never undoes the app install. -->
+      <ExePackage Id="Pc01Bridge"
+                  DisplayName="Pont de collecte PC01"
+                  SourceFile="$(var.SpigaServerSetup.TargetPath)"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="no"
+                  InstallCondition="InstallRole = &quot;server&quot;">
+        <Payload SourceFile="..\tools\pc01-bridge\pc01_collector.ps1" />
+        <Payload SourceFile="..\tools\pc01-bridge\install_pc01_collector.ps1" />
+        <Payload SourceFile="..\tools\pc01-bridge\ricciarelli_collector.ps1" />
+        <Payload SourceFile="..\tools\pc01-bridge\install_ricciarelli_collector.ps1" />
+      </ExePackage>
     </Chain>
 
   </Bundle>

@@ -5,11 +5,20 @@
     <OutputName>SpigaDashboards-$(Version)-Setup</OutputName>
     <OutputType>Bundle</OutputType>
     <Platform>x64</Platform>
+    <!-- WIX1161 (no DetectCondition on an ExePackage): on purpose, the PC01
+         bridge check must run on every server install / repair. -->
+    <SuppressSpecificWarnings>1161</SuppressSpecificWarnings>
     <DefineConstants>ProductVersion=$(Version);MsiFile=$(MSBuildProjectDirectory)\..\installer\bin\x64\Release\SpigaDashboards-$(Version)-Setup.msi</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="WixToolset.Bal.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <!-- Server step (PC01 bridge check), built with the bundle; Bundle.wxs
+       uses it as $(var.SpigaServerSetup.TargetPath). -->
+  <ItemGroup>
+    <ProjectReference Include="..\tools\server-setup\SpigaServerSetup\SpigaServerSetup.csproj" />
   </ItemGroup>
 
 </Project>

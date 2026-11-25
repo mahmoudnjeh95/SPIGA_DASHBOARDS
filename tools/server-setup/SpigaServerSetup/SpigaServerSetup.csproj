@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Server-only step of the setup .exe (installer-bundle\Bundle.wxs): checks
+       the PC01 collector's scheduled task and, with the user's approval,
+       creates or repairs it via tools\pc01-bridge\install_pc01_collector.ps1.
+       .NET Framework 4.8 is part of Windows 10/11, so this exe is a few KB and
+       the bundle does not carry a second .NET runtime. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ApplicationIcon>..\..\..\src\SpigaDashboards.App\Assets\spiga.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Version: Directory.Build.props at the repo root. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <!-- The bridge it installs sits beside the exe, as it will in the setup
+       .exe's package cache (Bundle.wxs ships the same two files as payloads). -->
+  <ItemGroup>
+    <None Include="..\..\pc01-bridge\pc01_collector.ps1" Link="pc01_collector.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\pc01-bridge\install_pc01_collector.ps1" Link="install_pc01_collector.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\pc01-bridge\ricciarelli_collector.ps1" Link="ricciarelli_collector.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\pc01-bridge\install_ricciarelli_collector.ps1" Link="install_ricciarelli_collector.ps1" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
