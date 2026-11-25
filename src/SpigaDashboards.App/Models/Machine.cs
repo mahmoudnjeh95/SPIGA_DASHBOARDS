@@ -15,6 +15,7 @@ public class Machine
     {
         "Pate courte" => "Pâte courte",
         "Pate longue" => "Pâte longue",
+        "Pate" => "Pâte",
         _ => sector,
     };
 }

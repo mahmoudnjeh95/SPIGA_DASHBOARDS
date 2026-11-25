@@ -37,7 +37,7 @@ public partial class HistoryViewModel : ObservableObject
     // A search in progress: loading motion over the results.
     [ObservableProperty] private bool isBusy;
 
-    public List<string> SectorOptions { get; } = new() { AllOption, "Couscous", "Pate courte", "Pate longue" };
+    public List<string> SectorOptions { get; } = new() { AllOption, "Couscous", "Pate courte", "Pate longue", "Pate" };
     public List<string> ShiftOptions { get; } = new() { AllOption, "Matin", "Après-midi", "Nuit" };
     public ObservableCollection<string> TeamOptions { get; } = new();
     public ObservableCollection<MachinePick> MachineOptions { get; } = new();

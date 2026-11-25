@@ -7,9 +7,10 @@ namespace SpigaDashboards.App.ViewModels.Slides;
 // (MainViewModel) and the Parametres slide list, so both name the same slides.
 public static class SlideDeck
 {
-    // Sector display order. CC = couscous, PC = pate courte, PL = pate longue.
+    // Sector display order. CC = couscous, PC = pate courte, PL = pate longue,
+    // Pate = the Ricciarelli checkweighers (RIC1/RIC2).
     // One slide per machine, in machine-id order within its sector.
-    public static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue" };
+    public static readonly string[] SectorOrder = { "Couscous", "Pate courte", "Pate longue", "Pate" };
 
     // Conditionnement 1 slide; Conditionnement 2 gets every other machine.
     private static readonly string[] Packaging1MachineIds = { "CC03", "CC04" };

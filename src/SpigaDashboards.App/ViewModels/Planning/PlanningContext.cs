@@ -49,7 +49,8 @@ public sealed class PlanningContext
         "Couscous" => 0,
         "Pate courte" => 1,
         "Pate longue" => 2,
-        _ => 3,
+        "Pate" => 3,
+        _ => 4,
     };
 
     // One hue per sector (blue / aqua / violet), the same on every tab.
@@ -58,6 +59,7 @@ public sealed class PlanningContext
         "Couscous" => Color.FromRgb(0x39, 0x87, 0xE5),
         "Pate courte" => Color.FromRgb(0x19, 0x9E, 0x70),
         "Pate longue" => Color.FromRgb(0x90, 0x85, 0xE9),
+        "Pate" => Color.FromRgb(0xE0, 0x8E, 0x3C),
         _ => Color.FromRgb(0x9A, 0xA4, 0xB2),
     };
 

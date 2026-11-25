@@ -147,8 +147,9 @@ public class AppSettings
         "machine:CC03", "machine:CC04", "machine:CC01", "machine:CC02",
         "machine:PC01", "machine:PC02", "machine:PC03",
         "machine:PL03", "machine:PL02", "machine:PL01",
+        "machine:RIC1", "machine:RIC2",
         "pdf",
-        "synthese:Couscous", "synthese:Pate courte", "synthese:Pate longue",
+        "synthese:Couscous", "synthese:Pate courte", "synthese:Pate longue", "synthese:Pate",
         "production:Conditionnement 1", "trs:Conditionnement 1",
         "production:Conditionnement 2", "trs:Conditionnement 2",
         "production:Cumul", "trs:Cumul",
@@ -206,6 +207,8 @@ public class AppSettings
         new() { MachineId = "PL01", WeightGrams = 400, RatePerMinute = 100, TareGrams = 5 },
         new() { MachineId = "PL02", WeightGrams = 400, RatePerMinute = 100 },
         new() { MachineId = "PL03", WeightGrams = 500, RatePerMinute = 100 },
+        new() { MachineId = "RIC1", WeightGrams = 250, RatePerMinute = 150 },
+        new() { MachineId = "RIC2", WeightGrams = 250, RatePerMinute = 150 },
     };
 
     // TRS target (%) per machine, shown next to each machine's TRS and used
@@ -216,6 +219,7 @@ public class AppSettings
         ["CC01"] = 45, ["CC02"] = 45, ["CC03"] = 45, ["CC04"] = 45,
         ["PC01"] = 45, ["PC02"] = 45, ["PC03"] = 45,
         ["PL01"] = 45, ["PL02"] = 45, ["PL03"] = 45,
+        ["RIC1"] = 45, ["RIC2"] = 45,
     };
 
     public const double DefaultTrsTarget = 85;
