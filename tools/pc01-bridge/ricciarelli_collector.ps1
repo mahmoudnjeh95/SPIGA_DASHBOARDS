@@ -101,7 +101,9 @@ if(-not $CredFile){ $CredFile = Join-Path $ScriptDir ("Ricciarelli_{0}.cred" -f 
 # State-file times are written as local 'yyyy-MM-ddTHH:mm:ss' text: a [DateTime] through
 # Windows PowerShell's ConvertTo/From-Json comes back in UTC (one hour early here).
 $Inv = [Globalization.CultureInfo]::InvariantCulture
+function WholeSecond([DateTime]$d){ $d.AddTicks(-($d.Ticks % [TimeSpan]::TicksPerSecond)) }
 function DtOut([DateTime]$d){ $d.ToString('yyyy-MM-ddTHH:mm:ss', $Inv) }
+function ErrText($e){ "$($e.Exception.Message) (line $($e.InvocationInfo.ScriptLineNumber): $("$($e.InvocationInfo.Line)".Trim()))" }
 function DtIn($v){
   if($v -is [DateTime]){ return $v.ToLocalTime() }
   [DateTime]::ParseExact([string]$v,'yyyy-MM-ddTHH:mm:ss',$Inv)
@@ -235,7 +237,7 @@ function Tick {
 
   # production/lot tracking
   $st = Load-State
-  $now = Get-Date
+  $now = WholeSecond (Get-Date)   # the state keeps seconds; lotto rows are found by ora_inizio
   $cod = CodiceArticolo $p.article
   if($null -eq $st -or [int64]$p.total -lt [int64]$st.lastTotal -or $st.article -ne $p.article){
     $prodStart = $now; $lotStart = $now; $lastLot = $p.lotNo
@@ -269,8 +271,13 @@ function Save-Credential {
 }
 
 function Connect-Share {
-  if(Test-Path $LogShare){ return }
-  if(-not (Test-Path $CredFile)){ throw "no access to $LogShare and no credential file $CredFile (run once with -SetCredential)" }
+  # Log in with the stored account BEFORE touching the share: under the task's S4U logon
+  # any earlier access opens an anonymous connection that then refuses everything (1219).
+  if(-not (Test-Path $CredFile)){
+    $ok = try { Test-Path $LogShare } catch { $false }
+    if($ok){ return }
+    throw "no access to $LogShare and no credential file $CredFile (run once with -SetCredential)"
+  }
   Add-Type -AssemblyName System.Security
   $txt = [Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($CredFile), $null, 'LocalMachine'))
   $user, $secret = $txt -split "`n", 2
@@ -283,13 +290,20 @@ public static class SpigaNet {
     public string lpLocalName, lpRemoteName, lpComment, lpProvider; }
   [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
   public static extern int WNetAddConnection2(NETRESOURCE r, string pwd, string user, int flags);
+  [DllImport("mpr.dll", CharSet = CharSet.Unicode)]
+  public static extern int WNetCancelConnection2(string name, int flags, bool force);
 }
 '@
   }
-  $share = ($LogShare -split '\\' | Where-Object { $_ })[0..1] -join '\'
-  $r = New-Object SpigaNet+NETRESOURCE; $r.dwType = 1; $r.lpRemoteName = "\\$share"
+  $parts = $LogShare -split '\\' | Where-Object { $_ }
+  $share = "\\$($parts[0])\$($parts[1])"
+  $r = New-Object SpigaNet+NETRESOURCE; $r.dwType = 1; $r.lpRemoteName = $share
   $rc = [SpigaNet]::WNetAddConnection2($r, $secret, $user, 0)
-  if($rc -ne 0 -and $rc -ne 1219){ throw "cannot connect \\$share (error $rc)" }
+  if($rc -eq 1219){   # a connection to that server with other (or no) credentials: drop it, retry
+    foreach($n in @($share, "\\$($parts[0])\IPC`$")){ [void][SpigaNet]::WNetCancelConnection2($n, 0, $true) }
+    $rc = [SpigaNet]::WNetAddConnection2($r, $secret, $user, 0)
+  }
+  if($rc -ne 0){ throw "cannot connect $share as $user (Windows error $rc)" }
 }
 
 function Open-Shared([string]$path){ [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite') }
@@ -396,7 +410,7 @@ function Tick-Log {
   $packs = 0; $finished = $null
   $from = if(-not $st -and $StartAt){ [DateTime]::Parse($StartAt) } else { [DateTime]::MinValue }
   foreach($m in $entries){
-    $t = [DateTime]::ParseExact($m.Groups[1].Value, 'dd/MM/yyyy HH:mm:ss', $Inv) + $skew
+    $t = WholeSecond ([DateTime]::ParseExact($m.Groups[1].Value, 'dd/MM/yyyy HH:mm:ss', $Inv) + $skew)
     if($t -lt $from -and $m.Groups[2].Value -eq '0x42'){ continue }
     $b = [int[]]($m.Groups[4].Value -split '-' | ForEach-Object { [Convert]::ToInt32($_.Substring(2), 16) })
     if($m.Groups[2].Value -eq '0x41'){
@@ -475,8 +489,8 @@ if($Loop){
   $mutex = New-Object System.Threading.Mutex($false,("Global\SpigaRicciarelli_{0}" -f $Line))
   if(-not $mutex.WaitOne(0)){ Log "another collector instance ($Line) already running; exiting." 'WARN'; return }
   Log "=== Ricciarelli collector ($Line $Ip`:$Port) starting  Write=$Write Interval=${IntervalSec}s ==="
-  while($true){ try { Tick } catch { Log "tick error: $($_.Exception.Message)" 'ERROR' }; Start-Sleep -Seconds $IntervalSec }
+  while($true){ try { Tick } catch { Log "tick error: $(ErrText $_)" 'ERROR' }; Start-Sleep -Seconds $IntervalSec }
 } else {
   Log "=== Ricciarelli collector ($Line $Ip`:$Port) one-shot  Write=$Write ==="
-  try { Tick } catch { Log "tick error: $($_.Exception.Message)" 'ERROR' }
+  try { Tick } catch { Log "tick error: $(ErrText $_)" 'ERROR' }
 }
