@@ -8,7 +8,8 @@
 // Blazor's next update still finds it) and sets attributes it does not use.
 (function () {
     "use strict";
-    var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Motion plays even with Windows animation effects off (reduced motion):
+    // the servers and remote sessions have them off by default.
 
     // ---------- count-up ----------
     // "65,3 %", "1 234 kg", "+1,2 %", "12,5 t" -> animate the number only,
@@ -73,7 +74,7 @@
     }
 
     function scan(root) {
-        if (reduced || !root.querySelectorAll) return;
+        if (!root.querySelectorAll) return;
         if (root.matches && root.matches(SELECTOR)) countUp(root);
         var list = root.querySelectorAll(SELECTOR);
         for (var i = 0; i < list.length; i++) countUp(list[i]);
@@ -94,7 +95,6 @@
     // record, read after the count had started, found the count's own first
     // frame ("0") as the new value, stopped the count and left the "0".
     function handle(records) {
-        if (reduced) return;
         var els = [];
         function add(el) { if (el && el.matches && el.matches(SELECTOR) && els.indexOf(el) < 0) els.push(el); }
         for (var i = 0; i < records.length; i++) {
@@ -154,7 +154,6 @@
 
     // ---------- click ripple ----------
     document.addEventListener("pointerdown", function (e) {
-        if (reduced) return;
         var b = e.target && e.target.closest && e.target.closest(".spiga-root .bar, .spiga-root .seg, .spiga-root .tab, .spiga-root .rolebtn");
         if (!b || b.disabled) return;
         var r = b.getBoundingClientRect();
