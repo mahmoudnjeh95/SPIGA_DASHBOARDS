@@ -126,6 +126,8 @@ public static class ModuleCatalog
             Permission: Perm.ParametresPoste),
         new NavItem("acces", "Utilisateurs et rôles", "Administration", Modules.Utilisateurs, "admin/acces", true),
         new NavItem("personnel", "Personnel et lignes", "Administration", Modules.Referentiels, "admin/personnel", true),
+        new NavItem("regles", "Règles « À traiter »", "Administration", Modules.VueEnsemble, "admin/regles", true,
+            Permission: Perm.Regles),
         new NavItem("referentiels", "Référentiels", "Administration", Modules.Referentiels, "module/referentiels", false,
             "Machines, lignes, secteurs, produits et cadences, équipes et roulement, pauses, silos, motifs de déchet.",
             "Recherche", "Reprend cadences, équipes et pauses des Paramètres actuels"),

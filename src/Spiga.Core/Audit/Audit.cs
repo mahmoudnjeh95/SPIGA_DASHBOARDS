@@ -71,4 +71,8 @@ public static class AuditActions
     public const string OvertimeBanLifted = "Interdiction d'heures sup. levée";
     public const string OvertimeDerogation = "Dérogation à la limite d'heures sup.";
     public const string OvertimeDerogationLifted = "Dérogation d'heures sup. levée";
+    public const string AttentionRulesChanged = "Règles « À traiter » modifiées";
+    public const string PermutationRuleChanged = "Règle de permutation modifiée";
+    public const string Permuted = "Pointage : permutation";
+    public const string PermutationCancelled = "Pointage : permutation annulée";
 }

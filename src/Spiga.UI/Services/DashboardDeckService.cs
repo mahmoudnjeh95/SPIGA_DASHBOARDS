@@ -112,7 +112,9 @@ public sealed partial class DashboardDeckService(
                     postes.Take(postes.Count - 1).Select(id => Poste(id, date, false, false, lots, now, trsBand, weightBand, null)).ToList(),
                     null);
             }
-            return await PeriodAsync(repository, header, machine, date, date.AddDays(1), previous ? "Poste précédent" : "Aujourd'hui",
+            // The whole production day: 06:00 to 06:00 the next morning.
+            return await PeriodAsync(repository, header, machine, date.AddHours(PeriodRanges.DayStartHour),
+                date.AddDays(1).AddHours(PeriodRanges.DayStartHour), previous ? "Poste précédent" : "Aujourd'hui",
                 filter, status, trsBand, weightBand, now);
         }
 

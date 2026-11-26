@@ -167,6 +167,10 @@
                                             @if (l.IsRenfort)
                                             {
                                                 <small>@StaffFunctions.Short(l.Function) · <span class="chip acc">Renfort · @l.HomeTeam</span></small>
+                                                @if (l.PermutedWith != null)
+                                                {
+                                                    <small class="pt-away-note">⇄ Permuté : à la place de @l.PermutedWith</small>
+                                                }
                                             }
                                             @if (l.Status != LineStatus.Absent && _accidents.TryGetValue(l.EmployeeId, out var atSheet))
                                             {
@@ -193,7 +197,15 @@
                                             }
                                         </td>
                                         <td class="nowrap">
-                                            @if (l.Status == LineStatus.Ailleurs)
+                                            @if (l.Status == LineStatus.Ailleurs && SwapOf(l) is { } gone)
+                                            {
+                                                <span class="chip acc">⇄ Permuté · @gone.PosteOf(l.EmployeeId).Team</span>
+                                                @if (editable)
+                                                {
+                                                    <button type="button" class="link danger" @onclick="() => CancelSwapAsync(gone)">Annuler la permutation</button>
+                                                }
+                                            }
+                                            else if (l.Status == LineStatus.Ailleurs)
                                             {
                                                 <span class="chip acc">Renfort · @(AwayOf(l).FirstOrDefault().Sheet?.Team ?? "autre équipe")</span>
                                             }
@@ -209,9 +221,18 @@
                                                         <option value="@c">@c · @AbsenceCodes.Label(c)</option>
                                                     }
                                                 </select>
-                                                @if (l.IsRenfort)
+                                                @if (l.IsRenfort && SwapOf(l) is { } came)
+                                                {
+                                                    <button type="button" class="link danger" @onclick="() => CancelSwapAsync(came)">Annuler la permutation</button>
+                                                }
+                                                else if (l.IsRenfort)
                                                 {
                                                     <button type="button" class="link danger" @onclick="() => Remove(l)">Retirer</button>
+                                                }
+                                                else if (l.PermutationId == null && !_correcting)
+                                                {
+                                                    <button type="button" class="link" title="Échanger son poste du jour avec une personne d'une autre équipe"
+                                                            @onclick="() => OpenPermuteAsync(l)">Permuter…</button>
                                                 }
                                             }
                                             else
@@ -225,14 +246,24 @@
                                         {
                                             var away = AwayOf(l).FirstOrDefault();
                                             <td colspan="2" class="pt-away">
-                                                @if (away.Sheet != null)
+                                                @if (SwapOf(l) is { } swap)
+                                                {
+                                                    var (toShift, toTeam) = swap.PosteOf(l.EmployeeId);
+                                                    <b>@toTeam</b>
+                                                    <span>@Shifts.Label(toShift) du @swap.ProductionDate.ToString("dd/MM") (@Shifts.Hours(toShift))</span>
+                                                    <span>Permuté avec @l.PermutedWith, qui fait ce poste-ci à sa place.</span>
+                                                }
+                                                else if (away.Sheet != null)
                                                 {
                                                     <b>@away.Sheet.Team</b>
                                                     <span>@Shifts.Label(away.Sheet.ShiftId) du @away.Sheet.ProductionDate.ToString("dd/MM")</span>
                                                     <span>@away.Line.EntryAt?.ToString("HH:mm") – @away.Line.ExitAt?.ToString("HH:mm")</span>
                                                     <span>@PostHeld(away.Line)</span>
                                                 }
-                                                @if (l.Absence is { } was)
+                                                @if (l.PermutedWith != null)
+                                                {
+                                                }
+                                                else if (l.Absence is { } was)
                                                 {
                                                     <small class="pt-away-note">Transféré : pointé @was (@AbsenceCodes.Label(was)) ici, présent sur ce poste-là</small>
                                                 }
@@ -307,6 +338,12 @@
                                             </td>
                                         }
                                     </tr>
+                                    @if (_permFor == l.EmployeeId)
+                                    {
+                                        <tr class="pt-perm-row">
+                                            <td colspan="4">@PermutePanel(l)</td>
+                                        </tr>
+                                    }
                                 }
                             }
                         </tbody>
@@ -479,6 +516,15 @@
     // Temporary assignment being chosen: whose post, by whom, from when.
     private int? _assignFor;
 
+    // Permutation being chosen for this row: why it cannot be, else the
+    // people of the other teams (refused ones greyed). _swaps: those in force
+    // on this poste.
+    private int? _permFor;
+    private string? _permRefusal;
+    private string _permFilter = string.Empty;
+    private IReadOnlyList<AttendanceService.PermutationCandidate> _permCandidates = Array.Empty<AttendanceService.PermutationCandidate>();
+    private IReadOnlyList<AttendancePermutation> _swaps = Array.Empty<AttendancePermutation>();
+
     // 0 all, 1 to confirm (or with a problem), 2 absents, 3 exceptions.
     private int _show;
     private bool _allMissing;
@@ -574,6 +620,8 @@
         _reason = "";
         _assignFor = null;
         _editTimes = null;
+        _permFor = null;
+        _swaps = Array.Empty<AttendancePermutation>();
         await Run(async () =>
         {
             _missing = await Attendance.MissingAsync(Actor, Attendance.ReminderFrom(Actor));
@@ -588,9 +636,109 @@
             _away = await Attendance.AwayAsync(Actor, _sheet.Team, _sheet.ProductionDate.AddDays(-1), _sheet.ProductionDate.AddDays(1));
             _history = await Attendance.HistoryAsync(Actor, _sheet);
             _candidates = await Attendance.RenfortCandidatesAsync(Actor, _sheet);
+            _swaps = await Attendance.PermutationsAsync(Actor, _sheet);
             Refusals();
         });
     }
+
+    // ---------- permutation ----------
+
+    private AttendancePermutation? SwapOf(AttendanceLine l)
+        => l.PermutationId is { } id ? _swaps.FirstOrDefault(p => p.Id == id) : null;
+
+    private async Task OpenPermuteAsync(AttendanceLine l)
+    {
+        if (_permFor == l.EmployeeId)
+        {
+            _permFor = null;
+            return;
+        }
+        _permFor = l.EmployeeId;
+        _permFilter = string.Empty;
+        _permRefusal = null;
+        _permCandidates = Array.Empty<AttendanceService.PermutationCandidate>();
+        if (_dirty)
+        {
+            _permRefusal = "Enregistrez d'abord la feuille : la permutation est enregistrée tout de suite et recharge la feuille.";
+            return;
+        }
+        await Run(async () => (_permRefusal, _permCandidates) = await Attendance.PermutationCandidatesAsync(Actor, _sheet!, l.EmployeeId));
+    }
+
+    private async Task PermuteAsync(AttendanceLine l, AttendanceService.PermutationCandidate c)
+    {
+        AttendancePermutation? done = null;
+        if (!await Run(async () => done = await Attendance.PermuteAsync(Actor, _sheet!, l.EmployeeId, c.Employee.Id)))
+            return;
+        var message = $"Permutation enregistrée : {done!.Describe()}. {c.Employee.FullName} est ajouté en renfort, à confirmer.";
+        await LoadAsync();
+        Info = message;
+    }
+
+    private async Task CancelSwapAsync(AttendancePermutation p)
+    {
+        if (_dirty)
+        {
+            Error = "Enregistrez d'abord la feuille : l'annulation de la permutation recharge la feuille.";
+            return;
+        }
+        if (!await Run(() => Attendance.CancelPermutationAsync(Actor, p.Id)))
+            return;
+        await LoadAsync();
+        Info = $"Permutation annulée : {p.NameA} et {p.NameB} reviennent sur leur poste, à confirmer.";
+    }
+
+    private RenderFragment PermutePanel(AttendanceLine l) => __builder =>
+    {
+        <div class="pt-pick-panel pt-perm">
+            <div class="pt-perm-head">
+                <b>Permuter @l.FullName avec…</b>
+                <small>
+                    une personne d'une autre équipe qui travaille un autre poste le @_sheet!.ProductionDate.ToString("dd/MM") :
+                    chacun fait le poste de l'autre. Enregistrée tout de suite, sur les deux feuilles.
+                </small>
+                <button type="button" class="link" @onclick="() => _permFor = null">Fermer</button>
+            </div>
+            @if (_permRefusal != null)
+            {
+                <p class="warn-t">@_permRefusal</p>
+            }
+            else
+            {
+                <input class="input pt-pick-find" placeholder="Rechercher un nom…" aria-label="Rechercher un nom"
+                       @bind="_permFilter" @bind:event="oninput" />
+                <div class="pt-pick-cols">
+                    @foreach (var team in _permCandidates.GroupBy(c => c.Posting.Team).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        var people = team.Where(c => _permFilter.Length == 0 || c.Employee.FullName.Contains(_permFilter, StringComparison.CurrentCultureIgnoreCase))
+                                         .OrderBy(c => c.Refusal != null).ThenBy(c => (int)c.Posting.Function)
+                                         .ThenBy(c => c.Employee.FullName, StringComparer.CurrentCultureIgnoreCase).ToList();
+                        <section class="pt-pick-col">
+                            <h4>@team.Key <small>@Shifts.Label(team.First().ShiftId) · @Shifts.Hours(team.First().ShiftId)</small></h4>
+                            @foreach (var c in people)
+                            {
+                                var candidate = c;
+                                <button type="button" class="pt-pick-item" disabled="@(c.Refusal != null)"
+                                        title="@($"{team.Key} · {StaffFunctions.Label(c.Posting.Function)}{(c.Refusal != null ? " — " + c.Refusal : "")}")"
+                                        @onclick="() => PermuteAsync(l, candidate)">
+                                    <b>@c.Employee.FullName</b>
+                                    <small>@StaffFunctions.Label(c.Posting.Function)@(c.Refusal != null ? " — " + c.Refusal : "")</small>
+                                </button>
+                            }
+                            @if (people.Count == 0)
+                            {
+                                <p class="pt-pick-none">Personne</p>
+                            }
+                        </section>
+                    }
+                    @if (_permCandidates.Count == 0)
+                    {
+                        <p class="pt-pick-none">Aucune autre équipe ne travaille un autre poste ce jour-là.</p>
+                    }
+                </div>
+            }
+        </div>
+    };
 
     // ---------- row actions ----------
 

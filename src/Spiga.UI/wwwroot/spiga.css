@@ -1036,6 +1036,11 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 .pt-pick-item.on small { color: var(--on-accent); }
 .pt-pick-item:disabled { opacity: .55; cursor: not-allowed; }
 .pt-pick-none { color: var(--fg3); font-size: 12px; margin: 4px 8px; }
+/* The permutation picker: the same columns, shown in a row under the person (not a dropdown). */
+.pt-pick-panel.pt-perm { position: static; width: auto; box-shadow: none; margin: 4px 0; }
+.pt-perm-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.pt-perm-head small { color: var(--fg2); flex: 1 1 320px; }
+.pt-perm-row > td { background: var(--soft); }
 .pt-save { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .pt-todo { display: flex; flex-direction: column; gap: 2px; color: var(--warn); font-size: 13px; }
 .pt-todo small { color: var(--fg2); }

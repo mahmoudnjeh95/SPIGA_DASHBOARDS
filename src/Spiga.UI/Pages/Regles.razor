@@ -1,0 +1,186 @@
+@page "/admin/regles"
+@inherits SpigaPage
+@inject RulesService Rules
+
+@* The rules of « À traiter » (Vue d'ensemble): which machine and personnel
+   alerts show and from which threshold, and the rule of the permutation of
+   the pointage. Kept in the settings, every change in the audit log. *@
+<RequireAccess Module="@Modules.VueEnsemble">
+    @if (!Session.Can(Perm.Regles))
+    {
+        <div class="card" style="max-width:640px">
+            <h2>Accès refusé</h2>
+            <p>Vos rôles (@Actor.RoleNames) ne donnent pas le droit « @PermissionCatalog.Label(Perm.Regles) ».</p>
+        </div>
+    }
+    else if (_rules != null && _perm != null)
+    {
+        var m = _rules.Machines;
+        var p = _rules.Personnel;
+        <div class="head">
+            <div>
+                <span class="pre">Administration</span><h1>Règles « À traiter »</h1>
+                <p>
+                    Ce que la Vue d'ensemble signale dans ses deux cartes <b>Machines</b> et <b>Personnel</b>, et à partir de quel seuil.
+                    Une règle décochée n'affiche plus rien. Les journées de production vont de 06:00 à 06:00 (le poste de nuit appartient au jour où il commence).
+                </p>
+            </div>
+        </div>
+
+        <Flash Error="@Error" Info="@Info" />
+
+        <section class="card">
+            <div class="card-head"><h2>Machines <small>état en direct et indicateurs de la période</small></h2></div>
+            <table class="t">
+                <thead><tr><th style="width:220px">Alerte</th><th>Seuil</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.Offline" /> Machine déconnectée</label></td>
+                        <td class="n">après <input type="number" min="0" max="@AttentionRules.MaxMinutes" style="width:80px" @bind="m.OfflineMinutes" /> min sans donnée</td>
+                    </tr>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.Stops" /> Machine à l'arrêt</label></td>
+                        <td class="n">arrêt de plus de <input type="number" min="0" max="@AttentionRules.MaxMinutes" style="width:80px" @bind="m.StopMinutes" /> min (un arrêt dont le début est inconnu est toujours affiché)</td>
+                    </tr>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.LowTrs" /> TRS trop bas</label></td>
+                        <td class="n">
+                            plus de <input type="number" min="0" max="100" step="0.5" style="width:80px" placeholder="—" @bind="m.TrsPointsBelowTarget" /> points sous la cible de la machine
+                            <small>vide = la zone rouge du tableau de bord (tolérance de la machine dans les Paramètres)</small>
+                            dès <input type="number" min="0" step="100" style="width:100px" @bind="m.TrsMinBags" /> sacs produits sur la période,
+                            au plus <input type="number" min="1" max="@AttentionRules.MaxListed" style="width:70px" @bind="m.TrsMaxListed" /> machines listées
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.WastePending" /> Déchets à valider</label></td>
+                        <td class="n">saisies non validées de la période, dans le périmètre du compte</td>
+                    </tr>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.WasteReturned" /> Saisies renvoyées</label></td>
+                        <td class="n">les saisies du compte renvoyées par un validateur</td>
+                    </tr>
+                    <tr>
+                        <td><label class="check"><input type="checkbox" @bind="m.ProductWasteMissing" /> Déchet produit non saisi</label></td>
+                        <td class="n">secteur sans saisie sur une période terminée</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <div class="card-head"><h2>Personnel <small>d'après les feuilles de pointage validées, dans les équipes du compte</small></h2></div>
+            <table class="t">
+                <thead><tr><th style="width:220px">Alerte</th><th>Niveau</th><th>Tolérance</th><th>Déclenchement</th></tr></thead>
+                <tbody>
+                    @RuleRow("Retards répétés", p.Lateness, true)
+                    @RuleRow("Absences répétées", p.Absence, false)
+                    @RuleRow("Départs avant la fin du poste", p.EarlyLeave, true)
+                    <tr>
+                        <td class="n">Codes d'absence comptés</td>
+                        <td colspan="3" class="n">
+                            @foreach (var c in AbsenceCodes.All)
+                            {
+                                <label class="check" style="margin-right:14px">
+                                    <input type="checkbox" checked="@p.AbsenceCodes.Contains(c)" @onchange="e => ToggleCode(c, e)" />
+                                    @c (@AbsenceCodes.Label(c))
+                                </label>
+                            }
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="n" style="margin:8px 0 0">
+                « Sur les N derniers postes » regarde les N derniers postes où la personne était attendue (présente ou absente) :
+                3 fois sur les 3 derniers postes = 3 d'affilée. « Sur N jours » regarde les N derniers jours de production.
+                Un retard compte à partir de l'heure de début du poste, au-delà de la tolérance.
+            </p>
+        </section>
+
+        <section class="card">
+            <div class="card-head"><h2>Permutation <small>pointage : deux personnes de deux équipes échangent leur poste pour une journée</small></h2></div>
+            <label class="check"><input type="checkbox" @bind="_perm.SameFunction" /> Seulement entre personnes de la même fonction (un conducteur avec un conducteur)</label>
+        </section>
+
+        <div class="savebar">
+            <span class="sp"></span>
+            <button type="button" class="bar" @onclick="ResetAsync" title="Revenir aux règles enregistrées">Annuler</button>
+            <button type="button" class="bar" @onclick="Defaults" title="Les valeurs d'origine (à enregistrer ensuite)">Valeurs par défaut</button>
+            <button type="button" class="bar acc" @onclick="SaveAsync">Enregistrer</button>
+        </div>
+    }
+</RequireAccess>
+
+@code {
+    private AttentionRules? _rules;
+    private PermutationRule? _perm;
+
+    protected override async Task OnInitializedAsync() => await ResetAsync();
+
+    private async Task ResetAsync()
+    {
+        if (!Session.Can(Perm.Regles))
+            return;
+        await Run(async () =>
+        {
+            _rules = await Rules.AttentionAsync();
+            _perm = await Rules.PermutationAsync();
+        });
+    }
+
+    private void Defaults()
+    {
+        _rules = new AttentionRules();
+        _perm = new PermutationRule();
+        Info = "Valeurs par défaut affichées : enregistrez pour les appliquer.";
+    }
+
+    private void ToggleCode(AbsenceCode code, ChangeEventArgs e)
+    {
+        var list = _rules!.Personnel.AbsenceCodes;
+        list.Remove(code);
+        if (e.Value is true)
+            list.Add(code);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_rules == null || _perm == null)
+            return;
+        if (await Run(async () =>
+            {
+                await Rules.SetAttentionAsync(Actor, _rules);
+                await Rules.SetPermutationAsync(Actor, _perm);
+            }, "Règles enregistrées : la Vue d'ensemble et le pointage les appliquent dès maintenant."))
+            await ResetAsync();
+    }
+
+    private RenderFragment RuleRow(string label, RepeatRule r, bool tolerance) =>
+        @<tr>
+            <td><label class="check"><input type="checkbox" @bind="r.Enabled" /> @label</label></td>
+            <td>
+                <select @bind="r.Level" aria-label="Niveau">
+                    <option value="@AlertLevel.Avertissement">Avertissement</option>
+                    <option value="@AlertLevel.Critique">Critique</option>
+                </select>
+            </td>
+            <td class="n">
+                @if (tolerance)
+                {
+                    <span>au-delà de <input type="number" min="0" max="480" style="width:70px" @bind="r.ToleranceMinutes" /> min</span>
+                }
+                else
+                {
+                    <span>—</span>
+                }
+            </td>
+            <td class="n">
+                <input type="number" min="1" max="@AttentionRules.MaxCount" style="width:70px" @bind="r.Count" /> fois ou plus sur les
+                <input type="number" min="1" max="@(r.Unit == WindowUnit.Postes ? AttentionRules.MaxWindowPostes : AttentionRules.MaxWindowDays)" style="width:70px" @bind="r.Window" />
+                <select @bind="r.Unit" aria-label="Unité">
+                    <option value="@WindowUnit.Postes">derniers postes</option>
+                    <option value="@WindowUnit.Jours">derniers jours</option>
+                </select>
+                <small>@r.Describe(label.Split(' ')[0].ToLowerInvariant())</small>
+            </td>
+        </tr>;
+}

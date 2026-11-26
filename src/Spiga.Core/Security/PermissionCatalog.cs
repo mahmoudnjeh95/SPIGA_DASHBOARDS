@@ -50,6 +50,9 @@ public static class Perm
     // bound to one team and sees the postes of that team only.
     public const string EquipesMultiples = "vue-ensemble:equipes";
 
+    // The rules of « À traiter » (machines, personnel) and of the permutation.
+    public const string Regles = "vue-ensemble:regles";
+
     public static string View(string module) => module + ":voir";
 }
 
@@ -94,6 +97,8 @@ public static class PermissionCatalog
         View(Modules.VueEnsemble); Export(Modules.VueEnsemble);
         Add(Modules.VueEnsemble, "equipes", "Couvrir plusieurs équipes",
             "Responsables. Sans ce droit, le compte est rattaché à une seule équipe et ne voit que ses postes");
+        Add(Modules.VueEnsemble, "regles", "Paramétrer « À traiter » et la permutation",
+            "Seuils des alertes machines (arrêt, déconnexion, TRS) et personnel (retards, absences, départs), règle de permutation du pointage");
 
         View(Modules.Conditionnement); Export(Modules.Conditionnement);
         Add(Modules.Conditionnement, "tableau", "Tableau de bord détaillé", "Diapositives, historique, synthèse secteur (application poste)");
