@@ -686,8 +686,8 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
     50% { transform: translate(30%, 40%) scale(1.25); }
 }
 @keyframes sp-card-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -9px; } }
-/* One sweep (about 1 s) every 3 s. */
-@keyframes sp-card-sheen { 0%, 60% { transform: translateX(-160%) skewX(-18deg); } 95%, 100% { transform: translateX(520%) skewX(-18deg); } }
+/* The sweep (about 1 s) at the start of each 3 s cycle; the first cycle waits 3 s. */
+@keyframes sp-card-sheen { 0% { transform: translateX(-160%) skewX(-18deg); } 35%, 100% { transform: translateX(520%) skewX(-18deg); } }
 @keyframes sp-digit-in { from { opacity: 0; transform: translateY(.35em); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes sp-go-halo {
     0% { box-shadow: 0 10px 26px rgba(30, 107, 58, .32), 0 0 0 0 rgba(30, 107, 58, .45); }
@@ -713,7 +713,7 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 .wl-sheen {
     position: absolute; top: -10%; bottom: -10%; left: 0; width: 22%; pointer-events: none;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .75) 50%, transparent);
-    animation: sp-card-sheen 3s cubic-bezier(.65, 0, .35, 1) infinite;
+    animation: sp-card-sheen 3s 3s cubic-bezier(.65, 0, .35, 1) infinite both;
 }
 .wl-digits { display: inline-block; animation: sp-digit-in .7s var(--ease) both; }
 
