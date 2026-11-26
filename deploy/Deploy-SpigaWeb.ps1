@@ -29,8 +29,9 @@ param(
     [Parameter(Mandatory)] [string] $SitePath,
     [Parameter(Mandatory)] [string] $AppPool,
     [Parameter(Mandatory)] [string] $HealthUrl,
-    # The site's HTTPS certificate is self-signed: the health check accepts exactly
-    # this certificate (LocalMachine\My) and nothing else, without trusting it machine-wide.
+    # The site is served over plain HTTP (internal network, no certificate to install
+    # on the users' PCs). Only for an https:// HealthUrl on a self-signed certificate:
+    # the health check then accepts exactly this certificate and nothing else.
     [string] $CertThumbprint = '',
     [int] $KeepReleases = 5,
     [int] $HealthTimeoutSeconds = 90
@@ -146,7 +147,7 @@ try {
     Restart-Pool
 
     Write-Step "Health check $HealthUrl"
-    if (-not (Test-Health)) { throw "Health check failed after $HealthTimeoutSeconds s (if the HTTPS certificate was renewed, update SPIGA_CERT_THUMBPRINT)" }
+    if (-not (Test-Health)) { throw "Health check failed after $HealthTimeoutSeconds s" }
     Write-Step 'Deployed'
 }
 catch {
