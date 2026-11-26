@@ -220,15 +220,6 @@ else if (m.Charts is { } c)
         </section>
     };
 
-    private RenderFragment Chart(string title, string key, DeckChart chart) => __builder =>
-    {
-        if (!chart.HasData)
-        {
-            <h2>@title</h2>
-            <p class="empty">Pas de données.</p>
-            return;
-        }
-        <SpigaChart Title="@title" Key="@("deck-" + key)" Labels="chart.Labels" Series="chart.Series" Format="chart.Format"
-                    YMin="chart.YMin" YMax="chart.YMax" Height="230" />
-    };
+    // DeckChartView passes Times too: the lot weight chart is on a time axis.
+    private static RenderFragment Chart(string title, string key, DeckChart chart) => DeckChartView.Render(title, key, chart);
 }
