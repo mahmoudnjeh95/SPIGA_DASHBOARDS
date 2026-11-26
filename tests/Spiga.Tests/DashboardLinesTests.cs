@@ -89,6 +89,20 @@ public class DashboardLinesTests
     }
 
     [Fact]
+    public void The_machine_states_show_the_lines_on_two_balanced_rows()
+    {
+        StatusGroup Group(string name, int machines)
+            => new(name, "", "#000", Enumerable.Range(0, machines).Select(i => new StatusTile($"{name}-{i}", "is-run", "", true, null, false)).ToList());
+        string Layout(params StatusGroup[] groups)
+            => string.Join(" | ", Spiga.UI.Components.Deck.StatusSlideView.Rows(groups).Select(r => string.Join(",", r.Select(g => g.Name))));
+
+        // The plant: CC1, CC2, PC1 (with RIC B PC) then PC2, PL1+2.
+        Assert.Equal("CC1,CC2,PC1 | PC2,PL1+2", Layout(Group("CC1", 2), Group("CC2", 2), Group("PC1", 2), Group("PC2", 3), Group("PL1+2", 4)));
+        Assert.Equal("A | B", Layout(Group("A", 9), Group("B", 1)));
+        Assert.Equal("A", Layout(Group("A", 3)));
+    }
+
+    [Fact]
     public void A_machine_counts_in_its_lines_sector_and_slides_say_their_line()
     {
         var ric1 = Plant.Single(m => m.MachineId == "RIC1");

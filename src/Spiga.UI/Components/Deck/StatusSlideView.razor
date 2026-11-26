@@ -22,7 +22,10 @@
 </div>
 
 <div class="dk-status">
-    @foreach (var g in Slide.Groups)
+    @foreach (var row in Rows(Slide.Groups))
+    {
+    <div class="dk-srow">
+    @foreach (var g in row)
     {
         <section class="card dk-sgroup" style="--lc:@g.Color;--n:@g.Tiles.Count">
             <div class="dk-sgroup-head">
@@ -64,8 +67,30 @@
             </div>
         </section>
     }
+    </div>
+    }
 </div>
 
 @code {
     [Parameter, EditorRequired] public StatusSlide Slide { get; set; } = default!;
+
+    // Two rows of lines, in line order, the first holding about half of
+    // the machines (CC1, CC2, PC1 | PC2, PL1+2): every tile stays large
+    // enough to read on the TV, whatever the screen's width.
+    public static List<List<StatusGroup>> Rows(IReadOnlyList<StatusGroup> groups)
+    {
+        if (groups.Count <= 1)
+            return new List<List<StatusGroup>> { groups.ToList() };
+        var half = groups.Sum(g => g.Tiles.Count) / 2.0;
+        var first = new List<StatusGroup>();
+        var count = 0;
+        foreach (var g in groups.Take(groups.Count - 1))
+        {
+            if (first.Count > 0 && count + g.Tiles.Count > half)
+                break;
+            first.Add(g);
+            count += g.Tiles.Count;
+        }
+        return new List<List<StatusGroup>> { first, groups.Skip(first.Count).ToList() };
+    }
 }
