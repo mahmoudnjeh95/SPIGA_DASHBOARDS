@@ -802,13 +802,14 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
 
 /* Windows "animation effects" off: no movement, no loops, short fades only. */
 @media (prefers-reduced-motion: reduce) {
-    .spiga-root *, .spiga-root *::before, .spiga-root *::after {
+    /* Except the welcome screen: it is the plant's attract screen and keeps
+       its motion even where Windows animations are off (as on the servers
+       and remote sessions, which report reduced motion by default). */
+    .spiga-root :not(.welcome, .welcome *), .spiga-root :not(.welcome, .welcome *)::before, .spiga-root :not(.welcome, .welcome *)::after {
         animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important;
         transition-duration: .15s !important; scroll-behavior: auto !important;
     }
-    .spiga-root::before, .gate::before, .gate::after, .dot::after, .brand img, .brand b,
-    .wl-go svg, .wl-colon, .wl-dot::after, .wl-glow, .wl-sheen, .wl-digits { animation: none !important; }
-    .wl-grains { display: none; }
+    .spiga-root::before, .gate::before, .gate::after, .dot::after, .brand img, .brand b { animation: none !important; }
     .kpi:hover, .bar:hover:not(:disabled) { translate: none; }
 }
 
