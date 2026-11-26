@@ -1648,6 +1648,26 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 .dk-sdot.is-run { background: var(--ok); }
 .dk-sdot.is-stop { background: var(--bad); }
 .dk-sdot.is-planned { background: #FAB219; }
+/* État des machines: every machine, grouped by line, on one screen. A
+   group is as wide as its machines (--n), groups wrap into rows. */
+.dk-status-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.dk-status-head b { font-size: 20px; margin-right: 6px; }
+.dk-status-head .chip { font-size: 14px; padding: 3px 12px; }
+.dk-status { display: flex; flex-wrap: wrap; gap: 14px; }
+.dk-sgroup { flex: var(--n, 1) 1 calc(var(--n, 1) * 150px); min-width: 0; display: flex; flex-direction: column; gap: 10px;
+    padding: 12px 14px 14px; border-top: 6px solid var(--lc, var(--accent)); }
+.dk-sgroup-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.dk-sgroup-head h3 { margin: 0; font-size: 20px; white-space: nowrap; color: var(--lc, var(--fg)); }
+.dk-sgroup-head span { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--fg3); }
+.dk-stiles { display: grid; grid-template-columns: repeat(var(--n, 1), minmax(0, 200px)); justify-content: space-evenly; gap: 10px; }
+.dk-stile { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; min-width: 0; }
+.dk-stile .run-state { width: 100%; max-width: 170px; }
+.dk-stile b { font-size: 16px; }
+.dk-stile small { color: var(--fg2); font-weight: 600; font-size: 12px; }
+.dk-stile small.bad { color: var(--bad); }
+.dk-stile.planned { opacity: .55; }
+.dk-stile.planned .run-state { filter: grayscale(1); }
+@media (max-width: 700px) { .dk-stiles { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
 /* page head buttons (dashboard: Historique, Écran TV) */
 .head-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* Écran TV: no menu, the slides fill the screen */

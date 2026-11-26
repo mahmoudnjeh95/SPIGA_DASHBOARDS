@@ -22,6 +22,14 @@ public sealed record LineSynthesisSlideDescriptor(string Line, IReadOnlyList<str
     public override string Key => $"synthese-ligne:{Line}";
 }
 
+// État des machines: the live state of every machine shown, grouped by
+// line, on one screen. Always the deck's first slide.
+public sealed record StatusSlideDescriptor(IReadOnlyList<string> MachineIds) : SlideDescriptor
+{
+    public const string SlideKey = "etat";
+    public override string Key => SlideKey;
+}
+
 // Every line side by side.
 public sealed record PlantSlideDescriptor(IReadOnlyList<string> Lines) : SlideDescriptor
 {
@@ -67,6 +75,8 @@ public static class WebDeck
         }).ToList();
 
         var slides = new List<SlideDescriptor>();
+        if (shown.Count > 0)
+            slides.Add(new StatusSlideDescriptor(shown.Select(m => m.MachineId).ToList()));
         foreach (var (line, ids, planned) in parts)
         {
             if (ids.Count == 0 && planned.Count == 0)
@@ -89,9 +99,25 @@ public static class WebDeck
         return slides;
     }
 
+    // The saved order applied (SlideDeck.Arrange), the État des machines
+    // slide put back in first place whatever the order saved.
+    public static List<SlideDescriptor> Arrange(List<SlideDescriptor> defaults, IReadOnlyList<SlideSetting> saved)
+    {
+        var slides = SlideDeck.Arrange(defaults, saved);
+        var status = slides.FindIndex(s => s is StatusSlideDescriptor);
+        if (status > 0)
+        {
+            var slide = slides[status];
+            slides.RemoveAt(status);
+            slides.Insert(0, slide);
+        }
+        return slides;
+    }
+
     // Name of a slide (deck bar, dots, Paramètres).
     public static string Label(SlideDescriptor slide, Func<string, string> machineName, IReadOnlyList<DashboardLine> lines) => slide switch
     {
+        StatusSlideDescriptor => "État des machines - toutes les lignes",
         LineSlideDescriptor l => $"{DashboardLine.LabelOf(l.Line)} - Vue d'ensemble",
         LineSynthesisSlideDescriptor s => $"Synthèse - {DashboardLine.LabelOf(s.Line)}",
         PlantSlideDescriptor => "Vue usine - toutes les lignes",

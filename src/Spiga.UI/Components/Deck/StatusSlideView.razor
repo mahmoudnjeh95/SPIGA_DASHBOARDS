@@ -1,0 +1,71 @@
+@* État des machines (the deck's first slide): the run-state photo of every
+   machine, live whatever the period, grouped by production line in its
+   colour, all on one screen. A stopped machine shows since when, and its
+   cause once it has one; a machine not connected yet shows greyed. *@
+@using SpigaDashboards.App.Models
+
+<div class="dk-status-head">
+    <b>État des machines</b>
+    <span class="chip ok">@Slide.Running en marche</span>
+    @if (Slide.Stopped > 0)
+    {
+        <span class="chip bad">@Slide.Stopped à l'arrêt</span>
+    }
+    @if (Slide.Scheduled > 0)
+    {
+        <span class="chip warn">@Slide.Scheduled arrêt planifié / maintenance</span>
+    }
+    @if (Slide.Offline > 0)
+    {
+        <span class="chip">@Slide.Offline sans données</span>
+    }
+</div>
+
+<div class="dk-status">
+    @foreach (var g in Slide.Groups)
+    {
+        <section class="card dk-sgroup" style="--lc:@g.Color;--n:@g.Tiles.Count">
+            <div class="dk-sgroup-head">
+                <h3>@g.Name</h3>
+                @if (g.Sector.Length > 0)
+                {
+                    <span>@g.Sector</span>
+                }
+            </div>
+            <div class="dk-stiles">
+                @foreach (var t in g.Tiles)
+                {
+                    <div class="dk-stile @(t.Planned ? "planned" : "")">
+                        <RunStateArt State="@t.State" Label="@t.StateText" />
+                        <b>@t.Name</b>
+                        @if (t.Planned)
+                        {
+                            <small>Pas encore raccordée</small>
+                        }
+                        else if (t.Stop is { } stop)
+                        {
+                            @if (stop.IsUnqualified)
+                            {
+                                <small class="bad">Depuis @stop.DurationText · cause à définir</small>
+                            }
+                            else
+                            {
+                                <span class="dk-cause" style="background:@(stop.Kind == OngoingStopKind.Maintenance ? "#FAB219" : stop.TickerColor);color:@(stop.Kind == OngoingStopKind.Maintenance ? "#1A1406" : "#FFFFFF")">
+                                    @stop.ShortCause · @stop.DurationText
+                                </span>
+                            }
+                        }
+                        else
+                        {
+                            <small>@t.StateText</small>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public StatusSlide Slide { get; set; } = default!;
+}

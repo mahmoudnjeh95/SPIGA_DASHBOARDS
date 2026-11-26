@@ -31,6 +31,7 @@ public class DashboardLinesTests
 
         Assert.Equal(new[]
         {
+            "etat",
             "ligne:CC1", "machine:CC01", "machine:CC02",
             "ligne:CC2", "machine:CC03", "machine:CC04",
             "ligne:PC1", "machine:RIC1",
@@ -68,7 +69,23 @@ public class DashboardLinesTests
         var lines = new List<DashboardLine> { new() { Name = "CC1", Sector = "Couscous", MachineIds = { "CC03", "CC04" } } };
         var keys = WebDeck.Default(Plant, Only("CC03", "CC04", "PL01", "CC01"), lines).Select(s => s.Key).ToList();
 
-        Assert.Equal(new[] { "ligne:CC1", "machine:CC03", "machine:CC04", "machine:CC01", "machine:PL01", "synthese-ligne:CC1" }, keys);
+        Assert.Equal(new[] { "etat", "ligne:CC1", "machine:CC03", "machine:CC04", "machine:CC01", "machine:PL01", "synthese-ligne:CC1" }, keys);
+    }
+
+    [Fact]
+    public void The_machine_states_stay_the_first_slide_whatever_the_order_saved()
+    {
+        var deck = WebDeck.Default(Plant, Plant, Lines);
+        Assert.Equal(Plant.Select(m => m.MachineId), Assert.IsType<StatusSlideDescriptor>(deck[0]).MachineIds);
+
+        // Saved with it moved down, and with an order from before it existed.
+        var moved = new[] { "ligne:PC2", "etat", "ligne:CC1" }.Select(k => new SlideSetting { Key = k }).ToList();
+        Assert.Equal(new[] { "etat", "ligne:PC2" }, WebDeck.Arrange(deck, moved).Take(2).Select(s => s.Key));
+        var older = new[] { "ligne:PC2", "ligne:CC1" }.Select(k => new SlideSetting { Key = k }).ToList();
+        Assert.Equal("etat", WebDeck.Arrange(deck, older)[0].Key);
+
+        // Filtered to one line: only its machines.
+        Assert.Equal(new[] { "CC01", "CC02" }, Assert.IsType<StatusSlideDescriptor>(WebDeck.Default(Plant, Only("CC01", "CC02"), Lines)[0]).MachineIds);
     }
 
     [Fact]

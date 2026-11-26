@@ -197,6 +197,9 @@ else
                 case SynthesisSlide synthesis:
                     <SynthesisSlideView Slide="synthesis" OnPeriod="SetSynthesisPeriodAsync" />
                     break;
+                case StatusSlide status:
+                    <StatusSlideView Slide="status" />
+                    break;
                 case LineSlide line:
                     <LineSlideView Slide="line" />
                     break;
@@ -493,6 +496,7 @@ else
             {
                 MachineSlideDescriptor ms when machines.FirstOrDefault(m => m.MachineId == ms.MachineId) is { } machine
                     => await Deck.MachineAsync(actor, machine, period, from, to, filter, cancel) with { Line = Deck.TagOf(machine.MachineId) },
+                StatusSlideDescriptor sd => await Deck.StatusAsync(actor, machines, sd.MachineIds, cancel),
                 LineSlideDescriptor ld when Deck.Line(ld.Line) is { } line
                     => await Deck.LineAsync(actor, line, Of(ld.MachineIds), ld.Planned, period, from, to, filter, cancel),
                 LineSynthesisSlideDescriptor sd when Deck.Line(sd.Line) is { } line
