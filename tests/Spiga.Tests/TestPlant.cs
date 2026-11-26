@@ -7,6 +7,29 @@ using Spiga.Data;
 
 namespace Spiga.Tests;
 
+// Closes the pooled connections to one test database file, under every
+// connection string the tests and the stores open it with, so the file can
+// be read whole or deleted. SqliteConnection.ClearAllPools() would also close
+// the connections of the tests running in parallel in other classes, which
+// then fail with "Cannot access a disposed object" (SQLitePCL.sqlite3).
+public static class SqliteFiles
+{
+    public static void Release(string path)
+    {
+        var strings = new[]
+        {
+            $"Data Source={path}",
+            AppDbOptions.ForSqliteFile(path).ConnectionString,
+            new SpigaDashboards.App.Data.SqliteConnectionFactory(path).CreateConnection().ConnectionString,
+        };
+        foreach (var connectionString in strings.Distinct())
+        {
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionString);
+            Microsoft.Data.Sqlite.SqliteConnection.ClearPool(connection);
+        }
+    }
+}
+
 public sealed class FixedClock(DateTime now) : TimeProvider
 {
     public DateTime Now { get; set; } = now;
@@ -124,7 +147,7 @@ public sealed class TestApp : IDisposable
 
     public void Dispose()
     {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        SqliteFiles.Release(_path);
         try { File.Delete(_path); } catch (IOException) { }
     }
 }

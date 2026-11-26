@@ -104,7 +104,7 @@ window.spigaChart = (function () {
         var hasRef = spec.series.some(function (s) { return s.kind === "ref"; });
         var zoomable = !!spec.times || (spec.cats && spec.cats.length > 12);
         return {
-            animation: !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+            animation: true,
             useUTC: true, // the times are the plant's wall-clock times, sent as UTC
             textStyle: { fontFamily: font },
             grid: { left: 8, right: hasRef ? 64 : 14, top: 26, bottom: spec.big ? 44 : zoomable ? 30 : 6, containLabel: true },
@@ -147,7 +147,7 @@ window.spigaChart = (function () {
         var dark = !!el.closest("[data-theme='dark']");
         var blues = dark ? ["#104281", "#1C5CAB", "#2A78D6", "#5598E7", "#9EC5F4"] : ["#CDE2FB", "#9EC5F4", "#5598E7", "#2A78D6", "#1C5CAB"];
         return {
-            animation: !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches),
+            animation: true,
             textStyle: { fontFamily: v("--font", "Segoe UI, sans-serif") },
             grid: { left: 8, right: 8, top: 34, bottom: spec.bands && spec.bands.length ? 30 : 6, containLabel: true },
             tooltip: {

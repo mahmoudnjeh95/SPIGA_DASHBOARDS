@@ -13,8 +13,8 @@ namespace SpigaDashboards.App.Views;
 // set, veils what is behind it.
 // Entrance: the card pops up (small overshoot, ease-out), exit: it fades and
 // sinks a little (ease-in, shorter), so the data does not appear behind a
-// hard cut. With Windows animation effects off, it shows still and leaves at
-// once.
+// hard cut. It animates even with Windows animation effects off (the servers
+// and remote sessions have them off by default).
 public partial class PastaLoader : UserControl
 {
     private static readonly TimeSpan Delay = TimeSpan.FromMilliseconds(400);
@@ -23,8 +23,6 @@ public partial class PastaLoader : UserControl
     private static readonly Duration ExitTime = new(TimeSpan.FromMilliseconds(200));
     private static readonly IEasingFunction EnterEase = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 };
     private static readonly IEasingFunction ExitEase = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-    private static bool Motion => SystemParameters.ClientAreaAnimation;
 
     private bool _shown;
 
@@ -89,11 +87,6 @@ public partial class PastaLoader : UserControl
         _shown = true;
         StopAll();
         Visibility = Visibility.Visible;
-        if (!Motion)
-        {
-            Opacity = 1;
-            return;
-        }
         BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
         CardScale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.86, 1, EnterTime) { EasingFunction = EnterEase });
         CardScale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.86, 1, EnterTime) { EasingFunction = EnterEase });
@@ -117,7 +110,7 @@ public partial class PastaLoader : UserControl
         if (!_shown)
             return;
         _shown = false;
-        if (!animate || !Motion || !IsLoaded)
+        if (!animate || !IsLoaded)
         {
             StopAll();
             Visibility = Visibility.Collapsed;
