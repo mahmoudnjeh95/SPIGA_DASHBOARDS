@@ -1,0 +1,125 @@
+# Spiga.Web (Blazor Server) CI/CD
+#
+#   Pull request  -> build + test (GitHub-hosted Windows runner). Make this the
+#                    required check on the deploy branch so nothing untested merges.
+#   Merge (push)  -> build + test, publish ONE artifact, then deploy that exact
+#   to deploy        artifact to IIS on the plant server through the self-hosted
+#   branch           runner (the server is never reached from the internet).
+#   Manual run    -> "Run workflow" re-deploys any branch/commit (e.g. a rollback).
+#
+# To deploy from another branch, change DEPLOY BRANCH in the two places marked below.
+
+name: Spiga.Web CI/CD
+
+on:
+  pull_request:
+    branches: [main]            # DEPLOY BRANCH (1/2): PRs into it are checked
+  push:
+    branches: [main]            # DEPLOY BRANCH (2/2): a merge into it deploys
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy this run's build to IIS
+        type: boolean
+        default: true
+
+# One deploy at a time; a newer merge waits instead of cancelling a deploy mid-copy.
+concurrency:
+  group: spiga-web-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      # Only the web host and the tests; the WPF app and WiX installers are not built here.
+      - name: Restore
+        run: |
+          dotnet restore src/Spiga.Web/Spiga.Web.csproj
+          dotnet restore tests/Spiga.Tests/Spiga.Tests.csproj
+
+      - name: Test
+        run: dotnet test tests/Spiga.Tests/Spiga.Tests.csproj -c Release --no-restore --logger "trx;LogFileName=results.trx" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 14
+
+      - name: Publish Spiga.Web
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          dotnet publish src/Spiga.Web/Spiga.Web.csproj -c Release --no-restore -o publish `
+            -p:SourceRevisionId=${{ github.sha }}
+          # Read by the deploy log and handy on the server: which commit is live.
+          "commit=${{ github.sha }}`nref=${{ github.ref_name }}`nrun=${{ github.run_number }}`nbuilt=$((Get-Date).ToUniversalTime().ToString('u'))" |
+            Set-Content publish/version.txt
+
+      - name: Upload web package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiga-web
+          path: publish
+          retention-days: 30
+
+  deploy:
+    name: Deploy to IIS
+    needs: build
+    if: >-
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    runs-on: [self-hosted, windows, spiga-iis]
+    timeout-minutes: 15
+    # Settings -> Environments -> production: add required reviewers here if a
+    # merge should wait for approval.
+    environment:
+      name: production
+      url: ${{ vars.SPIGA_HEALTH_URL }}
+    steps:
+      # Only the deploy script; the build itself is the artifact from the job above.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: deploy
+          sparse-checkout-cone-mode: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: spiga-web
+          path: ${{ runner.temp }}\spiga-web
+
+      - name: Deploy
+        shell: powershell
+        env:
+          # "--update-database" runs with this admin connection before the site comes
+          # back: the site's own login (IIS APPPOOL\SpigaWeb) is only datareader/datawriter
+          # and cannot apply table changes. Windows auth, so the runner's service account
+          # must be a local Administrator (sysadmin on .\SQLEXPRESS) or db_owner on spiga_suivi.
+          SPIGA_ADMIN_SQL: ${{ vars.SPIGA_ADMIN_SQL || 'Server=.\SQLEXPRESS;Database=spiga_suivi;Integrated Security=true;TrustServerCertificate=true' }}
+        run: >-
+          ./deploy/Deploy-SpigaWeb.ps1
+          -PackagePath "${{ runner.temp }}\spiga-web"
+          -SitePath "${{ vars.SPIGA_SITE_PATH || 'C:\inetpub\SpigaWeb' }}"
+          -AppPool "${{ vars.SPIGA_APP_POOL || 'SpigaWeb' }}"
+          -HealthUrl "${{ vars.SPIGA_HEALTH_URL || 'http://localhost/' }}"
