@@ -1,4 +1,4 @@
-# Spiga.Web (Blazor Server) CI/CD
+# Spiga.Web (Blazor Server) CI/CD -- deploy branch: web-migration
 #
 #   Pull request  -> build + test (GitHub-hosted Windows runner). Make this the
 #                    required check on the deploy branch so nothing untested merges.
@@ -13,9 +13,9 @@ name: Spiga.Web CI/CD
 
 on:
   pull_request:
-    branches: [main]            # DEPLOY BRANCH (1/2): PRs into it are checked
+    branches: [web-migration]   # DEPLOY BRANCH (1/2): PRs into it are checked
   push:
-    branches: [main]            # DEPLOY BRANCH (2/2): a merge into it deploys
+    branches: [web-migration]   # DEPLOY BRANCH (2/2): a merge into it deploys
   workflow_dispatch:
     inputs:
       deploy:
