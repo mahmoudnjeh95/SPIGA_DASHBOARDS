@@ -225,7 +225,7 @@ public sealed class StationSettingsEditor(
         WebSlides.Clear();
         var names = _activeMachines.ToDictionary(m => m.MachineId, m => m.MachineName);
         var catalog = WebDeck.Default(_activeMachines, _activeMachines, settings.DashboardLines);
-        foreach (var slide in SlideDeck.Arrange(catalog, saved))
+        foreach (var slide in WebDeck.Arrange(catalog, saved))
         {
             var setting = saved.FirstOrDefault(s => s.Key == slide.Key);
             WebSlides.Add(new SlideRow

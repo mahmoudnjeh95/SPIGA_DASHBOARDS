@@ -132,12 +132,6 @@
         if (raf) return;
         raf = requestAnimationFrame(function () {
             raf = 0;
-            // Welcome screen: the 3D logo leans toward the pointer (--px / --py, -1..1).
-            var tilt = !reduced && document.querySelector(".spiga-root .welcome .wl-tilt");
-            if (tilt) {
-                tilt.style.setProperty("--px", (lastEvt.clientX / window.innerWidth * 2 - 1).toFixed(3));
-                tilt.style.setProperty("--py", (lastEvt.clientY / window.innerHeight * 2 - 1).toFixed(3));
-            }
             var card = lastEvt.target && lastEvt.target.closest && lastEvt.target.closest(".spiga-root .card");
             if (!card) return;
             var r = card.getBoundingClientRect();

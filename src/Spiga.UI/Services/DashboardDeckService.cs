@@ -50,7 +50,7 @@ public sealed partial class DashboardDeckService(
     {
         var shown = filter.MachineIds.Count == 0 ? machines : machines.Where(m => filter.MachineIds.Contains(m.MachineId)).ToList();
         var off = settings.WebSlides.Where(s => !s.Enabled).Select(s => s.Key).ToHashSet();
-        return SlideDeck.Arrange(WebDeck.Default(machines, shown, Lines), settings.WebSlides)
+        return WebDeck.Arrange(WebDeck.Default(machines, shown, Lines), settings.WebSlides)
             .Where(s => !off.Contains(s.Key))
             .ToList();
     }

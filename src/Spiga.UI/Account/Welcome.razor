@@ -1,84 +1,71 @@
-@* Welcome screen, before the sign-in form: the Spiga · Diari logo flies in in 3D, the
-   word "Bienvenue" builds up letter by letter, then the greeting, the time
-   and the three products. Any key, a click or a tap continues to the sign-in
-   form (the screen leaves first, then the form rises). On a shared plant PC
-   it is also the screen left after a sign-out. *@
+@* Welcome screen, before the sign-in form. Split in two: on the left a deep
+   green brand panel with the Spiga · Diari logo, on the right what is useful
+   at a glance from across the floor: the greeting, the poste in progress,
+   a large clock and the date. Any key, a click or a tap continues to the
+   sign-in form (the screen leaves first, then the form rises). On a shared
+   plant PC it is also the screen left after a sign-out. *@
 @implements IDisposable
 @inject TimeProvider Clock
 
 <div class="welcome @(_leaving ? "leaving" : "")" tabindex="0" @ref="_root"
      @onclick="ContinueAsync" @onkeydown="OnKeyAsync" aria-label="Accueil SPIGA Suivi Production">
+    <section class="wl-brand">
+        <i class="wl-glow" aria-hidden="true"></i>
+        <div class="wl-logo-card">
+            <img src="@Logo" alt="Spiga · Diari" />
+            <i class="wl-sheen" aria-hidden="true"></i>
+        </div>
+        <p class="wl-sub">Suivi de production</p>
+        <i class="wl-rule" aria-hidden="true"></i>
+    </section>
+
+    <section class="wl-info">
+        <div class="wl-info-in">
+            <p class="wl-greet">@Greeting</p>
+            <p class="wl-shift">
+                <i class="wl-dot" aria-hidden="true"></i>
+                Poste @ShiftLabel <span>· @Shifts.Hours(_shift)</span>
+            </p>
+            <p class="wl-clock num" aria-label="@_now.ToString("HH:mm", Fr)">
+                @* Keyed on the value: a new hour or minute rolls in from below. *@
+                <span class="wl-digits" @key="@($"h{_now.Hour}")">@_now.ToString("HH", Fr)</span><span class="wl-colon" aria-hidden="true">:</span><span class="wl-digits" @key="@($"m{_now.Minute}")">@_now.ToString("mm", Fr)</span>
+            </p>
+            <p class="wl-date">@Date</p>
+            <button type="button" class="bar wl-go">
+                Commencer
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+            </button>
+            <p class="wl-hint">Touchez l'écran ou appuyez sur une touche pour vous connecter</p>
+        </div>
+    </section>
+
+    @* Semolina: golden durum grains rising slowly across the whole screen. *@
     <div class="wl-grains" aria-hidden="true">
-        @for (var i = 0; i < 18; i++)
+        @for (var i = 0; i < 22; i++)
         {
             <i style="@Grain(i)"></i>
         }
-    </div>
-    <svg class="wl-strands" viewBox="0 0 1200 220" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <path pathLength="1" d="M-20,150 C140,110 260,190 420,150 S700,110 860,150 S1100,190 1220,140" />
-        <path pathLength="1" d="M-20,175 C160,140 300,215 460,172 S760,130 920,170 S1120,205 1220,165" />
-        <path pathLength="1" d="M-20,198 C120,170 280,230 470,196 S780,160 940,194 S1130,222 1220,190" />
-    </svg>
-
-    <div class="wl-center">
-        @* The logo in 3D: a slab (the face, a stack of darker copies behind it
-           for the thickness, and a back face) that flies in, sways, turns a
-           full circle now and then, and leans toward the pointer (spiga.js). *@
-        <div class="wl-stage">
-            <i class="wl-rays" aria-hidden="true"></i>
-            <div class="wl-logo3d">
-                <div class="wl-tilt">
-                    <div class="wl-slab">
-                        @for (var i = Depth; i >= 1; i--)
-                        {
-                            <img class="wl-edge" src="@Logo" alt="" aria-hidden="true" style="--k:@i" />
-                        }
-                        <img class="wl-back" src="@Logo" alt="" aria-hidden="true" />
-                        <img class="wl-face" src="@Logo" alt="Spiga · Diari" />
-                        <i class="wl-gloss" aria-hidden="true"></i>
-                    </div>
-                </div>
-            </div>
-            <i class="wl-floor" aria-hidden="true"></i>
-        </div>
-        <h1 class="wl-title" aria-label="Bienvenue">
-            @for (var i = 0; i < Word.Length; i++)
-            {
-                <span aria-hidden="true" style="--i:@i">@Word[i]</span>
-            }
-        </h1>
-        <p class="wl-sub">SPIGA <b>·</b> Suivi de production</p>
-        <p class="wl-greet">
-            <span>@Greeting</span>
-            <span class="wl-time num">@_now.ToString("HH:mm", Fr)</span>
-            <span>@Date</span>
-        </p>
-        <PastaTrio Class="wl-trio" />
-        <button type="button" class="bar acc wl-go">
-            Commencer
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-        </button>
-        <p class="wl-hint">Appuyez sur une touche ou touchez l'écran pour vous connecter</p>
     </div>
 </div>
 
 @code {
     [Parameter] public EventCallback OnContinue { get; set; }
 
-    private const string Word = "Bienvenue";
     private const string Logo = "_content/Spiga.UI/img/cds-logo.png";
-    // Layers of the logo's thickness (1 px apart, see .wl-edge).
-    private const int Depth = 8;
     private static readonly System.Globalization.CultureInfo Fr = new("fr-FR");
     // The screen leaves (ease-in) before the sign-in form comes up.
     private static readonly TimeSpan LeaveTime = TimeSpan.FromMilliseconds(420);
 
     private ElementReference _root;
     private DateTime _now;
+    private int _shift;
     private Timer? _timer;
     private bool _leaving;
 
-    private string Greeting => _now.Hour is >= 5 and < 18 ? "Bonjour" : "Bonsoir";
+    // "Bonjour" from 4 h (the early hours belong to the morning, not the
+    // evening), "Bonsoir" from 18 h.
+    private string Greeting => _now.Hour is >= 4 and < 18 ? "Bonjour" : "Bonsoir";
+    private string ShiftLabel => _shift switch { 1 => "du matin", 2 => "de l'après-midi", _ => "de nuit" };
     private string Date
     {
         get
@@ -91,20 +78,26 @@
     // Grains: spread across the width, each with its own speed, drift, size
     // and brightness, and already on their way when the screen opens.
     private static string Grain(int i) => string.Create(System.Globalization.CultureInfo.InvariantCulture,
-        $"--x:{3 + i * 5.5}%;--dx:{(i - 9) * 6}px;--o:{.25 + i % 4 * .12};--s:{.7 + i % 3 * .25};--t:{14 + i * 7 % 9}s;--d:{-1.7 * i}s");
+        $"--x:{2 + i * 4.5}%;--dx:{(i - 11) * 6}px;--o:{.35 + i % 4 * .13};--s:{.8 + i % 3 * .25};--t:{12 + i * 7 % 9}s;--d:{-1.7 * i}s");
 
     protected override void OnInitialized()
     {
-        _now = Clock.GetLocalNow().DateTime;
+        SetNow(Clock.GetLocalNow().DateTime);
         // The clock on screen: once a second is enough to turn the minute.
         _timer = new Timer(_ => InvokeAsync(() =>
         {
             var now = Clock.GetLocalNow().DateTime;
             if (now.Minute == _now.Minute && now.Hour == _now.Hour)
                 return;
-            _now = now;
+            SetNow(now);
             StateHasChanged();
         }), null, 1000, 1000);
+    }
+
+    private void SetNow(DateTime now)
+    {
+        _now = now;
+        _shift = Shifts.At(now);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

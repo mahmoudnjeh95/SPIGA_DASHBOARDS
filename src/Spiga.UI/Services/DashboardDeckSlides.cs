@@ -235,6 +235,49 @@ public sealed partial class DashboardDeckService
             live.Values.Count(h => h.Running), live.Values.Count(h => h.Connected && !h.Running && h.Slot == null), cards, trsChart, productionChart);
     }
 
+    // État des machines: every machine shown, live, grouped by line in line
+    // order (a line's machines not connected yet greyed, with the whole line
+    // only), then the machines in no line.
+    // all = every machine of the account, shownIds = those the filters keep.
+    public async Task<StatusSlide> StatusAsync(Actor actor, IReadOnlyList<Machine> all, IReadOnlyCollection<string> shownIds,
+        CancellationToken cancel = default)
+    {
+        var shown = shownIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var machines = all.Where(m => shown.Contains(m.MachineId)).ToList();
+        var allIds = all.Select(m => m.MachineId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var repository = Repository(actor);
+        var live = await LiveAsync(repository, machines, cancel);
+        StatusTile Tile(Machine m)
+        {
+            var h = live[m.MachineId];
+            return new StatusTile(m.MachineName, h.State, h.StateText, h.Running, h.Stop, false);
+        }
+
+        var byId = machines.ToDictionary(m => m.MachineId, StringComparer.OrdinalIgnoreCase);
+        var groups = new List<StatusGroup>();
+        foreach (var line in Lines)
+        {
+            var mine = line.MachineIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+            // Planned machines only when the whole line is shown (a line of
+            // planned machines alone: only with no filter at all).
+            var whole = mine.Count > 0 ? line.MachineIds.Where(allIds.Contains).All(byId.ContainsKey) : machines.Count == all.Count;
+            if (mine.Count == 0 && (!whole || line.PlannedMachines.Count == 0))
+                continue;
+            var tiles = mine.Select(Tile).ToList();
+            if (whole)
+                tiles.AddRange(line.PlannedMachines.Select(name => new StatusTile(name, "is-off", "En préparation", false, null, true)));
+            groups.Add(new StatusGroup(line.Label, Machine.SectorLabel(line.Sector), WebDeck.ColorOf(Lines, line.Name), tiles));
+        }
+        var inLines = Lines.SelectMany(l => l.MachineIds).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var others = machines.Where(m => !inLines.Contains(m.MachineId)).ToList();
+        if (others.Count > 0)
+            groups.Add(new StatusGroup("Autres machines", "", "#8A93A0", others.Select(Tile).ToList()));
+
+        var headers = live.Values.ToList();
+        return new StatusSlide(groups, headers.Count(h => h.Running), headers.Count(h => h.Connected && !h.Running && h.Slot == null),
+            headers.Count(h => h.Slot != null), headers.Count(h => !h.Connected && h.Slot == null));
+    }
+
     private static DeckChart TrsBars(IReadOnlyList<string> labels, IReadOnlyList<double?> values, double? target)
         => values.Any(v => v.HasValue)
             ? DeckCharts.Bars(labels, values.Select(v => v is { } x ? (double?)Math.Round(x, 1) : null).ToList(), "TRS", v => $"{v:0} %", target)
@@ -280,6 +323,15 @@ public sealed partial class DashboardDeckService
         await Repository(actor).SetActiveNoteAsync(text.Trim(), author);
     }
 }
+
+// État des machines: one tile per machine (Planned = not connected yet),
+// grouped by line, and the counts of the header.
+public sealed record StatusTile(string Name, string State, string StateText, bool Running, OngoingStop? Stop, bool Planned);
+
+public sealed record StatusGroup(string Name, string Sector, string Color, IReadOnlyList<StatusTile> Tiles);
+
+// Scheduled = in a planned stop or maintenance slot; Offline = no data.
+public sealed record StatusSlide(IReadOnlyList<StatusGroup> Groups, int Running, int Stopped, int Scheduled, int Offline);
 
 // The line a machine slide belongs to (badge in its title).
 public sealed record LineTag(string Label, string SectorLabel, string Color);

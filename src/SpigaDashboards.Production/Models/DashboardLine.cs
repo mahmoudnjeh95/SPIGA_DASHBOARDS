@@ -18,12 +18,12 @@ public sealed class DashboardLine
 
     public static string LabelOf(string name) => "Ligne " + name.Trim();
 
-    // The plant as organised on 2026-11-26, Couscous lines as in Personnel
-    // (StaffLines: Couscous 1 = CC01, CC02; Couscous 2 = CC03, CC04).
+    // The plant as organised on 2026-11-26 (as the machine names say: RICC A
+    // / RICC B CC1, STV C / STV D CC2; Personnel's lines match).
     public static List<DashboardLine> Defaults() => new()
     {
-        new() { Name = "CC1", Sector = "Couscous", MachineIds = { "CC01", "CC02" } },
-        new() { Name = "CC2", Sector = "Couscous", MachineIds = { "CC03", "CC04" } },
+        new() { Name = "CC1", Sector = "Couscous", MachineIds = { "CC03", "CC04" } },
+        new() { Name = "CC2", Sector = "Couscous", MachineIds = { "CC01", "CC02" } },
         new() { Name = "PC1", Sector = "Pate courte", MachineIds = { "RIC1" }, PlannedMachines = { "RIC B PC" } },
         new() { Name = "PC2", Sector = "Pate courte", MachineIds = { "PC01", "PC02", "PC03" } },
         new() { Name = "PL1+2", Sector = "Pate longue", MachineIds = { "RIC2", "PL03", "PL02", "PL01" } },

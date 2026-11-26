@@ -97,6 +97,9 @@ else
     private bool _saving;
     private SettingsTab _tab = SettingsTab.Machines;
     private bool _webDeck = true;
+
+    // État des machines stays the first slide of the web deck (WebDeck.Arrange).
+    private static bool Pinned(SlideRow row) => row.Key == StatusSlideDescriptor.SlideKey;
     private string? _sharedMessage;
     private string? _testMessage;
     private bool? _testOk;
@@ -300,12 +303,12 @@ else
                         <tr class="@(row.Enabled ? "" : "is-off")">
                             <td class="n">@(i + 1)</td>
                             <td><label class="check"><input type="checkbox" @bind="row.Enabled" aria-label="Afficher @row.Label" /></label></td>
-                            <td>@row.Label</td>
+                            <td>@row.Label@(Pinned(row) ? " (toujours en premier)" : "")</td>
                             <td><input class="input num-in" inputmode="numeric" placeholder="@Editor.SlideDurationSeconds" @bind="row.Duration" aria-label="Durée de @row.Label" /></td>
                             <td class="r">
                                 <span class="actions">
-                                    <button type="button" class="link" title="Monter (passe plus tôt)" disabled="@(index == 0)" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, -1)">▲</button>
-                                    <button type="button" class="link" title="Descendre (passe plus tard)" disabled="@(index == slides.Count - 1)" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, 1)">▼</button>
+                                    <button type="button" class="link" title="Monter (passe plus tôt)" disabled="@(index == 0 || Pinned(row) || Pinned(slides[index - 1]))" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, -1)">▲</button>
+                                    <button type="button" class="link" title="Descendre (passe plus tard)" disabled="@(index == slides.Count - 1 || Pinned(row))" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, 1)">▼</button>
                                 </span>
                             </td>
                         </tr>
