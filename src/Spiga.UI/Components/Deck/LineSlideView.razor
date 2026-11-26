@@ -1,0 +1,132 @@
+@* Vue d'ensemble of a production line: its figures over the top-bar period,
+   the live state of each of its machines (a machine not connected yet
+   shows greyed, counted nowhere), the machine x team table (production and
+   TRS) and its TRS per team / production per machine. *@
+@using SpigaDashboards.App.Services
+
+<section class="card dk-head plain dk-lhead" style="--lc:@Slide.Color">
+    <div class="dk-title">
+        <span class="pre">@Slide.Sector · Vue d'ensemble</span>
+        <h2><i class="dk-lc" aria-hidden="true"></i>@Slide.Title</h2>
+        <p class="dk-sub">
+            <b>@Slide.PeriodLabel</b>
+            @if (Slide.FilterLabel.Length > 0)
+            {
+                <span class="chip acc">@Slide.FilterLabel</span>
+            }
+        </p>
+    </div>
+    <div class="dk-head-tools dk-live">
+        <span class="chip ok">@Slide.Running en marche</span>
+        @if (Slide.Stopped > 0)
+        {
+            <span class="chip bad">@Slide.Stopped à l'arrêt</span>
+        }
+    </div>
+</section>
+
+<div class="row dk-kpis">
+    <KpiTile Label="TRS de la ligne" Hint="@($"cible {Slide.TrsTarget:0} %")" Value="@Fmt.Pct(Slide.Overall.Kpis.TrsPercent)" Css="@Fmt.Css(Slide.Overall.TrsSeverity)"
+             Sub="@Dpq(Slide.Overall)" />
+    <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(Slide.Overall.ProductionKg)" Sub="@($"{Fmt.Num(Slide.Overall.TotalBags)} sacs")" />
+    <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(Slide.Overall.Kpis.WeightDeviationPercent)" Css="@Fmt.Css(Slide.WeightSeverity)"
+             Sub="@Slide.Overall.Kpis.GiveawayLabel" />
+    <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(Slide.Overall.Kpis.SpeedBagsPerMinute, 1)" />
+</div>
+
+<div class="dk-mtiles" style="--cols:@Math.Max(1, Slide.Tiles.Count)">
+    @foreach (var t in Slide.Tiles)
+    {
+        <section class="card dk-mtile @(t.Planned ? "planned" : "")">
+            <RunStateArt State="@t.State" Label="@t.StateText" />
+            <b>@t.Name</b>
+            @if (t.Planned)
+            {
+                <span class="chip">En préparation</span>
+                <small>Non connectée : comptée nulle part</small>
+            }
+            else
+            {
+                <small>@t.StateText</small>
+                @if (t.Figures is { } f)
+                {
+                    <span class="dk-mfig">
+                        <span class="chip @Fmt.Css(f.TrsSeverity)" title="@($"Cible {t.TrsTarget:0} %")">TRS @Fmt.Pct(f.Kpis.TrsPercent)</span>
+                        <span>@(f.HasProduction ? KpiCalculator.FormatMass(f.ProductionKg) : "—")</span>
+                    </span>
+                }
+                @if (t.Stop is { IsUnqualified: false } stop)
+                {
+                    <span class="dk-cause" style="background:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#FAB219" : stop.TickerColor);color:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#1A1406" : "#FFFFFF")">
+                        @stop.ShortCause · depuis @stop.DurationText
+                    </span>
+                }
+            }
+        </section>
+    }
+</div>
+
+@if (Slide.Rows.Count > 0)
+{
+    <section class="card">
+        <div class="tbl-wrap">
+            <table class="t dk-pack">
+                <thead>
+                    <tr>
+                        <th>Machine</th>
+                        @foreach (var c in Slide.Teams)
+                        {
+                            <th class="r">@c</th>
+                        }
+                        <th class="r">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Slide.Rows)
+                    {
+                        <tr class="@(row.IsTotal ? "total" : "")">
+                            <td>@row.Label</td>
+                            @foreach (var cell in row.Cells)
+                            {
+                                <td class="r">@Cell(cell)</td>
+                            }
+                            <td class="r"><b>@Cell(row.Total)</b></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="dk-charts">
+        <section class="card">@DeckChartView.Render("TRS par équipe", "line-trs-team", Slide.TeamChart)</section>
+        <section class="card">@DeckChartView.Render("Production par machine et par équipe", "line-machine", Slide.MachineChart)</section>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public LineSlide Slide { get; set; } = default!;
+
+    private static string Dpq(PackCell c)
+        => $"D {Fmt.Pct(c.Kpis.AvailabilityPercent, 0)} · P {Fmt.Pct(c.Kpis.PerformancePercent, 0)} · Q {Fmt.Pct(c.Kpis.QualityPercent, 0)}";
+
+    // Production, then the TRS of that machine / team.
+    private static RenderFragment Cell(PackCell cell) => __builder =>
+    {
+        @if (!cell.HasProduction)
+        {
+            <span class="nd">—</span>
+        }
+        else
+        {
+            @KpiCalculator.FormatMass(cell.ProductionKg)
+            <small class="dk-dpq">
+                @if (cell.Kpis.TrsPercent is not null)
+                {
+                    <span class="chip @Fmt.Css(cell.TrsSeverity)">TRS @Fmt.Pct(cell.Kpis.TrsPercent, 0)</span>
+                }
+                @Fmt.Num(cell.TotalBags) sacs
+            </small>
+        }
+    };
+}

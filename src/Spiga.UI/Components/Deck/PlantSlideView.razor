@@ -1,0 +1,63 @@
+@* Vue usine: every production line side by side over the top-bar period,
+   each in its colour with the state of its machines now, then the lines
+   compared (TRS, production). *@
+@using SpigaDashboards.App.Services
+
+<section class="card dk-head plain">
+    <div class="dk-title">
+        <span class="pre">Vue usine</span>
+        <h2>Toutes les lignes</h2>
+        <p class="dk-sub">
+            <b>@Slide.PeriodLabel</b>
+            @if (Slide.FilterLabel.Length > 0)
+            {
+                <span class="chip acc">@Slide.FilterLabel</span>
+            }
+        </p>
+    </div>
+    <div class="dk-head-tools dk-live">
+        <span class="chip ok">@Slide.Running en marche</span>
+        @if (Slide.Stopped > 0)
+        {
+            <span class="chip bad">@Slide.Stopped à l'arrêt</span>
+        }
+    </div>
+</section>
+
+<div class="row dk-kpis">
+    <KpiTile Label="TRS usine" Hint="@($"cible {Slide.TrsTarget:0} %")" Value="@Fmt.Pct(Slide.Overall.Kpis.TrsPercent)" Css="@Fmt.Css(Slide.Overall.TrsSeverity)" />
+    <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(Slide.Overall.ProductionKg)" Sub="@($"{Fmt.Num(Slide.Overall.TotalBags)} sacs")" />
+    <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(Slide.Overall.Kpis.WeightDeviationPercent)" Sub="@Slide.Overall.Kpis.GiveawayLabel" />
+    <KpiTile Label="Machines en marche" Value="@($"{Slide.Running} / {Slide.Lines.Sum(l => l.Machines.Count)}")" />
+</div>
+
+<div class="dk-plant" style="--cols:@Math.Max(1, Slide.Lines.Count)">
+    @foreach (var line in Slide.Lines)
+    {
+        <section class="card dk-pline" style="--lc:@line.Color">
+            <span class="pre">@line.Sector</span>
+            <h3>@line.Name</h3>
+            <span class="chip big @Fmt.Css(line.Figures.TrsSeverity)" title="@($"Cible {line.TrsTarget:0} %")">TRS @Fmt.Pct(line.Figures.Kpis.TrsPercent)</span>
+            <p>@KpiCalculator.FormatMass(line.Figures.ProductionKg) · @Fmt.Num(line.Figures.TotalBags) sacs</p>
+            <ul class="dk-pstates">
+                @foreach (var m in line.Machines)
+                {
+                    <li title="@m.StateText"><i class="dk-sdot @m.State" aria-hidden="true"></i>@m.Name</li>
+                }
+                @if (line.Planned > 0)
+                {
+                    <li class="planned"><i class="dk-sdot is-off" aria-hidden="true"></i>@(line.Planned == 1 ? "1 machine en préparation" : $"{line.Planned} machines en préparation")</li>
+                }
+            </ul>
+        </section>
+    }
+</div>
+
+<div class="dk-charts">
+    <section class="card">@DeckChartView.Render("TRS par ligne", "plant-trs", Slide.TrsChart)</section>
+    <section class="card">@DeckChartView.Render("Production par ligne", "plant-prod", Slide.ProductionChart)</section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PlantSlide Slide { get; set; } = default!;
+}

@@ -12,10 +12,17 @@
     // A planned stop / maintenance going on now takes the whole poste view.
     var declared = h.Stop is { TakesWholeView: true } && Slide.Period == null && Slide.PeriodLabel.Length == 0 ? h.Stop : null;
 }
-<section class="card dk-head">
+<section class="card dk-head @(Slide.Line != null ? "dk-lhead" : "")" style="@(Slide.Line is { } tag ? $"--lc:{tag.Color}" : null)">
     <RunStateArt State="@h.State" Label="@h.StateText" Class="dk-photo" />
     <div class="dk-title">
-        <span class="pre">@h.SectorLabel</span>
+        @if (Slide.Line is { } line)
+        {
+            <span class="pre"><span class="dk-lbadge">@line.Label</span> @line.SectorLabel</span>
+        }
+        else
+        {
+            <span class="pre">@h.SectorLabel</span>
+        }
         <h2>@h.Name</h2>
         <p class="dk-sub">
             @if (Slide.Period == null)

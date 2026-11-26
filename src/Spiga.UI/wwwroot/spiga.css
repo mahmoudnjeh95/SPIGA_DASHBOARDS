@@ -1515,17 +1515,17 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 /* "backwards", not "both": a filled-forward transform makes the card a containing block, which would pin the enlarged chart (position: fixed) to the card. */
 .dk-slide { animation: dk-slide-in .6s var(--ease) backwards; }
 @keyframes dk-slide-in { from { opacity: 0; transform: translateX(40px); } }
-.dk-slide > *, .dk-slide .dk-kpis > .kpi, .dk-slide .dk-charts > .card, .dk-slide .dk-runstate > .card, .dk-slide .dk-lines > .card {
+.dk-slide > *, .dk-slide .dk-kpis > .kpi, .dk-slide .dk-charts > .card, .dk-slide .dk-mtiles > .card, .dk-slide .dk-lines > .card {
     animation: sp-rise .55s var(--ease) backwards; }
-.dk-slide > :nth-child(2), .dk-slide .dk-kpis > :nth-child(2), .dk-slide .dk-charts > :nth-child(2), .dk-slide .dk-runstate > :nth-child(2) { animation-delay: 60ms; }
-.dk-slide > :nth-child(3), .dk-slide .dk-kpis > :nth-child(3), .dk-slide .dk-charts > :nth-child(3), .dk-slide .dk-runstate > :nth-child(3) { animation-delay: 120ms; }
-.dk-slide > :nth-child(4), .dk-slide .dk-kpis > :nth-child(4), .dk-slide .dk-runstate > :nth-child(4) { animation-delay: 180ms; }
-.dk-slide .dk-kpis > :nth-child(5), .dk-slide .dk-runstate > :nth-child(5) { animation-delay: 240ms; }
-.dk-slide .dk-kpis > :nth-child(6), .dk-slide .dk-runstate > :nth-child(6) { animation-delay: 300ms; }
-.dk-slide .dk-kpis > :nth-child(7), .dk-slide .dk-runstate > :nth-child(7) { animation-delay: 360ms; }
-.dk-slide .dk-kpis > :nth-child(8), .dk-slide .dk-runstate > :nth-child(8) { animation-delay: 420ms; }
-.dk-slide .dk-runstate > :nth-child(9) { animation-delay: 480ms; }
-.dk-slide .dk-runstate > :nth-child(10) { animation-delay: 540ms; }
+.dk-slide > :nth-child(2), .dk-slide .dk-kpis > :nth-child(2), .dk-slide .dk-charts > :nth-child(2), .dk-slide .dk-mtiles > :nth-child(2) { animation-delay: 60ms; }
+.dk-slide > :nth-child(3), .dk-slide .dk-kpis > :nth-child(3), .dk-slide .dk-charts > :nth-child(3), .dk-slide .dk-mtiles > :nth-child(3) { animation-delay: 120ms; }
+.dk-slide > :nth-child(4), .dk-slide .dk-kpis > :nth-child(4), .dk-slide .dk-mtiles > :nth-child(4) { animation-delay: 180ms; }
+.dk-slide .dk-kpis > :nth-child(5), .dk-slide .dk-mtiles > :nth-child(5) { animation-delay: 240ms; }
+.dk-slide .dk-kpis > :nth-child(6), .dk-slide .dk-mtiles > :nth-child(6) { animation-delay: 300ms; }
+.dk-slide .dk-kpis > :nth-child(7), .dk-slide .dk-mtiles > :nth-child(7) { animation-delay: 360ms; }
+.dk-slide .dk-kpis > :nth-child(8), .dk-slide .dk-mtiles > :nth-child(8) { animation-delay: 420ms; }
+.dk-slide .dk-mtiles > :nth-child(9) { animation-delay: 480ms; }
+.dk-slide .dk-mtiles > :nth-child(10) { animation-delay: 540ms; }
 .dk-cause { animation: dk-cause-pop .5s var(--spring) .45s both; }
 @keyframes dk-cause-pop { from { opacity: 0; transform: scale(.5); } }
 /* the "live" dot breathes; a shift change pops the team chip, which glows three times */
@@ -1536,7 +1536,7 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 @keyframes dk-announce-glow { 0%, 100% { box-shadow: var(--shadow-sm); } 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 22px var(--accent); } }
 .tv-shift { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--fg2); padding: 2px 10px; border-radius: 99px; background: var(--tile); }
 @media (prefers-reduced-motion: reduce) {
-    .dk-slide, .dk-slide > *, .dk-slide .dk-kpis > .kpi, .dk-slide .dk-charts > .card, .dk-slide .dk-runstate > .card, .dk-slide .dk-lines > .card,
+    .dk-slide, .dk-slide > *, .dk-slide .dk-kpis > .kpi, .dk-slide .dk-charts > .card, .dk-slide .dk-mtiles > .card, .dk-slide .dk-lines > .card,
     .dk-cause, .pill .dot, .me-shift .dot, .tv-shift .dot, .announce { animation: none; }
 }
 .dk-declared { text-align: center; padding: 40px 20px; border-left: 6px solid #7F8C8D; }
@@ -1619,12 +1619,35 @@ a.tab { display: inline-flex; align-items: center; text-decoration: none; }
 .dk-pack td, .dk-pack th { white-space: nowrap; }
 .dk-pack tr.total td { font-weight: 700; border-top: 2px solid var(--line); background: var(--soft); }
 .dk-dpq { display: block; font-size: 11px; color: var(--fg3); font-weight: 600; }
-.dk-runstate { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 1100px) { .dk-runstate { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
-.dk-run { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 16px 12px; }
-.dk-run .run-state { width: 100%; max-width: 190px; }
-.dk-run b { font-size: 17px; }
-.dk-run small { color: var(--fg2); font-weight: 600; }
+/* Production lines (web deck): each line in its colour (--lc). */
+.dk-lhead { border-left: 6px solid var(--lc, var(--accent)); }
+.dk-lc { display: inline-block; width: 14px; height: 14px; border-radius: 4px; background: var(--lc, var(--accent)); margin-right: 10px; vertical-align: 2px; }
+.seg .dk-lc { width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
+.dk-lbadge { display: inline-block; padding: 1px 8px; border-radius: 99px; background: var(--lc, var(--accent)); color: #fff; margin-right: 4px; }
+.dk-live { display: flex; flex-wrap: wrap; gap: 6px; }
+.dk-mtiles { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .dk-mtiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); } }
+.dk-mtile { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 14px 12px; }
+.dk-mtile .run-state { width: 100%; max-width: 150px; }
+.dk-mtile b { font-size: 18px; }
+.dk-mtile small { color: var(--fg2); font-weight: 600; }
+.dk-mfig { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; font-weight: 700; }
+.dk-mtile.planned, .dk-lines .dk-planned { opacity: .6; border: 2px dashed var(--line); box-shadow: none; }
+.dk-mtile.planned .run-state { filter: grayscale(1); }
+.dk-plant { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .dk-plant { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+.dk-pline { display: flex; flex-direction: column; gap: 6px; border-top: 6px solid var(--lc, var(--accent)); }
+.dk-pline .pre { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--lc, var(--accent)); }
+.dk-pline h3 { margin: 0; font-size: 22px; }
+.dk-pline p { margin: 0; color: var(--fg2); font-weight: 600; }
+.dk-pline .chip.big { align-self: flex-start; font-size: 18px; padding: 4px 14px; }
+.dk-pstates { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.dk-pstates li { display: flex; align-items: center; gap: 8px; }
+.dk-pstates li.planned { color: var(--fg3); font-style: italic; }
+.dk-sdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+.dk-sdot.is-run { background: var(--ok); }
+.dk-sdot.is-stop { background: var(--bad); }
+.dk-sdot.is-planned { background: #FAB219; }
 /* page head buttons (dashboard: Historique, Écran TV) */
 .head-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 /* Écran TV: no menu, the slides fill the screen */
