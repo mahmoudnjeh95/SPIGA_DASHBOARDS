@@ -592,153 +592,143 @@ h3.sub { font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transfor
 .gate-leave .gate-card { animation: sp-leave .4s .3s cubic-bezier(.7, 0, .84, 0) both; }
 
 /* ---------- welcome (before sign-in) ---------- */
-/* Logo: one technique, a circular mask reveal with a soft overshoot, then a
-   sheen. Title: letters rise one after another (45 ms apart). Then the
-   greeting, the products and the button. Loops (grains, strands, hops,
-   button halo) are ambient: slow, low contrast. */
+/* Split screen. Left: a deep Spiga green panel with the logo on a white card
+   (so the Spiga and Diari marks sit on one clean ground). Right: greeting,
+   poste in progress, a clock large enough to read from across the floor,
+   the date and one green button. One accent (the green), wheat gold only
+   for the thin rule and the dot. Motion is calm: a staggered rise on entry,
+   then only the clock colon and the poste dot breathe. */
 @keyframes sp-reveal {
     0% { clip-path: circle(0% at 50% 55%); transform: scale(.82); opacity: 0; }
     15% { opacity: 1; }
     70% { clip-path: circle(75% at 50% 55%); transform: scale(1.04); }
     100% { clip-path: circle(75% at 50% 55%); transform: scale(1); opacity: 1; }
 }
-@keyframes sp-letter { from { opacity: 0; transform: translateY(.55em) rotate(6deg); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
-@keyframes sp-strand-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes sp-strand-sway { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes sp-nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+@keyframes sp-welcome-out { to { opacity: 0; transform: scale(1.03); filter: blur(6px); } }
+@keyframes sp-panel-in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes sp-colon { 0%, 45%, 100% { opacity: 1; } 50%, 95% { opacity: .25; } }
+
+.welcome {
+    --wl-green: #1E6B3A; --wl-green-2: #154D2A; --wl-gold: #E3B04B; --wl-cream: #FAF7F0;
+    position: relative; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    overflow: hidden; cursor: pointer; outline: none;
+}
+/* Hide the drifting orbs of the app background behind this screen. */
+.welcome::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--wl-cream); }
+.spiga-root[data-theme="dark"] .welcome::before { background: var(--bg); }
+
+.wl-brand {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(16px, 3vh, 28px);
+    padding: 40px clamp(24px, 4vw, 64px); color: #fff; overflow: hidden;
+    background:
+        radial-gradient(70% 60% at 30% 25%, rgba(255, 255, 255, .10), transparent 70%),
+        linear-gradient(160deg, var(--wl-green) 0%, var(--wl-green-2) 100%);
+    animation: sp-panel-in .7s var(--ease) both;
+}
+/* A very faint texture of wheat-coloured diagonal strands. */
+.wl-brand::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .07;
+    background: repeating-linear-gradient(-35deg, var(--wl-gold) 0 2px, transparent 2px 22px);
+    -webkit-mask: radial-gradient(120% 90% at 100% 100%, #000, transparent 70%); mask: radial-gradient(120% 90% at 100% 100%, #000, transparent 70%);
+}
+.wl-logo-card {
+    position: relative; width: min(440px, 100%); padding: clamp(18px, 3vh, 30px) clamp(20px, 3vw, 36px);
+    background: #fff; border-radius: 22px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+    animation: sp-rise .7s .25s var(--ease) both;
+}
+.wl-logo-card img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.wl-sub {
+    position: relative; margin: 0; font-size: clamp(14px, 1.6vw, 18px); font-weight: 700; letter-spacing: .24em; text-transform: uppercase;
+    color: rgba(255, 255, 255, .92); animation: sp-rise .6s .45s var(--ease) both;
+}
+.wl-rule { position: relative; display: block; width: 56px; height: 3px; border-radius: 2px; background: var(--wl-gold); transform-origin: left; animation: sp-draw .6s .6s var(--ease) both; }
+
+.wl-info { display: flex; align-items: center; justify-content: center; padding: 40px clamp(24px, 5vw, 80px); }
+.wl-info-in { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: min(520px, 100%); }
+.wl-info-in > * { margin: 0; animation: sp-rise .6s var(--ease) both; }
+.wl-greet { font-size: clamp(26px, 3vw, 36px); font-weight: 700; color: var(--fg); animation-delay: .35s !important; }
+.wl-shift {
+    display: inline-flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; color: var(--fg2);
+    animation-delay: .45s !important;
+}
+.wl-shift span { margin-left: -6px; color: var(--fg3); font-weight: 500; }
+.wl-dot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--wl-gold); flex: none; }
+.wl-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--wl-gold); animation: sp-ping 2.4s 1.2s ease-out infinite; }
+.wl-clock {
+    margin-top: clamp(10px, 3vh, 28px) !important; font-size: clamp(52px, min(7vw, 12vh), 88px); font-weight: 700; line-height: 1;
+    letter-spacing: -.03em; color: var(--fg); font-variant-numeric: tabular-nums; animation-delay: .55s !important;
+}
+.wl-colon { display: inline-block; padding: 0 .02em; transform: translateY(-.06em); animation: sp-colon 2s 1.5s steps(1, end) infinite; }
+.wl-date { font-size: clamp(17px, 1.8vw, 22px); color: var(--fg2); animation-delay: .65s !important; }
+.welcome .wl-go {
+    margin-top: clamp(20px, 5vh, 44px); min-height: 58px; padding: 0 32px; font-size: 18px; font-weight: 700; border-radius: 14px;
+    background: var(--wl-green); color: #fff; border-color: transparent; box-shadow: 0 10px 26px rgba(30, 107, 58, .32);
+    animation: sp-rise .6s .75s var(--ease) both, sp-go-halo 2.6s 2s ease-out infinite;
+}
+.welcome .wl-go svg { width: 20px; height: 20px; animation: sp-nudge 1.8s 2s ease-in-out infinite; }
+.welcome .wl-go:hover:not(:disabled), .welcome:hover .wl-go { background: #23803F; color: #fff; border-color: transparent; box-shadow: 0 14px 30px rgba(30, 107, 58, .4); }
+.welcome .wl-go:hover:not(:disabled) svg { transform: none; }
+.wl-hint { margin-top: 6px !important; font-size: 14px; color: var(--fg3); animation-delay: .9s !important; }
+.spiga-root[data-theme="dark"] .welcome .wl-go { box-shadow: 0 10px 26px rgba(0, 0, 0, .4); }
+
+/* Ambient motion, all slow and low contrast so the screen stays calm:
+   the logo card floats and a light sweeps across it now and then, golden
+   grains rise through the green panel past a drifting glow, the button
+   sends out a soft ring, and the clock's digits roll in when they change. */
 @keyframes sp-grain {
     0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
     15%, 85% { opacity: var(--o, .55); }
     100% { transform: translate3d(var(--dx, 30px), -110vh, 0) rotate(260deg); opacity: 0; }
 }
-@keyframes sp-halo { 0% { box-shadow: var(--glow), 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 70%, 100% { box-shadow: var(--glow), 0 0 0 16px transparent; } }
-@keyframes sp-nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
-@keyframes sp-welcome-out { to { opacity: 0; transform: scale(1.06); filter: blur(8px); } }
-
-.welcome {
-    position: relative; min-height: 100vh; display: grid; place-items: center; padding: clamp(12px, 3vh, 32px) 16px clamp(36px, 11vh, 120px);
-    overflow: hidden; cursor: pointer; outline: none;
+@keyframes sp-glow-drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(30%, 40%) scale(1.25); }
 }
-.welcome::before, .welcome::after { /* the same orbs as the sign-in screen, so the hand-over is seamless */
-    content: ""; position: absolute; width: 560px; height: 560px; border-radius: 50%; filter: blur(80px); opacity: .5; pointer-events: none; z-index: -1;
-}
-.welcome::before { background: radial-gradient(circle, var(--accent), transparent 65%); top: -140px; left: -90px; animation: sp-drift 22s ease-in-out infinite; }
-.welcome::after { background: radial-gradient(circle, var(--brand-yellow), transparent 65%); bottom: -180px; right: -110px; animation: sp-drift 26s ease-in-out infinite reverse; opacity: .35; }
-/* Sized on the window height too, so it fits a 1366 x 768 screen without scrolling. */
-.wl-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: clamp(6px, 1.5vh, 14px); max-width: 640px; }
-
-/* The Spiga · Diari logo in 3D. Four nested layers, each with one job:
-   .wl-stage     perspective + fade in
-   .wl-logo3d    the entrance: flies in from deep, turned away, and settles
-   .wl-tilt      leans toward the pointer (--px / --py from spiga.js)
-   .wl-slab      the idle loop (16 s): sways, lifts, then turns a full circle
-   The slab is a real solid: the face, eight darker copies 1 px apart behind
-   it (the thickness you see on the turn) and a back face, so the logo reads
-   the right way round when it shows its back. Nothing above .wl-slab may
-   have filter / opacity / clip-path: they would flatten the 3D. */
-@keyframes sp-logo-in {
-    0% { transform: translateZ(-700px) rotateY(-80deg) rotateX(26deg); }
-    62% { transform: translateZ(40px) rotateY(9deg) rotateX(-4deg); }
-    82% { transform: translateZ(-6px) rotateY(-3deg) rotateX(1deg); }
-    100% { transform: translateZ(0) rotateY(0) rotateX(0); }
-}
-@keyframes sp-logo-idle {
-    0% { transform: translateY(0) rotateX(0) rotateY(0); animation-timing-function: ease-in-out; }
-    18% { transform: translateY(-7px) rotateX(5deg) rotateY(-15deg); animation-timing-function: ease-in-out; }
-    40% { transform: translateY(0) rotateX(-3deg) rotateY(13deg); animation-timing-function: ease-in-out; }
-    56% { transform: translateY(-4px) rotateX(2deg) rotateY(-6deg); animation-timing-function: ease-in-out; }
-    66% { transform: translateY(0) rotateX(0) rotateY(0); animation-timing-function: cubic-bezier(.7, 0, .3, 1); }
-    84% { transform: translateY(-12px) rotateX(0) rotateY(360deg); animation-timing-function: cubic-bezier(.34, 1.4, .64, 1); }
-    92%, 100% { transform: translateY(0) rotateX(0) rotateY(360deg); }
-}
-@keyframes sp-logo-floor {
-    0%, 66%, 92%, 100% { transform: translateX(-50%) scale(1); opacity: .55; }
-    18% { transform: translateX(-50%) scale(.9); opacity: .42; }
-    56% { transform: translateX(-50%) scale(.94); opacity: .47; }
-    75% { transform: translateX(-50%) scale(.35, .8); opacity: .3; }
-    84% { transform: translateX(-50%) scale(.82); opacity: .32; }
-}
-@keyframes sp-logo-gloss {
-    0%, 70% { transform: translateX(-140%) skewX(-18deg); }
-    88%, 100% { transform: translateX(340%) skewX(-18deg); }
-}
-@keyframes sp-rays { to { transform: translate(-50%, -50%) rotate(360deg); } }
-
-.wl-stage {
-    position: relative; width: min(520px, 86vw, 58vh); aspect-ratio: 523 / 188; margin: clamp(4px, 2vh, 22px) 0 clamp(10px, 3vh, 30px);
-    perspective: 1100px; perspective-origin: 50% 40%; animation: sp-fade .5s .15s both;
-}
-.wl-logo3d, .wl-tilt, .wl-slab { position: absolute; inset: 0; transform-style: preserve-3d; }
-.wl-logo3d { animation: sp-logo-in 1.7s .15s cubic-bezier(.22, 1, .36, 1) both; }
-.wl-tilt {
-    transform: rotateY(calc(var(--px, 0) * 16deg)) rotateX(calc(var(--py, 0) * -10deg));
-    transition: transform .9s cubic-bezier(.22, 1, .36, 1);
-}
-.wl-slab { animation: sp-logo-idle 16s 2s infinite; }
-.wl-slab img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; user-select: none; -webkit-user-drag: none; }
-.wl-face { transform: translateZ(0); backface-visibility: hidden; }
-.wl-edge { transform: translateZ(calc(var(--k) * -1px)); backface-visibility: hidden; filter: brightness(calc(.9 - var(--k) * .03)) saturate(1.1); }
-.wl-back { transform: translateZ(-9px) rotateY(180deg); backface-visibility: hidden; filter: brightness(.92); }
-.wl-gloss { /* a light sweep over the face, cut to the logo's shape */
-    position: absolute; inset: 0; overflow: hidden; pointer-events: none; transform: translateZ(.6px); backface-visibility: hidden;
-    -webkit-mask: url("img/cds-logo.png") center / 100% 100% no-repeat; mask: url("img/cds-logo.png") center / 100% 100% no-repeat;
-}
-.wl-gloss::before {
-    content: ""; position: absolute; top: -10%; bottom: -10%; left: 0; width: 26%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .7) 50%, transparent);
-    animation: sp-shine 1.2s 1.5s cubic-bezier(.65, 0, .35, 1) both, sp-logo-gloss 16s 2s infinite;
-}
-.wl-floor { /* the soft shadow the slab casts; shrinks as it lifts and as it turns edge-on */
-    position: absolute; left: 50%; bottom: -16%; width: 78%; height: 16%; border-radius: 50%; pointer-events: none;
-    background: radial-gradient(closest-side, rgba(0, 0, 0, .34), transparent);
-    animation: sp-fade .8s 1.2s both, sp-logo-floor 16s 2s infinite;
-}
-.spiga-root[data-theme="dark"] .wl-floor { background: radial-gradient(closest-side, rgba(0, 0, 0, .7), transparent); }
-.wl-rays { /* slow golden light rays behind the logo */
-    position: absolute; left: 50%; top: 50%; width: 150%; aspect-ratio: 1; border-radius: 50%; pointer-events: none; z-index: -1;
-    background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--brand-yellow) 30%, transparent) 0deg 5deg, transparent 5deg 20deg);
-    -webkit-mask: radial-gradient(closest-side, #000 12%, transparent 62%); mask: radial-gradient(closest-side, #000 12%, transparent 62%);
-    transform: translate(-50%, -50%); opacity: .4; animation: sp-rays 60s linear infinite;
+@keyframes sp-card-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -9px; } }
+/* One sweep (about 1 s) every 3 s. */
+@keyframes sp-card-sheen { 0%, 60% { transform: translateX(-160%) skewX(-18deg); } 95%, 100% { transform: translateX(520%) skewX(-18deg); } }
+@keyframes sp-digit-in { from { opacity: 0; transform: translateY(.35em); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes sp-go-halo {
+    0% { box-shadow: 0 10px 26px rgba(30, 107, 58, .32), 0 0 0 0 rgba(30, 107, 58, .45); }
+    70%, 100% { box-shadow: 0 10px 26px rgba(30, 107, 58, .32), 0 0 0 18px rgba(30, 107, 58, 0); }
 }
 
-.wl-title { display: flex; font-size: clamp(36px, min(7vw, 9vh), 76px); font-weight: 800; letter-spacing: -.02em; line-height: 1.05; }
-.wl-title span {
-    display: inline-block; animation: sp-letter .7s calc(.75s + var(--i) * 45ms) var(--ease) both;
-    background: linear-gradient(90deg, var(--brand-green), var(--brand-yellow) 55%, var(--brand-red));
-    background-size: 900% 100%; background-position: calc(var(--i) * 12.5%) 0;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+.wl-glow {
+    position: absolute; top: -20%; left: -25%; width: 80%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(227, 176, 75, .22), transparent); filter: blur(10px);
+    animation: sp-glow-drift 18s ease-in-out infinite;
 }
-.wl-sub { font-size: 15px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--fg2); animation: sp-rise .6s 1.25s var(--ease) both; }
-.wl-sub b { color: var(--brand-yellow); }
-.wl-greet { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 6px 14px; color: var(--fg2); font-size: 16px; animation: sp-rise .6s 1.4s var(--ease) both; }
-.wl-greet > span:first-child { font-weight: 700; color: var(--fg); }
-.wl-time { font-size: 22px; font-weight: 800; color: var(--fg); }
-.wl-trio { width: min(230px, 28vh); margin: 2px 0 -4px; animation: sp-rise .6s 1.55s var(--ease) both; }
-.welcome .wl-go {
-    min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 14px; background-size: 200% 200%;
-    animation: sp-rise .6s 1.7s var(--ease) both, sp-gradient 6s ease-in-out infinite, sp-halo 2.4s 2.4s ease-out infinite;
-}
-.welcome .wl-go svg { width: 18px; height: 18px; animation: sp-nudge 1.6s 2.4s ease-in-out infinite; }
-.welcome:hover .wl-go { filter: brightness(1.08); }
-.wl-hint { font-size: 12px; color: var(--fg3); animation: sp-fade .6s 2.1s both, sp-blink 3.2s 2.7s ease-in-out infinite; }
-
-/* Golden durum grains rising slowly behind everything. */
-.wl-grains { position: absolute; inset: 0; pointer-events: none; z-index: -1; }
+/* Above both panels' backgrounds, below their content. */
+.wl-grains { position: absolute; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+.wl-logo-card, .wl-sub, .wl-rule, .wl-info-in { z-index: 2; }
+.wl-info { position: relative; }
+.wl-info-in { position: relative; }
 .wl-grains i {
-    position: absolute; bottom: -20px; width: 7px; height: 11px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #FFE29A, #E2A93A 70%); box-shadow: 0 0 6px rgba(245, 184, 0, .35);
-    left: var(--x); scale: var(--s);
+    position: absolute; bottom: -20px; left: var(--x); width: 7px; height: 11px; border-radius: 50%; scale: var(--s);
+    background: radial-gradient(circle at 35% 30%, #FFE29A, #E2A93A 70%); box-shadow: 0 0 8px rgba(245, 184, 0, .45);
     animation: sp-grain var(--t) var(--d) linear infinite;
 }
-/* Strands of spaghetti drawn along the bottom, then swaying gently. */
-.wl-strands { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 200px; pointer-events: none; z-index: -1; overflow: visible; }
-.wl-strands path { fill: none; stroke: #F2BE4E; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 1; opacity: .5; animation: sp-strand-draw 2.2s .3s cubic-bezier(.65, 0, .35, 1) both, sp-strand-sway 7s 2.5s ease-in-out infinite; }
-.wl-strands path:nth-child(2) { stroke: #E2A93A; opacity: .38; animation-delay: .5s, 3s; animation-duration: 2.2s, 9s; }
-.wl-strands path:nth-child(3) { stroke: #C58A1C; opacity: .26; animation-delay: .7s, 3.4s; animation-duration: 2.2s, 11s; }
-.spiga-root[data-theme="dark"] .wl-strands path { opacity: .35; }
+.wl-logo-card { overflow: hidden; animation: sp-rise .7s .25s var(--ease) both, sp-card-float 7s 1.2s ease-in-out infinite; }
+.wl-sheen {
+    position: absolute; top: -10%; bottom: -10%; left: 0; width: 22%; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .75) 50%, transparent);
+    animation: sp-card-sheen 3s cubic-bezier(.65, 0, .35, 1) infinite;
+}
+.wl-digits { display: inline-block; animation: sp-digit-in .7s var(--ease) both; }
+
+/* Narrow or portrait screens: brand on top, information below. */
+@media (max-width: 860px), (orientation: portrait) {
+    .welcome { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .wl-brand { padding: 32px 24px; }
+    .wl-logo-card { width: min(340px, 100%); }
+    .wl-info-in { align-items: center; text-align: center; }
+}
 
 .welcome.leaving { pointer-events: none; }
-.welcome.leaving .wl-center { animation: sp-welcome-out .42s cubic-bezier(.7, 0, .84, 0) both; }
-.welcome.leaving .wl-strands, .welcome.leaving .wl-grains { transition: opacity .4s; opacity: 0; }
+.welcome.leaving .wl-info-in, .welcome.leaving .wl-logo-card, .welcome.leaving .wl-sub {
+    animation: sp-welcome-out .42s cubic-bezier(.7, 0, .84, 0) both !important;
+}
 
 /* ---------- loading ---------- */
 /* The hopping pasta of the dashboard (PastaTrio): each piece stretches on
@@ -817,11 +807,8 @@ body:has(.spiga-root:not(.boot)) .spiga-root.boot { opacity: 0; visibility: hidd
         transition-duration: .15s !important; scroll-behavior: auto !important;
     }
     .spiga-root::before, .gate::before, .gate::after, .dot::after, .brand img, .brand b,
-    .welcome::before, .welcome::after, .wl-grains, .wl-gloss::before, .wl-go svg,
-    .wl-logo3d, .wl-slab, .wl-floor, .wl-rays { animation: none !important; }
-    .wl-tilt { transform: none !important; }
+    .wl-go svg, .wl-colon, .wl-dot::after, .wl-glow, .wl-sheen, .wl-digits { animation: none !important; }
     .wl-grains { display: none; }
-    .wl-strands path { stroke-dashoffset: 0 !important; }
     .kpi:hover, .bar:hover:not(:disabled) { translate: none; }
 }
 
