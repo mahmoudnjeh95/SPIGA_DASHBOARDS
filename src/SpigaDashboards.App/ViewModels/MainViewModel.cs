@@ -193,7 +193,9 @@ public partial class MainViewModel : ObservableObject
                 : CurrentRange;
             if (to == DateTime.MinValue)
                 to = from.AddDays(1);
-            for (var d = from.Date; d < to && d < from.Date.AddDays(28); d = d.AddDays(1))
+            // Production days: the range ends at 06:00 after its last day.
+            var last = PeriodRanges.ProductionDay(to.AddTicks(-1));
+            for (var d = from.Date; d <= last && d < from.Date.AddDays(28); d = d.AddDays(1))
             {
                 var team = _teamSchedule.GetTeamForShift(d, shiftId);
                 if (string.IsNullOrEmpty(team) || string.Equals(team, _lockedTeam, StringComparison.OrdinalIgnoreCase))

@@ -5,6 +5,8 @@
 @inject UiState Ui
 @inject PlantData Plant
 @inject IDesktopBridge Desktop
+@inject RulesService Rules
+@inject AttendanceService Attendance
 
 @if (Session.Can(Modules.VueEnsemble, AppAction.Voir))
 {
@@ -52,7 +54,13 @@
 
         <div class="row">
             <section class="card" style="flex:4 1 360px">
-                <div class="card-head"><h2>À traiter <small>@(_alerts.Count == 0 ? "rien à signaler" : $"{_alerts.Count} point(s)")</small></h2></div>
+                <div class="card-head">
+                    <h2>À traiter · Machines <small>@(_alerts.Count == 0 ? "rien à signaler" : $"{_alerts.Count} point(s)")</small></h2>
+                    @if (Session.Can(Perm.Regles))
+                    {
+                        <a class="link" href="admin/regles" title="Seuils et règles de ces alertes">Règles</a>
+                    }
+                </div>
                 @if (_alerts.Count == 0)
                 {
                     <p class="empty">Aucun point ouvert sur la période.</p>
@@ -70,6 +78,43 @@
                 }
             </section>
 
+            @if (_people != null)
+            {
+                <section class="card" style="flex:4 1 360px">
+                    <div class="card-head">
+                        <h2>À traiter · Personnel <small>@(_people.Count == 0 ? "rien à signaler" : $"{_people.Count} personne(s)") · pointages validés au @_peopleAt.ToString("dd/MM")</small></h2>
+                        @if (Session.Can(Perm.Regles))
+                        {
+                            <a class="link" href="admin/regles" title="Seuils et règles de ces alertes">Règles</a>
+                        }
+                    </div>
+                    @if (_peopleError != null)
+                    {
+                        <p class="empty">@_peopleError</p>
+                    }
+                    else if (_people.Count == 0)
+                    {
+                        <p class="empty">Aucun retard, absence ou départ répété selon les règles.</p>
+                    }
+                    @foreach (var pa in _people)
+                    {
+                        <div class="alert">
+                            <span class="dot @(pa.Level == AlertLevel.Critique ? "bad" : "warn")"></span>
+                            <div>
+                                <b>@pa.FullName : @pa.Count @pa.KindLabel @pa.Scope</b>
+                                <small>@pa.Team · @Fmt.Num(pa.Minutes / 60.0, 1) h cumulées · dernier le @pa.Last.ToString("dd/MM")@(pa.Dates.Count > 1 ? $" ({string.Join(", ", pa.Dates.Select(d => d.ToString("dd/MM")))})" : "")</small>
+                            </div>
+                            @if (PeopleHref is { } href)
+                            {
+                                <a class="link" href="@href">Voir</a>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+
+        <div class="row">
             <section class="card" style="flex:6 1 520px">
                 <div class="card-head"><h2>Par secteur <small>cliquer pour le détail par machine</small></h2></div>
                 <div class="scroll">
@@ -113,8 +158,16 @@
     private Period _period = default!;
     private PlantSnapshot? _snap;
     private List<Alert> _alerts = new();
+    // Null = the personnel card is not shown (no right to the pointage).
+    private IReadOnlyList<PersonAlert>? _people;
+    private DateTime _peopleAt;
+    private string? _peopleError;
 
     private sealed record Alert(string Css, string Title, string Detail, string? Href, string Action);
+
+    private string? PeopleHref
+        => Session.Can(Modules.RhNominatif, AppAction.Voir) ? "rh/calendrier"
+            : Session.Can(Modules.Rh, AppAction.Voir) ? "rh/absences" : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,8 +203,37 @@
         await Run(async () =>
         {
             _snap = await Queries.LoadAsync(Actor, Perm.View(Modules.VueEnsemble), from, to, null, null);
-            _alerts = await BuildAlertsAsync(_snap, from, to);
+            var rules = await Rules.AttentionAsync();
+            _alerts = await BuildAlertsAsync(_snap, from, to, rules.Machines);
+            await LoadPeopleAsync(rules.Personnel);
         });
+    }
+
+    // The personnel rules over the validated sheets, looking back from the
+    // last day of the period (today at the latest), in the actor's teams.
+    private async Task LoadPeopleAsync(PersonnelRules rules)
+    {
+        _peopleError = null;
+        if (!Session.Can(Perm.PointageVoir))
+        {
+            _people = null;
+            return;
+        }
+        var last = _period.Days(Now).Last;
+        _peopleAt = last > Attendance.Today ? Attendance.Today : last;
+        try
+        {
+            var days = rules.LookbackDays();
+            var sheets = days == 0
+                ? Array.Empty<AttendanceSheet>()
+                : await Attendance.ValidatedAsync(Actor, Perm.PointageVoir, _peopleAt.AddDays(-days + 1), _peopleAt);
+            _people = PersonnelAnalysis.Alerts(sheets, rules, _peopleAt);
+        }
+        catch (Exception ex) when (ex is not AccessDeniedException)
+        {
+            _people = Array.Empty<PersonAlert>();
+            _peopleError = "Pointages illisibles : " + ex.Message;
+        }
     }
 
     private string Subtitle()
@@ -171,7 +253,8 @@
         return _period.Kind == PeriodKind.Today ? query : query + $"&du={from:yyyy-MM-dd}&au={to.AddDays(-1):yyyy-MM-dd}";
     }
 
-    private async Task<List<Alert>> BuildAlertsAsync(PlantSnapshot snap, DateTime from, DateTime to)
+    // Every rule comes from Administration › Règles « À traiter » (MachineRules).
+    private async Task<List<Alert>> BuildAlertsAsync(PlantSnapshot snap, DateTime from, DateTime to, MachineRules rules)
     {
         var alerts = new List<Alert>();
         var packaging = Session.Can(Modules.Conditionnement, AppAction.Voir) ? "production/conditionnement" : null;
@@ -191,20 +274,25 @@
 
         // Disconnected machines: one line for all of them (the server PC
         // off stops them all at once).
-        var offline = snap.Machines.Where(m => m.State is { Connected: false }).ToList();
+        var offline = rules.Offline
+            ? snap.Machines.Where(m => m.State is { Connected: false } s
+                                       && (s.LastData is not { } last || (Now - last).TotalMinutes >= rules.OfflineMinutes)).ToList()
+            : new List<MachineRow>();
         if (offline.Count == 1)
             alerts.Add(new("off", $"{offline[0].Machine.Name} déconnectée", $"Conditionnement · dernière donnée {Fmt.Ago(offline[0].State!.LastData, Now)}", packaging, "Voir"));
         else if (offline.Count > 1)
             alerts.Add(new("off", $"{offline.Count} machines déconnectées",
                 $"{string.Join(", ", offline.Select(m => m.Machine.Name))} · dernière donnée {Fmt.Ago(offline.Max(m => m.State!.LastData), Now)}", packaging, "Voir"));
 
-        foreach (var m in snap.Machines.Where(m => m.State is { Connected: true }))
+        foreach (var m in snap.Machines.Where(m => rules.Stops && m.State is { Connected: true }))
         {
             if (!m.State!.Running)
             {
                 var product = m.State.Product ?? "production en cours";
                 if (ongoing.TryGetValue(m.Machine.Id, out var stop))
                 {
+                    if ((Now - stop.Start).TotalMinutes < rules.StopMinutes)
+                        continue;
                     var cause = stop.Qualification?.Cause?.Label;
                     alerts.Add(new("bad", $"{m.Machine.Name} à l'arrêt depuis {Fmt.Since(stop.Start, Now)}",
                         $"Depuis {stop.Start:HH:mm} · {cause ?? "cause à définir"} · {product}",
@@ -215,20 +303,28 @@
             }
         }
 
-        var lowTrs = snap.Machines.Where(m => m.Figures.HasProduction && m.Figures.TrsSeverity == KpiSeverity.Bad)
-            .OrderBy(m => m.Figures.Kpi.TrsPercent).ToList();
-        foreach (var m in lowTrs.Take(3))
+        // TRS too low: more than N points under the target, or (no N) in the
+        // dashboard's red band; judged once the machine made enough bags.
+        var lowTrs = rules.LowTrs
+            ? snap.Machines.Where(m => m.Figures.HasProduction && m.Figures.Kpi.TotalBags >= rules.TrsMinBags
+                                       && (rules.TrsPointsBelowTarget is { } points
+                                           ? m.Figures.Kpi.TrsPercent is { } trs && trs < m.Figures.TrsTarget - points
+                                           : m.Figures.TrsSeverity == KpiSeverity.Bad))
+                .OrderBy(m => m.Figures.Kpi.TrsPercent).ToList()
+            : new List<MachineRow>();
+        var below = rules.TrsPointsBelowTarget is { } p ? $"plus de {Fmt.Num(p)} points sous la cible" : "zone rouge du tableau de bord";
+        foreach (var m in lowTrs.Take(rules.TrsMaxListed))
             alerts.Add(new("bad", $"{m.Machine.Name} : TRS {Fmt.Pct(m.Figures.Kpi.TrsPercent)}",
-                $"Cible {Fmt.Num(m.Figures.TrsTarget)} % · {Sectors.Label(m.Machine.Sector)}", packaging, "Voir"));
-        if (lowTrs.Count > 3)
-            alerts.Add(new("bad", $"{lowTrs.Count - 3} autre(s) machine(s) loin de la cible TRS", "Conditionnement", packaging, "Voir"));
+                $"Cible {Fmt.Num(m.Figures.TrsTarget)} % ({below}) · {Sectors.Label(m.Machine.Sector)}", packaging, "Voir"));
+        if (lowTrs.Count > rules.TrsMaxListed)
+            alerts.Add(new("bad", $"{lowTrs.Count - rules.TrsMaxListed} autre(s) machine(s) loin de la cible TRS", "Conditionnement", packaging, "Voir"));
 
-        var pending = await Waste.PendingValidationCountAsync(Actor, from, to.AddDays(-1));
+        var pending = rules.WastePending ? await Waste.PendingValidationCountAsync(Actor, from, to.AddDays(-1)) : 0;
         if (pending > 0)
             alerts.Add(new("warn", $"{pending} saisie(s) de déchets à valider", "Saisies non validées de la période, dans votre périmètre",
                 "production/dechets/a-valider", "Valider"));
 
-        if (Session.Can(Modules.SaisieDechets, AppAction.Saisir))
+        if (rules.WasteReturned && Session.Can(Modules.SaisieDechets, AppAction.Saisir))
         {
             var returned = await Waste.ReturnedToAsync(Actor);
             if (returned.Count > 0)
@@ -236,7 +332,7 @@
                     returned[0].Kind == WasteKind.Emballage ? "production/dechets/emballage" : "production/dechets/produit", "Corriger"));
         }
 
-        if (Session.Can(Perm.DechetsProduit) && to <= Now)
+        if (rules.ProductWasteMissing && Session.Can(Perm.DechetsProduit) && to <= Now)
         {
             foreach (var s in snap.Sectors.Where(s => s.ProductWasteKg == 0 && s.Machines > 0))
                 alerts.Add(new("warn", $"Déchet produit non saisi : {Sectors.Label(s.Sector)}", "Saisie · aucune saisie sur la période",

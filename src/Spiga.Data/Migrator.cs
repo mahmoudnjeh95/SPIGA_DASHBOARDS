@@ -21,7 +21,7 @@ public sealed class SchemaUpdateRequiredException(string message) : Exception(me
 
 public sealed partial class Migrator(AppDb db)
 {
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
 
     [GeneratedRegex(@"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex GoSeparator();

@@ -20,7 +20,7 @@ namespace Spiga.Core.Staff;
 // with what changed, and an audit entry.
 public sealed class AttendanceService(
     IAttendanceStore store, IStaffStore staff, IPlantReferential plant, IAuditLog audit, TimeProvider clock, ClientInfo client,
-    OvertimeService overtime)
+    OvertimeService overtime, IPermutationStore permutations, RulesService rules)
 {
     public const int StepMinutes = 5;
 
@@ -194,12 +194,17 @@ public sealed class AttendanceService(
             foreach (var e in Members(employees, date, team).Where(e => sheet.Lines.All(l => l.EmployeeId != e.Id)))
                 sheet.Lines.Add(NewLine(sheet, e, e.PostingAt(date)!, renfort: false, elsewhere));
         }
+        var swaps = await PermutationsOnAsync(date);
+        if (sheet.Status == SheetStatus.Brouillon)
+            ApplyPermutations(sheet, swaps, employees.ToDictionary(e => e.Id));
+        else
+            MarkPermutations(sheet, swaps);
         if (sheet.Status == SheetStatus.Brouillon)
         {
             // A member forbidden overtime who already works another poste
             // that day was moved there: not expected on his own poste.
             var book = await overtime.BookAsync(date);
-            foreach (var l in sheet.Lines.Where(l => l.Status == LineStatus.AConfirmer && !l.IsRenfort))
+            foreach (var l in sheet.Lines.Where(l => l.Status == LineStatus.AConfirmer && !l.IsRenfort && l.PermutationId == null))
                 if (book.State(l.EmployeeId, date, sheet).Restricted && book.WorksElsewhere(l.EmployeeId, sheet))
                 {
                     l.Status = LineStatus.Ailleurs;
@@ -401,7 +406,8 @@ public sealed class AttendanceService(
                 case LineStatus.Absent:
                     if (l.Absence == null)
                         list.Add((l.EmployeeId, $"{l.FullName} : choisissez le code d'absence (A, M, AT ou C)."));
-                    if (l.IsRenfort)
+                    // A permuted renfort who did not come is absent here: his own poste shows him permuted.
+                    if (l.IsRenfort && l.PermutationId == null)
                         list.Add((l.EmployeeId, $"{l.FullName} est un renfort : s'il n'est pas venu, retirez-le de la feuille."));
                     break;
             }
@@ -488,6 +494,11 @@ public sealed class AttendanceService(
             sheet.ValidatedAt = Now;
         }
         sheet.Lines = await NormalizeAsync(sheet, draft.Lines);
+        var swaps = await PermutationsOnAsync(sheet.ProductionDate);
+        MarkPermutations(sheet, swaps);
+        if (stored != null)
+            MarkPermutations(stored, swaps);
+        CheckPermutations(sheet, swaps, sheet.Status == SheetStatus.Validee);
         await CheckRowsAsync(actor, stored ?? draft, stored, sheet);
         await TransferredAwayAsync(sheet);
         await CheckAsync(sheet, sheet.Status == SheetStatus.Validee);
@@ -523,7 +534,9 @@ public sealed class AttendanceService(
             Workstation = client.Workstation,
         });
         await SyncTransfersAsync(actor, sheet, stored);
-        return (await store.GetAsync(sheet.Id))!;
+        var saved = (await store.GetAsync(sheet.Id))!;
+        MarkPermutations(saved, swaps);
+        return saved;
     }
 
     // ---------- transfers ----------
@@ -642,6 +655,296 @@ public sealed class AttendanceService(
             foreach (var l in s.Lines.Where(l => l.Status == LineStatus.Absent && l.Absence == AbsenceCode.AT))
                 result[l.EmployeeId] = s;
         return result;
+    }
+
+    // ---------- permutations ----------
+
+    // A member of the sheet's team swaps postes, for this production day,
+    // with someone of another team working another poste that day: each one
+    // goes to the other's poste. Recorded at once (not with the sheet); the
+    // drafts already saved of both postes follow, the others when they open.
+    public sealed record PermutationCandidate(Employee Employee, EmployeePosting Posting, int ShiftId, string? Refusal);
+
+    public Task<PermutationRule> PermutationRuleAsync() => rules.PermutationAsync();
+
+    private async Task<List<AttendancePermutation>> PermutationsOnAsync(DateTime date)
+        => (await permutations.ListAsync(date.Date, date.Date)).Where(p => p.IsActive).ToList();
+
+    // The permutations in force on this sheet's poste.
+    public async Task<IReadOnlyList<AttendancePermutation>> PermutationsAsync(Actor actor, AttendanceSheet sheet)
+    {
+        actor.Demand(Perm.PointageVoir);
+        return (await PermutationsOnAsync(sheet.ProductionDate)).Where(p => p.Touches(sheet.ProductionDate, sheet.ShiftId, sheet.Team)).ToList();
+    }
+
+    // Why this row cannot be permuted (null = it can), and the people it can
+    // be permuted with, those refused greyed with the reason.
+    public async Task<(string? Refusal, IReadOnlyList<PermutationCandidate> Candidates)> PermutationCandidatesAsync(
+        Actor actor, AttendanceSheet sheet, int employeeId)
+    {
+        actor.Demand(Perm.PointageVoir);
+        var ctx = await PermutationContextAsync(sheet.ProductionDate);
+        var line = sheet.Lines.FirstOrDefault(l => l.EmployeeId == employeeId);
+        var refusal = await LineRefusalAsync(actor, sheet, line, ctx.Swaps);
+        if (refusal != null || line == null)
+            return (refusal, Array.Empty<PermutationCandidate>());
+        var list = new List<PermutationCandidate>();
+        foreach (var e in ctx.Employees.Values.Where(e => e.ActiveOn(sheet.ProductionDate)))
+        {
+            if (e.PostingAt(sheet.ProductionDate) is not { } posting || string.Equals(posting.Team, sheet.Team, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var shift = PosteOfTeam(sheet.ProductionDate, posting.Team, sheet.ShiftId);
+            if (shift == 0)
+                continue;
+            list.Add(new PermutationCandidate(e, posting, shift, CandidateRefusal(sheet, line, e, posting, shift, ctx)));
+        }
+        return (null, list
+            .OrderBy(c => c.Refusal != null)
+            .ThenBy(c => c.Posting.Team, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(c => c.Employee.FullName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList());
+    }
+
+    public async Task<AttendancePermutation> PermuteAsync(Actor actor, AttendanceSheet sheet, int employeeA, int employeeB)
+    {
+        actor.Demand(Perm.PointageSaisir);
+        if (!sheet.IsNew && (await store.GetAsync(sheet.Id))?.Version != sheet.Version)
+            throw Changed();
+        var date = sheet.ProductionDate.Date;
+        var ctx = await PermutationContextAsync(date);
+        var line = sheet.Lines.FirstOrDefault(l => l.EmployeeId == employeeA);
+        if (await LineRefusalAsync(actor, sheet, line, ctx.Swaps) is { } refusal)
+            throw new RuleViolationException(refusal);
+        if (!ctx.Employees.TryGetValue(employeeB, out var b) || !b.ActiveOn(date) || b.PostingAt(date) is not { } posting
+            || string.Equals(posting.Team, sheet.Team, StringComparison.OrdinalIgnoreCase))
+            throw new RuleViolationException("Choisissez une personne d'une autre équipe, employée ce jour-là.");
+        var shift = PosteOfTeam(date, posting.Team, sheet.ShiftId);
+        if (shift == 0)
+            throw new RuleViolationException($"{posting.Team} ne travaille pas un autre poste le {date:dd/MM} : pas de permutation possible.");
+        if (CandidateRefusal(sheet, line!, b, posting, shift, ctx) is { } why)
+            throw new RuleViolationException($"{b.FullName} : {why}.");
+
+        var p = new AttendancePermutation
+        {
+            ProductionDate = date,
+            EmployeeA = line!.EmployeeId, NameA = line.FullName, TeamA = sheet.Team, ShiftA = sheet.ShiftId,
+            EmployeeB = b.Id, NameB = b.FullName, TeamB = posting.Team, ShiftB = shift,
+            CreatedBy = actor.Login, CreatedAt = Now,
+        };
+        p.Id = await permutations.InsertAsync(p);
+        var swaps = ctx.Swaps.Append(p).ToList();
+        foreach (var (s, team) in new[] { (p.ShiftA, p.TeamA), (p.ShiftB, p.TeamB) })
+            await FollowAsync(actor, date, s, team, copy => ApplyPermutations(copy, swaps, ctx.Employees), AuditActions.Permuted, p.Describe());
+        await audit.WriteAsync(new AuditEntry
+        {
+            At = Now, UserLogin = actor.Login, Module = Modules.Pointage, Action = AuditActions.Permuted,
+            Target = $"Pointage du {date:dd/MM/yyyy}", NewValue = p.Describe(), Workstation = client.Workstation,
+        });
+        return p;
+    }
+
+    public async Task CancelPermutationAsync(Actor actor, long id)
+    {
+        actor.Demand(Perm.PointageSaisir);
+        var p = await permutations.GetAsync(id) ?? throw new RuleViolationException("Permutation introuvable.");
+        if (!p.IsActive)
+            return;
+        if (!actor.AllowsTeam(Perm.PointageSaisir, p.TeamA) && !actor.AllowsTeam(Perm.PointageSaisir, p.TeamB))
+            throw new AccessDeniedException("Cette permutation concerne des équipes hors de votre périmètre.");
+        if (!InWindow(actor, p.ProductionDate))
+            throw new AccessDeniedException("Vous pointez les postes d'hier et d'aujourd'hui seulement (droit « Pointer et corriger avant hier » pour les autres).");
+        foreach (var (s, team) in new[] { (p.ShiftA, p.TeamA), (p.ShiftB, p.TeamB) })
+            if ((await store.FindAsync(p.ProductionDate, s, team))?.Status == SheetStatus.Validee)
+                throw new RuleViolationException(
+                    $"La feuille {Shifts.Label(s)} · {team} est déjà validée : la permutation ne s'annule plus (corrigez les feuilles avec un motif).");
+        if (!await permutations.CancelAsync(id, actor.Login, Now))
+            return;
+        foreach (var (s, team) in new[] { (p.ShiftA, p.TeamA), (p.ShiftB, p.TeamB) })
+            await FollowAsync(actor, p.ProductionDate, s, team, copy => UndoPermutation(copy, p), AuditActions.PermutationCancelled, p.Describe());
+        await audit.WriteAsync(new AuditEntry
+        {
+            At = Now, UserLogin = actor.Login, Module = Modules.Pointage, Action = AuditActions.PermutationCancelled,
+            Target = $"Pointage du {p.ProductionDate:dd/MM/yyyy}", OldValue = p.Describe(), Workstation = client.Workstation,
+        });
+    }
+
+    private sealed record PermutationContext(
+        List<AttendancePermutation> Swaps, IReadOnlyList<AttendanceSheet> Sheets, Dictionary<int, Employee> Employees, PermutationRule Rule);
+
+    private async Task<PermutationContext> PermutationContextAsync(DateTime date)
+        => new(await PermutationsOnAsync(date), await store.ListAsync(date.Date.AddDays(-1), date.Date.AddDays(1)),
+            (await staff.ListEmployeesAsync()).ToDictionary(e => e.Id), await rules.PermutationAsync());
+
+    // The other poste the team works that day, 0 = none.
+    private int PosteOfTeam(DateTime date, string team, int notShift)
+        => Shifts.All.FirstOrDefault(s => s != notShift && string.Equals(plant.TeamOnShift(date.Date, s), team, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<string?> LineRefusalAsync(Actor actor, AttendanceSheet sheet, AttendanceLine? line, IEnumerable<AttendancePermutation> swaps)
+    {
+        if (!CanEnter(actor, sheet))
+            return "La permutation se fait sur une feuille en brouillon de votre équipe, d'hier ou d'aujourd'hui.";
+        if (line == null)
+            return "Cette personne n'est pas sur la feuille.";
+        if (line.IsRenfort)
+            return $"{line.FullName} est un renfort : seuls les membres de l'équipe se permutent.";
+        if (swaps.Any(p => p.Involves(line.EmployeeId)))
+            return $"{line.FullName} est déjà permuté ce jour-là : annulez d'abord cette permutation.";
+        if (line.Status == LineStatus.Ailleurs)
+            return $"{line.FullName} est pointé dans une autre équipe.";
+        var rows = await RowsAsync(actor, sheet);
+        if (!rows.Allows(line))
+            return $"{line.FullName} travaille sur {rows.Where(line)} : hors de vos plateformes.";
+        return null;
+    }
+
+    private static string? CandidateRefusal(AttendanceSheet sheet, AttendanceLine line, Employee b, EmployeePosting posting, int shift,
+        PermutationContext ctx)
+    {
+        var date = sheet.ProductionDate.Date;
+        if (ctx.Rule.SameFunction && posting.Function != line.Function)
+            return $"autre fonction ({StaffFunctions.Label(posting.Function)})";
+        if (ctx.Swaps.Any(p => p.Involves(b.Id)))
+            return "déjà permuté ce jour-là";
+        var home = ctx.Sheets.FirstOrDefault(s => s.ProductionDate.Date == date && s.ShiftId == shift
+                                                  && string.Equals(s.Team, posting.Team, StringComparison.OrdinalIgnoreCase));
+        if (home?.Status == SheetStatus.Validee)
+            return $"la feuille de son poste ({Shifts.Label(shift)}) est déjà validée";
+        if (home?.Lines.FirstOrDefault(l => l.EmployeeId == b.Id) is { Status: LineStatus.Present })
+            return $"déjà pointé présent à son poste ({Shifts.Label(shift)})";
+        var otherStart = Shifts.Start(date, shift);
+        var otherEnd = otherStart.AddHours(8);
+        foreach (var s in ctx.Sheets.Where(s => !SameSheet(s, sheet)))
+        {
+            if (s != home && s.Lines.Any(l => l.EmployeeId == b.Id && l.Status == LineStatus.Present && l.EntryAt < sheet.End && l.ExitAt > sheet.Start))
+                return $"déjà pointé {s.Team} à ces heures";
+            if (s.Lines.Any(l => l.EmployeeId == line.EmployeeId && l.Status == LineStatus.Present && l.EntryAt < otherEnd && l.ExitAt > otherStart))
+                return $"{line.FullName} est déjà pointé {s.Team} sur le poste {Shifts.Label(shift)}";
+        }
+        return null;
+    }
+
+    // Marks the rows of the permutations of the sheet's poste (not stored).
+    private static void MarkPermutations(AttendanceSheet sheet, IEnumerable<AttendancePermutation> swaps)
+    {
+        foreach (var l in sheet.Lines)
+        {
+            l.PermutationId = null;
+            l.PermutedWith = null;
+        }
+        foreach (var p in swaps.Where(p => p.ProductionDate.Date == sheet.ProductionDate.Date))
+        {
+            if (p.On(sheet.ShiftId, sheet.Team) is not { } s)
+                continue;
+            foreach (var l in sheet.Lines)
+                if (l.EmployeeId == s.Out && !l.IsRenfort || l.EmployeeId == s.In && l.IsRenfort)
+                {
+                    l.PermutationId = p.Id;
+                    l.PermutedWith = l.EmployeeId == s.Out ? s.InName : s.OutName;
+                }
+        }
+    }
+
+    // A draft follows the permutations of its poste: who left is "ailleurs",
+    // who came is a renfort row at the poste's hours, on the post of the one
+    // he replaces. Returns what changed (the revision).
+    private static List<string> ApplyPermutations(AttendanceSheet sheet, IEnumerable<AttendancePermutation> swaps, IReadOnlyDictionary<int, Employee> employees)
+    {
+        var changes = new List<string>();
+        var list = swaps.ToList();
+        foreach (var p in list.Where(p => p.ProductionDate.Date == sheet.ProductionDate.Date))
+        {
+            if (p.On(sheet.ShiftId, sheet.Team) is not { } s)
+                continue;
+            var gone = sheet.Lines.FirstOrDefault(l => l.EmployeeId == s.Out && !l.IsRenfort);
+            if (gone != null && gone.Status != LineStatus.Ailleurs)
+            {
+                var (toShift, toTeam) = p.PosteOf(s.Out);
+                gone.Status = LineStatus.Ailleurs;
+                gone.Absence = null;
+                gone.EntryAt = gone.ExitAt = null;
+                ClearActingOf(gone);
+                foreach (var cover in sheet.Lines.Where(l => l.ReplacesEmployeeId == s.Out))
+                    ClearActingOf(cover);
+                changes.Add($"{gone.FullName} : permuté avec {s.InName} → poste {Shifts.Label(toShift)} · {toTeam}");
+            }
+            if (sheet.Lines.All(l => l.EmployeeId != s.In) && employees.TryGetValue(s.In, out var e) && e.PostingAt(sheet.ProductionDate) is { } posting)
+            {
+                var came = NewLine(sheet, e, posting, renfort: true, new());
+                if (gone != null && posting.Function == gone.Function)
+                {
+                    came.MachineId = gone.MachineId ?? came.MachineId;
+                    came.LineId = gone.LineId ?? came.LineId;
+                }
+                sheet.Lines.Add(came);
+                changes.Add($"{came.FullName} (renfort {came.HomeTeam}) : permuté avec {s.OutName}, à confirmer");
+            }
+        }
+        sheet.Lines = Order(sheet.Lines);
+        MarkPermutations(sheet, list);
+        return changes;
+    }
+
+    private static List<string> UndoPermutation(AttendanceSheet sheet, AttendancePermutation p)
+    {
+        var changes = new List<string>();
+        if (p.On(sheet.ShiftId, sheet.Team) is not { } s)
+            return changes;
+        if (sheet.Lines.FirstOrDefault(l => l.EmployeeId == s.Out && !l.IsRenfort) is { Status: LineStatus.Ailleurs } gone)
+        {
+            gone.Status = LineStatus.AConfirmer;
+            gone.EntryAt = sheet.Start;
+            gone.ExitAt = sheet.End;
+            changes.Add($"{gone.FullName} : permutation avec {s.InName} annulée → de retour sur son poste, à confirmer");
+        }
+        if (sheet.Lines.FirstOrDefault(l => l.EmployeeId == s.In && l.IsRenfort) is { } came)
+        {
+            sheet.Lines.Remove(came);
+            foreach (var cover in sheet.Lines.Where(l => l.ReplacesEmployeeId == s.In))
+                ClearActingOf(cover);
+            changes.Add($"{came.FullName} : permutation avec {s.OutName} annulée → retiré de la feuille");
+        }
+        return changes;
+    }
+
+    // Who left must stay "ailleurs"; who came must be on the sheet to validate it.
+    private static void CheckPermutations(AttendanceSheet sheet, IEnumerable<AttendancePermutation> swaps, bool validating)
+    {
+        foreach (var p in swaps.Where(p => p.ProductionDate.Date == sheet.ProductionDate.Date))
+        {
+            if (p.On(sheet.ShiftId, sheet.Team) is not { } s)
+                continue;
+            if (sheet.Lines.FirstOrDefault(l => l.EmployeeId == s.Out && !l.IsRenfort) is { } gone && gone.Status != LineStatus.Ailleurs)
+                throw new RuleViolationException($"{gone.FullName} est permuté avec {s.InName} ce jour-là : annulez la permutation pour le pointer sur ce poste.");
+            if (validating && sheet.Lines.All(l => l.EmployeeId != s.In))
+                throw new RuleViolationException($"{s.InName} est permuté sur ce poste à la place de {s.OutName} : il doit figurer sur la feuille, présent ou absent.");
+        }
+    }
+
+    // A stored draft of that poste changed by `change`, with a revision; a
+    // validated sheet or one not saved yet is left alone (it follows when opened).
+    private async Task FollowAsync(Actor actor, DateTime date, int shiftId, string team, Func<AttendanceSheet, List<string>> change, string action, string note)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var stored = await store.FindAsync(date.Date, shiftId, team);
+            if (stored == null || stored.Status != SheetStatus.Brouillon)
+                return;
+            var copy = stored.Clone();
+            var changes = change(copy);
+            if (changes.Count == 0)
+                return;
+            copy.Version = stored.Version + 1;
+            copy.UpdatedBy = actor.Login;
+            copy.UpdatedAt = Now;
+            var revision = new AttendanceRevision
+            {
+                SheetId = stored.Id, Version = copy.Version, At = Now, UserLogin = actor.Login, Action = action,
+                Changes = string.Join("\n", changes), Note = note,
+            };
+            if (await store.UpdateAsync(copy, stored.Version, revision))
+                return;
+        }
+        throw Changed();
     }
 
     // ---------- internals ----------
@@ -808,7 +1111,7 @@ public sealed class AttendanceService(
                         $"{l.FullName} est déjà pointé {clash.s.Team}, poste {Shifts.Label(clash.s.ShiftId)} du {clash.s.ProductionDate:dd/MM}, " +
                         $"de {clash.x.EntryAt:HH:mm} à {clash.x.ExitAt:HH:mm} : une personne ne peut pas être à deux endroits à la fois.");
             }
-            else if (l.Status == LineStatus.Ailleurs)
+            else if (l.Status == LineStatus.Ailleurs && l.PermutationId == null)
             {
                 // Over these hours, or moved to another poste of the same day.
                 var away = others.Any(s => s.Lines.Any(x => x.EmployeeId == l.EmployeeId && x.Status == LineStatus.Present

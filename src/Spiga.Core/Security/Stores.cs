@@ -39,4 +39,6 @@ public static class SettingKeys
 {
     public const string SecurityPolicy = "security.policy";
     public const string OvertimeRule = "pointage.heures-sup";
+    public const string AttentionRules = "vue-ensemble.a-traiter";
+    public const string PermutationRule = "pointage.permutation";
 }

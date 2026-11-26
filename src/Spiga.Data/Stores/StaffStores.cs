@@ -258,3 +258,46 @@ public sealed class OvertimeStore(AppDb db) : IOvertimeStore
         return await c.ExecuteAsync("UPDATE OvertimeDecisions SET LiftedBy = @by, LiftedAt = @at WHERE Id = @id AND LiftedAt IS NULL", new { id, by, at }) == 1;
     }
 }
+
+public sealed class PermutationStore(AppDb db) : IPermutationStore
+{
+    private const string Columns = "Id, ProductionDate, EmployeeA, NameA, TeamA, ShiftA, EmployeeB, NameB, TeamB, ShiftB, CreatedBy, CreatedAt, CancelledBy, CancelledAt";
+
+    public async Task<IReadOnlyList<AttendancePermutation>> ListAsync(DateTime fromDate, DateTime toDate)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return (await c.QueryAsync<AttendancePermutation>(
+            $"SELECT {Columns} FROM AttendancePermutations WHERE ProductionDate >= @from AND ProductionDate <= @to",
+            new { from = fromDate.Date, to = toDate.Date })).ToList();
+    }
+
+    public async Task<AttendancePermutation?> GetAsync(long id)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return await c.QuerySingleOrDefaultAsync<AttendancePermutation>($"SELECT {Columns} FROM AttendancePermutations WHERE Id = @id", new { id });
+    }
+
+    public async Task<long> InsertAsync(AttendancePermutation p)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return await c.ExecuteScalarAsync<long>(
+            @"INSERT INTO AttendancePermutations (ProductionDate, EmployeeA, NameA, TeamA, ShiftA, EmployeeB, NameB, TeamB, ShiftB, CreatedBy, CreatedAt)
+              VALUES (@ProductionDate, @EmployeeA, @NameA, @TeamA, @ShiftA, @EmployeeB, @NameB, @TeamB, @ShiftB, @CreatedBy, @CreatedAt)" + db.ReturnId,
+            new
+            {
+                ProductionDate = p.ProductionDate.Date, p.EmployeeA, p.NameA, p.TeamA, p.ShiftA,
+                p.EmployeeB, p.NameB, p.TeamB, p.ShiftB, p.CreatedBy, p.CreatedAt,
+            });
+    }
+
+    public async Task<bool> CancelAsync(long id, string by, DateTime at)
+    {
+        await OffUiThread.Switch();
+        using var c = await db.OpenAsync();
+        return await c.ExecuteAsync(
+            "UPDATE AttendancePermutations SET CancelledBy = @by, CancelledAt = @at WHERE Id = @id AND CancelledAt IS NULL", new { id, by, at }) == 1;
+    }
+}

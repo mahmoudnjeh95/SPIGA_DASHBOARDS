@@ -73,6 +73,12 @@ public sealed class AttendanceLine
     public int? ActingLineId { get; set; }
     public DateTime? ActingFrom { get; set; }
 
+    // Not stored: set from the permutations of the day when the sheet is
+    // read. The row of someone who swapped postes with PermutedWith (his own
+    // row "ailleurs", or the renfort row of the one who came).
+    public long? PermutationId { get; set; }
+    public string? PermutedWith { get; set; }
+
     public bool IsActing => ReplacesEmployeeId != null;
 
     // Holds a higher post than his own (the polyvalence record).
@@ -85,7 +91,7 @@ public sealed class AttendanceLine
         LineStatus.Present => $"présent {EntryAt:HH:mm}–{ExitAt:HH:mm}"
                               + (IsActing ? $", remplace sur {ActingMachineId ?? "ligne"} dès {ActingFrom:HH:mm}" : ""),
         LineStatus.Absent => $"{Absence} ({(Absence is { } a ? AbsenceCodes.Label(a) : "")})",
-        LineStatus.Ailleurs => "en renfort dans une autre équipe",
+        LineStatus.Ailleurs => PermutedWith != null ? $"permuté avec {PermutedWith}" : "en renfort dans une autre équipe",
         _ => "à confirmer",
     };
 }

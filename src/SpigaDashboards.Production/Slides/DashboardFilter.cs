@@ -97,12 +97,21 @@ public static class PeriodRanges
 {
     private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr-FR");
 
-    // [From, To) of a period-layout view. PreviousShift / Day are only used
-    // here as the fallback when no poste matches the filters (whole day).
+    // A production day runs from 06:00 (first poste) to 06:00 the next
+    // morning: the Nuit poste 22h-06h belongs to the day it started.
+    public const int DayStartHour = 6;
+
+    // The production day of a moment (before 06:00: the day before).
+    public static DateTime ProductionDay(DateTime time) => time.Hour < DayStartHour ? time.Date.AddDays(-1) : time.Date;
+
+    // [From, To) of a period-layout view, in production days: from 06:00 of
+    // the first day to 06:00 after the last one. PreviousShift / Day are only
+    // used here as the fallback when no poste matches the filters (whole day).
+    // The hour buckets these views read are cut there exactly.
     public static (DateTime From, DateTime To) Get(DashboardPeriod period, DateTime now, DateTime? customFrom = null, DateTime? customTo = null)
     {
-        var today = now.Date;
-        return period switch
+        var today = ProductionDay(now);
+        var (first, end) = period switch
         {
             DashboardPeriod.Yesterday => (today.AddDays(-1), today),
             DashboardPeriod.Week => (StartOfWeek(today), today.AddDays(1)),
@@ -111,6 +120,7 @@ public static class PeriodRanges
             DashboardPeriod.Custom => CustomRange(today, customFrom, customTo),
             _ => (today, today.AddDays(1)),
         };
+        return (first.AddHours(DayStartHour), end.AddHours(DayStartHour));
     }
 
     private static (DateTime, DateTime) CustomRange(DateTime today, DateTime? from, DateTime? to)
