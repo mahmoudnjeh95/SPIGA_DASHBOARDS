@@ -32,8 +32,8 @@ public class DashboardLinesTests
         Assert.Equal(new[]
         {
             "etat",
-            "ligne:CC1", "machine:CC01", "machine:CC02",
-            "ligne:CC2", "machine:CC03", "machine:CC04",
+            "ligne:CC1", "machine:CC03", "machine:CC04",
+            "ligne:CC2", "machine:CC01", "machine:CC02",
             "ligne:PC1", "machine:RIC1",
             "ligne:PC2", "machine:PC01", "machine:PC02", "machine:PC03",
             "ligne:PL1+2", "machine:RIC2", "machine:PL03", "machine:PL02", "machine:PL01",
@@ -54,7 +54,7 @@ public class DashboardLinesTests
         Assert.DoesNotContain(deck, s => s.Key.Contains("RIC B", StringComparison.OrdinalIgnoreCase));
 
         // Another line chosen: PC1 is not shown at all.
-        Assert.DoesNotContain(WebDeck.Default(Plant, Only("CC01", "CC02"), Lines), s => s.Key == "ligne:PC1");
+        Assert.DoesNotContain(WebDeck.Default(Plant, Only("CC03", "CC04"), Lines), s => s.Key == "ligne:PC1");
 
         // A line with only part of its machines kept leaves its planned ones out.
         var lines = new List<DashboardLine> { new() { Name = "X", Sector = "Pate courte", MachineIds = { "PC01", "PC02" }, PlannedMachines = { "NEW" } } };
@@ -85,7 +85,7 @@ public class DashboardLinesTests
         Assert.Equal("etat", WebDeck.Arrange(deck, older)[0].Key);
 
         // Filtered to one line: only its machines.
-        Assert.Equal(new[] { "CC01", "CC02" }, Assert.IsType<StatusSlideDescriptor>(WebDeck.Default(Plant, Only("CC01", "CC02"), Lines)[0]).MachineIds);
+        Assert.Equal(new[] { "CC03", "CC04" }, Assert.IsType<StatusSlideDescriptor>(WebDeck.Default(Plant, Only("CC03", "CC04"), Lines)[0]).MachineIds);
     }
 
     [Fact]
@@ -97,8 +97,8 @@ public class DashboardLinesTests
 
         string Name(string id) => Plant.Single(m => m.MachineId == id).MachineName;
         Assert.Equal("Machine - RIC A PC (Ligne PC1)", WebDeck.Label(new MachineSlideDescriptor("Pate courte", "RIC1"), Name, Lines));
-        Assert.Equal("Ligne CC2 - Vue d'ensemble", WebDeck.Label(new LineSlideDescriptor("CC2", new[] { "CC03" }, Array.Empty<string>()), Name, Lines));
-        Assert.Equal("Machine - STV C CC2 (Ligne CC1)", WebDeck.Label(new MachineSlideDescriptor("Couscous", "CC01"), Name, Lines));
+        Assert.Equal("Ligne CC2 - Vue d'ensemble", WebDeck.Label(new LineSlideDescriptor("CC2", new[] { "CC01" }, Array.Empty<string>()), Name, Lines));
+        Assert.Equal("Machine - STV C CC2 (Ligne CC2)", WebDeck.Label(new MachineSlideDescriptor("Couscous", "CC01"), Name, Lines));
         Assert.Equal("Synthèse - Ligne PL1+2", WebDeck.Label(new LineSynthesisSlideDescriptor("PL1+2", new[] { "RIC2" }, Array.Empty<string>()), Name, Lines));
 
         // One colour per line, none twice among the five.
@@ -148,8 +148,8 @@ public class DashboardLinesTests
     [Fact]
     public void A_line_chosen_reads_as_its_name_on_the_slides()
     {
-        var filter = new DashboardFilter { MachineIds = new[] { "CC01", "CC02" }, MachineNames = new[] { "STV C CC2", "STV D CC2" }, ScopeLabel = "Ligne CC1", ShiftId = 1 };
+        var filter = new DashboardFilter { MachineIds = new[] { "CC03", "CC04" }, MachineNames = new[] { "RICC A CC1", "RICC B CC1" }, ScopeLabel = "Ligne CC1", ShiftId = 1 };
         Assert.Equal("Ligne CC1 · Poste Matin", filter.Describe());
-        Assert.Equal("STV C CC2", (filter with { ScopeLabel = null, MachineIds = new[] { "CC01" }, MachineNames = new[] { "STV C CC2" }, ShiftId = null }).Describe());
+        Assert.Equal("RICC A CC1", (filter with { ScopeLabel = null, MachineIds = new[] { "CC03" }, MachineNames = new[] { "RICC A CC1" }, ShiftId = null }).Describe());
     }
 }
