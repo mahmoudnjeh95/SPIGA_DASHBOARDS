@@ -178,9 +178,10 @@ public sealed partial class DashboardDeckService
             var total = PackCell.Of(machineLots, band);
             rows.Add(new PackRow(m.MachineName, false, columns.Select(t => PackCell.Of(machineLots.Where(l => teams.TeamOf(l) == t), band)).ToList(), total));
             var h = live[m.MachineId];
-            tiles.Add(new LineTile(m.MachineName, h.State, h.StateText, h.Running, h.Stop, total, band.Target, false));
+            tiles.Add(new LineTile(m.MachineName, h.State, h.StateText, h.Running, h.Stop, total, band.Target, false,
+                KpiCalculator.WeightDeviationSeverity(total.Kpis.WeightDeviationPercent, settings.WeightBandFor(m.MachineId))));
         }
-        tiles.AddRange(planned.Select(name => new LineTile(name, "is-off", "Non connectée", false, null, null, null, true)));
+        tiles.AddRange(planned.Select(name => new LineTile(name, "is-off", "Non connectée", false, null, null, null, true, KpiSeverity.Unknown)));
         var byTeam = lots.ToLookup(teams.TeamOf);
         var teamTotals = columns.Select(t => PackCell.Of(byTeam[t], groupBand)).ToList();
         var overall = PackCell.Of(lots, groupBand);
@@ -361,7 +362,7 @@ public sealed record PackRow(string Label, bool IsTotal, IReadOnlyList<PackCell>
 // A machine of a line overview: its state now and its figures over the
 // period; Planned = not connected yet (no figures).
 public sealed record LineTile(string Name, string State, string StateText, bool Running, OngoingStop? Stop, PackCell? Figures, double? TrsTarget,
-    bool Planned);
+    bool Planned, KpiSeverity WeightSeverity);
 
 public sealed record LineSlide(string Title, string Sector, string Color, string PeriodLabel, string FilterLabel, PackCell Overall, double TrsTarget,
     KpiSeverity WeightSeverity, int Running, int Stopped, IReadOnlyList<LineTile> Tiles, IReadOnlyList<string> Teams, IReadOnlyList<PackRow> Rows,
