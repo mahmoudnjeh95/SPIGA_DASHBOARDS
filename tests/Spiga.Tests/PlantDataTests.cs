@@ -51,13 +51,13 @@ public sealed class LiveDb : IDisposable
 
     public string Hash()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteFiles.Release(_path);
         return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_path)));
     }
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteFiles.Release(_path);
         try { File.Delete(_path); } catch (IOException) { }
     }
 }

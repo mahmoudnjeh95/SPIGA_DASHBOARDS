@@ -63,7 +63,7 @@ public sealed class SnapshotDb : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteFiles.Release(_path);
         try { File.Delete(_path); } catch (IOException) { }
     }
 }
