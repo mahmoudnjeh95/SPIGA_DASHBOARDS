@@ -96,7 +96,7 @@ jobs:
     # merge should wait for approval.
     environment:
       name: production
-      url: ${{ vars.SPIGA_HEALTH_URL }}
+      url: https://192.168.2.251/
     steps:
       # Only the deploy script; the build itself is the artifact from the job above.
       - uses: actions/checkout@v4
@@ -122,4 +122,5 @@ jobs:
           -PackagePath "${{ runner.temp }}\spiga-web"
           -SitePath "${{ vars.SPIGA_SITE_PATH || 'C:\inetpub\SpigaWeb' }}"
           -AppPool "${{ vars.SPIGA_APP_POOL || 'SpigaWeb' }}"
-          -HealthUrl "${{ vars.SPIGA_HEALTH_URL || 'http://localhost/' }}"
+          -HealthUrl "${{ vars.SPIGA_HEALTH_URL || 'https://localhost/' }}"
+          -CertThumbprint "${{ vars.SPIGA_CERT_THUMBPRINT || 'F9DAEDE4DB3B0180BEFA85FC65717297DB8EC551' }}"

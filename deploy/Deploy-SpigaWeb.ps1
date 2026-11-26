@@ -29,6 +29,9 @@ param(
     [Parameter(Mandatory)] [string] $SitePath,
     [Parameter(Mandatory)] [string] $AppPool,
     [Parameter(Mandatory)] [string] $HealthUrl,
+    # The site's HTTPS certificate is self-signed: the health check accepts exactly
+    # this certificate (LocalMachine\My) and nothing else, without trusting it machine-wide.
+    [string] $CertThumbprint = '',
     [int] $KeepReleases = 5,
     [int] $HealthTimeoutSeconds = 90
 )
@@ -59,6 +62,27 @@ function Set-Offline([bool] $offline) {
     } elseif (Test-Path $marker) {
         Remove-Item $marker -Force
     }
+}
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+if ($CertThumbprint) {
+    if (-not ('SpigaCertPin' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System.Net;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
+public static class SpigaCertPin {
+    public static string Thumbprint;
+    public static void Enable() {
+        ServicePointManager.ServerCertificateValidationCallback =
+            (sender, cert, chain, errors) => errors == SslPolicyErrors.None ||
+                (cert != null && string.Equals(new X509Certificate2(cert).Thumbprint, Thumbprint, System.StringComparison.OrdinalIgnoreCase));
+    }
+}
+'@
+    }
+    [SpigaCertPin]::Thumbprint = $CertThumbprint.Replace(' ', '')
+    [SpigaCertPin]::Enable()
 }
 
 function Test-Health {
@@ -122,7 +146,7 @@ try {
     Restart-Pool
 
     Write-Step "Health check $HealthUrl"
-    if (-not (Test-Health)) { throw "Health check failed after $HealthTimeoutSeconds s" }
+    if (-not (Test-Health)) { throw "Health check failed after $HealthTimeoutSeconds s (if the HTTPS certificate was renewed, update SPIGA_CERT_THUMBPRINT)" }
     Write-Step 'Deployed'
 }
 catch {
