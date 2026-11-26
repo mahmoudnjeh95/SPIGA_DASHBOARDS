@@ -37,31 +37,59 @@
 <div class="dk-mtiles" style="--cols:@Math.Max(1, Slide.Tiles.Count)">
     @foreach (var t in Slide.Tiles)
     {
+        @* Photo beside the figures when the tile is wide enough, above them otherwise (spiga.css: .dk-mbody). *@
         <section class="card dk-mtile @(t.Planned ? "planned" : "")">
-            <RunStateArt State="@t.State" Label="@t.StateText" />
-            <b>@t.Name</b>
-            @if (t.Planned)
-            {
-                <span class="chip">En préparation</span>
-                <small>Non connectée : comptée nulle part</small>
-            }
-            else
-            {
-                <small>@t.StateText</small>
-                @if (t.Figures is { } f)
+            <div class="dk-mbody">
+            <RunStateArt State="@t.State" Label="@t.StateText" Class="dk-mphoto" />
+            <div class="dk-minfo">
+                <div class="dk-mhead">
+                    <b>@t.Name</b>
+                    <span class="chip @StateCss(t.State)">@(t.Planned ? "En préparation" : t.Stop is { } s ? $"{t.StateText} · {s.DurationText}" : t.StateText)</span>
+                </div>
+                @if (t.Planned)
                 {
-                    <span class="dk-mfig">
-                        <span class="chip @Fmt.Css(f.TrsSeverity)" title="@($"Cible {t.TrsTarget:0} %")">TRS @Fmt.Pct(f.Kpis.TrsPercent)</span>
-                        <span>@(f.HasProduction ? KpiCalculator.FormatMass(f.ProductionKg) : "—")</span>
-                    </span>
+                    <p class="nd">Machine pas encore raccordée : comptée nulle part, ses chiffres viendront avec ses premières données.</p>
                 }
-                @if (t.Stop is { IsUnqualified: false } stop)
+                else if (t.Figures is { } f)
                 {
-                    <span class="dk-cause" style="background:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#FAB219" : stop.TickerColor);color:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#1A1406" : "#FFFFFF")">
-                        @stop.ShortCause · depuis @stop.DurationText
-                    </span>
+                    <div class="dk-mstats">
+                        <div>
+                            <span>TRS <i>cible @($"{t.TrsTarget:0}") %</i></span>
+                            <strong class="@Fmt.Css(f.TrsSeverity)">@Fmt.Pct(f.Kpis.TrsPercent)</strong>
+                            <small>@Dpq(f)</small>
+                        </div>
+                        <div>
+                            <span>Production</span>
+                            <strong>@(f.HasProduction ? KpiCalculator.FormatMass(f.ProductionKg) : "—")</strong>
+                            <small>@Fmt.Num(f.TotalBags) sacs</small>
+                        </div>
+                        <div>
+                            <span>Vitesse <i>sacs/min</i></span>
+                            <strong>@Fmt.Num(f.Kpis.SpeedBagsPerMinute, 1)</strong>
+                            <small>max @Fmt.Num(f.Kpis.MaxSpeedBagsPerMinute, 1)</small>
+                        </div>
+                        <div>
+                            <span>Écart de poids</span>
+                            <strong class="@Fmt.Css(t.WeightSeverity)">@Fmt.SignedPct(f.Kpis.WeightDeviationPercent)</strong>
+                            <small>@f.Kpis.GiveawayLabel</small>
+                        </div>
+                    </div>
                 }
-            }
+                @if (t.Stop is { } stop)
+                {
+                    @if (stop.IsUnqualified)
+                    {
+                        <p class="dk-mstop">⚠ Cause à définir · à l'arrêt depuis @stop.DurationText</p>
+                    }
+                    else
+                    {
+                        <span class="dk-cause" style="background:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#FAB219" : stop.TickerColor);color:@(stop.Kind == SpigaDashboards.App.Models.OngoingStopKind.Maintenance ? "#1A1406" : "#FFFFFF")">
+                            @stop.ShortCause · depuis @stop.DurationText
+                        </span>
+                    }
+                }
+            </div>
+            </div>
         </section>
     }
 </div>
@@ -106,6 +134,14 @@
 
 @code {
     [Parameter, EditorRequired] public LineSlide Slide { get; set; } = default!;
+
+    private static string StateCss(string state) => state switch
+    {
+        "is-run" => "ok",
+        "is-stop" or "is-panne" => "bad",
+        "is-planned" => "warn",
+        _ => "",
+    };
 
     private static string Dpq(PackCell c)
         => $"D {Fmt.Pct(c.Kpis.AvailabilityPercent, 0)} · P {Fmt.Pct(c.Kpis.PerformancePercent, 0)} · Q {Fmt.Pct(c.Kpis.QualityPercent, 0)}";
