@@ -62,6 +62,9 @@ else
                 case SettingsTab.Machines:
                     @MachinesTab()
                     break;
+                case SettingsTab.Lignes:
+                    @LignesTab()
+                    break;
                 case SettingsTab.Affichage:
                     @Affichage()
                     break;
@@ -81,8 +84,8 @@ else
         </section>
 
         <div class="savebar">
-            <span class="nd savebar-note">Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs, barre des arrêts et la
-                rotation des diapositives sont communs à tous les postes (enregistrés dans la base de données).</span>
+            <span class="nd savebar-note">Les cadences, pauses, seuil d'arrêt, équipes, TRS cibles, limites d'écart de poids, couleurs, barre des arrêts,
+                lignes et rotation des diapositives sont communs à tous les postes (enregistrés dans la base de données).</span>
             <button type="button" class="bar" @onclick="ReloadAsync" disabled="@_saving">Annuler les modifications</button>
             <button type="button" class="bar acc" @onclick="SaveAsync" disabled="@_saving">@(_saving ? "Enregistrement…" : "Enregistrer")</button>
         </div>
@@ -93,6 +96,7 @@ else
     private bool _loaded;
     private bool _saving;
     private SettingsTab _tab = SettingsTab.Machines;
+    private bool _webDeck = true;
     private string? _sharedMessage;
     private string? _testMessage;
     private bool? _testOk;
@@ -106,6 +110,7 @@ else
     {
         SettingsTab.Connexion => "Connexion",
         SettingsTab.Machines => "Machines",
+        SettingsTab.Lignes => "Lignes",
         SettingsTab.Affichage => "Affichage",
         SettingsTab.Cadences => "Cadences",
         SettingsTab.Pauses => "Pauses & arrêts",
@@ -282,6 +287,91 @@ else
         </div>
     };
 
+    private RenderFragment SlideTable(List<SlideRow> slides) => __builder =>
+    {
+        <div class="scroll">
+            <table class="t settings-t">
+                <thead><tr><th>#</th><th>Affichée</th><th>Diapositive</th><th>Durée (s)</th><th></th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < slides.Count; i++)
+                    {
+                        var row = slides[i];
+                        var index = i;
+                        <tr class="@(row.Enabled ? "" : "is-off")">
+                            <td class="n">@(i + 1)</td>
+                            <td><label class="check"><input type="checkbox" @bind="row.Enabled" aria-label="Afficher @row.Label" /></label></td>
+                            <td>@row.Label</td>
+                            <td><input class="input num-in" inputmode="numeric" placeholder="@Editor.SlideDurationSeconds" @bind="row.Duration" aria-label="Durée de @row.Label" /></td>
+                            <td class="r">
+                                <span class="actions">
+                                    <button type="button" class="link" title="Monter (passe plus tôt)" disabled="@(index == 0)" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, -1)">▲</button>
+                                    <button type="button" class="link" title="Descendre (passe plus tard)" disabled="@(index == slides.Count - 1)" @onclick="() => StationSettingsEditor.MoveSlide(slides, row, 1)">▼</button>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    // Production lines of the web dashboard: name, sector, machines (ids of
+    // the Machines tab, in display order) and machines not connected yet.
+    private RenderFragment LignesTab() => __builder =>
+    {
+        <h2>Lignes de production (tableau de bord web)</h2>
+        <p class="nd">Le tableau de bord web et l'écran TV sont organisés par ligne : chaque ligne a sa vue d'ensemble, sa synthèse et sa couleur. Les machines
+            se donnent par leur code (onglet Machines), séparées par des virgules, dans l'ordre d'affichage. Une machine pas encore raccordée se met dans
+            « En préparation » (son nom) : elle s'affiche grisée, sans compter dans les totaux. Le TRS d'une ligne cumule le temps utile et le temps requis
+            de ses machines.</p>
+        <div class="scroll">
+            <table class="t settings-t">
+                <thead><tr><th></th><th>Ligne</th><th>Secteur</th><th>Machines (codes)</th><th>En préparation (noms)</th><th></th></tr></thead>
+                <tbody>
+                    @for (var i = 0; i < Editor.Lines.Count; i++)
+                    {
+                        var row = Editor.Lines[i];
+                        var index = i;
+                        <tr>
+                            <td><i class="dk-lc" style="--lc:@WebDeck.ColorAt(index)" title="Couleur de la ligne" aria-hidden="true"></i></td>
+                            <td><input class="input" style="width:7em" maxlength="20" @bind="row.Name" aria-label="Nom de la ligne" placeholder="ex. CC1" /></td>
+                            <td>
+                                <select @bind="row.Sector" aria-label="Secteur de la ligne @row.Name">
+                                    @foreach (var s in SpigaDashboards.App.ViewModels.Slides.SlideDeck.SectorOrder)
+                                    {
+                                        <option value="@s">@SpigaDashboards.App.Models.Machine.SectorLabel(s)</option>
+                                    }
+                                </select>
+                            </td>
+                            <td>
+                                <input class="input" style="min-width:16em" @bind="row.Machines" aria-label="Machines de la ligne @row.Name" placeholder="ex. CC03, CC04" />
+                                <small class="nd" style="display:block">@Editor.LinePreview(row)</small>
+                            </td>
+                            <td><input class="input" style="min-width:10em" @bind="row.Planned" aria-label="Machines en préparation de la ligne @row.Name" placeholder="aucune" /></td>
+                            <td class="r">
+                                <span class="actions">
+                                    <button type="button" class="link" title="Monter" disabled="@(index == 0)" @onclick="() => Editor.MoveLine(row, -1)">▲</button>
+                                    <button type="button" class="link" title="Descendre" disabled="@(index == Editor.Lines.Count - 1)" @onclick="() => Editor.MoveLine(row, 1)">▼</button>
+                                    <button type="button" class="link" title="Supprimer la ligne" @onclick="() => Editor.Lines.Remove(row)">Supprimer</button>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="form"><button type="button" class="bar small" @onclick="Editor.AddLine">Ajouter une ligne</button></div>
+        @if (Editor.Machines.Count > 0)
+        {
+            var free = Editor.Machines.Where(m => Editor.Lines.All(l => !WebDeck.Split(l.Machines).Contains(m.MachineId, StringComparer.OrdinalIgnoreCase))).ToList();
+            @if (free.Count > 0)
+            {
+                <p class="nd">Machines dans aucune ligne (affichées après les lignes, sans vue d'ensemble) :
+                    @string.Join(", ", free.Select(m => $"{m.MachineId} ({m.Label})"))</p>
+            }
+        }
+    };
+
     private RenderFragment Affichage() => __builder =>
     {
         <h2>Affichage : rotation des diapositives</h2>
@@ -300,33 +390,26 @@ else
         </div>
 
         <h3 class="pe-sub">Diapositives : ordre, affichage et durée</h3>
-        <p class="nd">Commun à tous les postes. Décocher une diapositive la retire de la rotation (tableau de bord et écran TV). Les flèches changent sa
-            place. Durée vide = durée par défaut ci-dessus. Une machine masquée n'apparaît nulle part ; une nouvelle machine prend sa place par défaut.</p>
-        <div class="scroll">
-            <table class="t settings-t">
-                <thead><tr><th>#</th><th>Affichée</th><th>Diapositive</th><th>Durée (s)</th><th></th></tr></thead>
-                <tbody>
-                    @for (var i = 0; i < Editor.Slides.Count; i++)
-                    {
-                        var row = Editor.Slides[i];
-                        var index = i;
-                        <tr class="@(row.Enabled ? "" : "is-off")">
-                            <td class="n">@(i + 1)</td>
-                            <td><label class="check"><input type="checkbox" @bind="row.Enabled" aria-label="Afficher @row.Label" /></label></td>
-                            <td>@row.Label</td>
-                            <td><input class="input num-in" inputmode="numeric" placeholder="@Editor.SlideDurationSeconds" @bind="row.Duration" aria-label="Durée de @row.Label" /></td>
-                            <td class="r">
-                                <span class="actions">
-                                    <button type="button" class="link" title="Monter (passe plus tôt)" disabled="@(index == 0)" @onclick="() => Editor.MoveSlide(row, -1)">▲</button>
-                                    <button type="button" class="link" title="Descendre (passe plus tard)" disabled="@(index == Editor.Slides.Count - 1)" @onclick="() => Editor.MoveSlide(row, 1)">▼</button>
-                                </span>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="segs" role="group" aria-label="Rotation" style="margin-bottom:8px">
+            <button type="button" class="seg @(_webDeck ? "on" : "")" aria-pressed="@_webDeck" @onclick="() => _webDeck = true">Tableau de bord web et écran TV</button>
+            <button type="button" class="seg @(!_webDeck ? "on" : "")" aria-pressed="@(!_webDeck)" @onclick="() => _webDeck = false">Application (kiosque)</button>
         </div>
-        <div class="form"><button type="button" class="bar small" title="Toutes les diapositives, ordre d'origine, durée par défaut" @onclick="Editor.ResetSlides">Ordre par défaut</button></div>
+        @if (_webDeck)
+        {
+            <p class="nd">Commun à tous les postes. Organisé par ligne (onglet Lignes) : la vue d'ensemble de chaque ligne puis ses machines, la synthèse
+                de chaque ligne et la vue usine. Décocher une diapositive la retire de la rotation, les flèches changent sa place, durée vide = durée par
+                défaut ci-dessus. Une ligne modifiée apparaît ici une fois enregistrée.</p>
+            @SlideTable(Editor.WebSlides)
+            <div class="form"><button type="button" class="bar small" title="Toutes les diapositives, ordre d'origine, durée par défaut" @onclick="Editor.ResetWebSlides">Ordre par défaut</button></div>
+        }
+        else
+        {
+            <p class="nd">Commun à tous les postes de l'application installée (organisée par secteur). Décocher une diapositive la retire de la rotation. Les
+                flèches changent sa place. Durée vide = durée par défaut ci-dessus. Une machine masquée n'apparaît nulle part ; une nouvelle machine prend
+                sa place par défaut.</p>
+            @SlideTable(Editor.Slides)
+            <div class="form"><button type="button" class="bar small" title="Toutes les diapositives, ordre d'origine, durée par défaut" @onclick="Editor.ResetSlides">Ordre par défaut</button></div>
+        }
 
         @if (Station != null)
         {

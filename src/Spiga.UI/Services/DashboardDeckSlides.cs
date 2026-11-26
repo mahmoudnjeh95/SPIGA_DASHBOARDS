@@ -8,10 +8,12 @@ using SpigaDashboards.App.ViewModels.Slides;
 
 namespace Spiga.UI.Services;
 
-// The group slides of the web dashboard: Synthèse (per sector), Conditionnement
-// (production and TRS of a group of lines per machine and team) and État des
-// machines (run state photos). Same figures as the kiosk's
-// SynthesisSlideViewModel, PackagingSlideViewModel and RunStateSlideViewModel.
+// The group slides of the web dashboard, one production line at a time
+// (Paramètres > Lignes, see WebDeck): the line's overview (its figures, the
+// live state of each machine, the machine x team table), its synthesis over
+// the month / 3 months / year, and the plant view (every line side by
+// side). A line's figures pool its machines' buckets (KpiCalculator: useful
+// time over required time), so its TRS is never an average of theirs.
 public sealed partial class DashboardDeckService
 {
     // A year of sub-minute snapshots is heavy to aggregate again and these
@@ -19,7 +21,7 @@ public sealed partial class DashboardDeckService
     // the same). Keyed by the machines read, so an account only ever gets
     // lots of machines it was allowed to read.
     private static readonly TimeSpan SynthesisCache = TimeSpan.FromMinutes(30);
-    private static readonly TimeSpan PackagingCache = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan GroupCache = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<string, (DateTime LoadedAt, List<ProductionBucket> Lots)> Cache = new();
 
     private static async Task<List<ProductionBucket>> CachedAsync(string key, TimeSpan keep, DateTime now, Func<Task<List<ProductionBucket>>> read)
@@ -38,10 +40,18 @@ public sealed partial class DashboardDeckService
         return (from, label);
     }
 
-    // ---- Synthèse ----
+    public IReadOnlyList<DashboardLine> Lines => settings.DashboardLines;
 
-    public async Task<SynthesisSlide> SynthesisAsync(Actor actor, string sector, IReadOnlyList<Machine> machines, SynthesisPeriod period,
-        DashboardFilter filter, CancellationToken cancel = default)
+    public DashboardLine? Line(string name) => Lines.FirstOrDefault(l => l.Name == name);
+
+    // The badge of a machine slide: its line, sector and colour.
+    public LineTag? TagOf(string machineId)
+        => WebDeck.LineOf(Lines, machineId) is { } line ? new LineTag(line.Label, Machine.SectorLabel(line.Sector), WebDeck.ColorOf(Lines, line.Name)) : null;
+
+    // ---- Synthèse of a line ----
+
+    public async Task<SynthesisSlide> SynthesisAsync(Actor actor, DashboardLine line, IReadOnlyList<Machine> machines, IReadOnlyList<string> planned,
+        SynthesisPeriod period, DashboardFilter filter, CancellationToken cancel = default)
     {
         filter = ForActor(actor, filter);
         var repository = Repository(actor);
@@ -85,89 +95,144 @@ public sealed partial class DashboardDeckService
             trsLines.Add((m.MachineName, perStep.Select(k => k.TrsPercent is { } v ? (double?)Math.Round(v, 1) : null).ToArray()));
             deviationLines.Add((m.MachineName, perStep.Select(k => k.WeightDeviationPercent is { } v ? (double?)Math.Round(v, 2) : null).ToArray()));
         }
-        // Reference line only when every line shares the same TRS target.
+        // Reference line only when every machine shares the same TRS target.
         var targets = machines.Select(m => settings.TrsTarget(m.MachineId)).Distinct().ToList();
+        var groupBand = TrsBand.Average(machines.Select(m => settings.TrsBandFor(m.MachineId)).ToList());
+        var kpis = KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots));
 
-        return new SynthesisSlide(Machine.SectorLabel(sector), period, label, filter.Describe(),
-            KpiCalculator.Summarize(lots, KpiCalculator.AvailabilityPercent(lots)), lines, "par " + PeriodRanges.GrainName(grain),
+        return new SynthesisSlide(line.Label, Machine.SectorLabel(line.Sector), WebDeck.ColorOf(Lines, line.Name), period, label, filter.Describe(),
+            kpis, KpiCalculator.TrsSeverity(kpis.TrsPercent, groupBand), lines, planned, "par " + PeriodRanges.GrainName(grain),
             DeckCharts.Lines(labels, trsLines, v => $"{v:0} %", targets.Count == 1 ? targets[0] : null),
             DeckCharts.Lines(labels, deviationLines, v => v.ToString("+0.00;-0.00;0", Fmt.French) + " %", 0));
     }
 
-    // ---- Conditionnement ----
+    // ---- line overview, plant view ----
 
-    // Top-bar period ("Aujourd'hui" and "Poste précédent": the whole day);
-    // Cumul is always the current month.
-    public async Task<PackagingSlide> PackagingAsync(Actor actor, PackagingSlideDescriptor slide, IReadOnlyList<Machine> machines,
+    // The top-bar period ("Aujourd'hui" and "Poste précédent": the whole
+    // day), the machines' buckets (hour ones: teams are worked out from
+    // each bucket's poste), filtered.
+    private async Task<(List<ProductionBucket> Lots, string Label)> GroupLotsAsync(ProductionRepository repository, IReadOnlyList<Machine> machines,
+        DashboardPeriod period, DateTime? customFrom, DateTime? customTo, DashboardFilter filter, CancellationToken cancel)
+    {
+        var now = Now;
+        var p = period == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : period;
+        var (from, to) = PeriodRanges.Get(p, now, customFrom, customTo);
+        var label = PeriodRanges.Label(p, from, to);
+        (from, label) = FromDataStart(from, to, label);
+        var ids = machines.Select(m => m.MachineId).ToList();
+        var all = (to - from).TotalDays <= 8
+            ? await repository.GetLotsForMachinesAsync(ids, from, to)
+            : await CachedAsync($"group|{from:yyyyMMddHH}|{to:yyyyMMddHH}|{string.Join(",", ids)}", GroupCache, now,
+                () => repository.GetLotsForMachinesAsync(ids, from, to));
+        cancel.ThrowIfCancellationRequested();
+        return (filter.Apply(all, teams), label);
+    }
+
+    // Each machine's state now, whatever the period: a line with a stop in
+    // progress is not running, even if a few bags moved its counter.
+    private async Task<Dictionary<string, MachineHeader>> LiveAsync(ProductionRepository repository, IEnumerable<Machine> machines, CancellationToken cancel)
+    {
+        var slots = await repository.GetActiveSlotKindsAsync();
+        var stops = await OngoingStopService.GetAsync(repository, settings);
+        var headers = new Dictionary<string, MachineHeader>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in machines)
+        {
+            cancel.ThrowIfCancellationRequested();
+            var status = await repository.GetLatestStatusAsync(m.MachineId);
+            var stop = stops.GetValueOrDefault(m.MachineId);
+            headers[m.MachineId] = new MachineHeader(m.MachineId, m.MachineName, m.Sector, status?.IsConnected ?? false,
+                (status?.BeltRunning ?? false) && stop == null, slots.TryGetValue(m.MachineId, out var slot) ? slot : null, stop, null);
+        }
+        return headers;
+    }
+
+    // Every configured team, even at 0, so the columns compare like for
+    // like; "Sans équipe" only when such hours produced something.
+    private List<string> TeamColumns(IReadOnlyCollection<ProductionBucket> lots, DashboardFilter filter)
+    {
+        var columns = filter.Team != null ? new List<string> { filter.Team } : teams.TeamNames.ToList();
+        if (!columns.Contains(TeamScheduleService.NoTeam) && lots.Any(l => teams.TeamOf(l) == TeamScheduleService.NoTeam && l.TotalBags > 0))
+            columns.Add(TeamScheduleService.NoTeam);
+        return columns;
+    }
+
+    public async Task<LineSlide> LineAsync(Actor actor, DashboardLine line, IReadOnlyList<Machine> machines, IReadOnlyList<string> planned,
         DashboardPeriod period, DateTime? customFrom, DateTime? customTo, DashboardFilter filter, CancellationToken cancel = default)
     {
         filter = ForActor(actor, filter);
         var repository = Repository(actor);
-        var now = Now;
-        DateTime from, to;
-        string label;
-        if (slide.Cumul)
-            (from, to, label) = PeriodRanges.Synthesis(SynthesisPeriod.Month, now);
-        else
-        {
-            var p = period == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : period;
-            (from, to) = PeriodRanges.Get(p, now, customFrom, customTo);
-            label = PeriodRanges.Label(p, from, to);
-        }
-        (from, label) = FromDataStart(from, to, label);
+        var (lots, label) = machines.Count == 0
+            ? (new List<ProductionBucket>(), PeriodRanges.Label(period == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : period, Now, Now))
+            : await GroupLotsAsync(repository, machines, period, customFrom, customTo, filter, cancel);
+        var live = await LiveAsync(repository, machines, cancel);
 
-        var ids = machines.Select(m => m.MachineId).ToList();
-        // Hour buckets: teams are worked out from each bucket's poste.
-        var all = (to - from).TotalDays <= 8
-            ? await repository.GetLotsForMachinesAsync(ids, from, to)
-            : await CachedAsync($"pack|{from:yyyyMMddHH}|{to:yyyyMMddHH}|{string.Join(",", ids)}", PackagingCache, now,
-                () => repository.GetLotsForMachinesAsync(ids, from, to));
-        cancel.ThrowIfCancellationRequested();
-        var lots = filter.Apply(all, teams);
-
-        // Every configured team, even at 0, so the columns compare like for
-        // like; "Sans équipe" only when such hours produced something.
-        var columns = filter.Team != null ? new List<string> { filter.Team } : teams.TeamNames.ToList();
-        var byTeam = lots.ToLookup(teams.TeamOf);
-        if (!columns.Contains(TeamScheduleService.NoTeam) && byTeam[TeamScheduleService.NoTeam].Any(l => l.TotalBags > 0))
-            columns.Add(TeamScheduleService.NoTeam);
-
+        var columns = TeamColumns(lots, filter);
         var bands = machines.Select(m => settings.TrsBandFor(m.MachineId)).ToList();
         var groupBand = TrsBand.Average(bands);
-        var rows = machines.Select(m =>
+        var rows = new List<PackRow>();
+        var tiles = new List<LineTile>();
+        foreach (var m in machines)
         {
             var machineLots = lots.Where(l => l.MachineId == m.MachineId).ToList();
             var band = settings.TrsBandFor(m.MachineId);
-            return new PackRow(m.MachineName, false, columns.Select(t => PackCell.Of(machineLots.Where(l => teams.TeamOf(l) == t), band)).ToList(),
-                PackCell.Of(machineLots, band));
-        }).ToList();
+            var total = PackCell.Of(machineLots, band);
+            rows.Add(new PackRow(m.MachineName, false, columns.Select(t => PackCell.Of(machineLots.Where(l => teams.TeamOf(l) == t), band)).ToList(), total));
+            var h = live[m.MachineId];
+            tiles.Add(new LineTile(m.MachineName, h.State, h.StateText, h.Running, h.Stop, total, band.Target, false));
+        }
+        tiles.AddRange(planned.Select(name => new LineTile(name, "is-off", "Non connectée", false, null, null, null, true)));
+        var byTeam = lots.ToLookup(teams.TeamOf);
         var teamTotals = columns.Select(t => PackCell.Of(byTeam[t], groupBand)).ToList();
-        var total = PackCell.Of(lots, groupBand);
-        var machineRows = rows.ToList();
-        rows.Add(new PackRow("Total", true, teamTotals, total));
+        var overall = PackCell.Of(lots, groupBand);
+        if (machines.Count > 1)
+            rows.Add(new PackRow("Total ligne", true, teamTotals, overall));
 
         // Target line only when every machine shares the same target.
         var targets = bands.Select(b => b.Target).Distinct().ToList();
         double? targetLine = targets.Count == 1 ? targets[0] : null;
         var names = machines.Select(m => m.MachineName).ToList();
+        var teamChart = TrsBars(columns, teamTotals.Select(c => c.Kpis.TrsPercent).ToList(), targetLine);
+        // Each machine's production, piled up by team.
+        var machineChart = DeckCharts.Stacked(names, columns.Select((t, i) =>
+            (t, (IReadOnlyList<double?>)rows.Take(machines.Count).Select(r => (double?)Math.Round(r.Cells[i].ProductionKg)).ToList())).ToList(),
+            v => KpiCalculator.FormatMass(v));
 
-        DeckChart teamChart, machineChart;
-        if (slide.Trs)
-        {
-            teamChart = TrsBars(columns, teamTotals.Select(c => c.Kpis.TrsPercent).ToList(), targetLine);
-            machineChart = TrsBars(names, machineRows.Select(r => r.Total.Kpis.TrsPercent).ToList(), targetLine);
-        }
-        else
-        {
-            teamChart = DeckCharts.Bars(columns, teamTotals.Select(c => (double?)Math.Round(c.ProductionKg)).ToList(), "Production",
-                v => KpiCalculator.FormatMass(v));
-            // Each machine's production, piled up by team.
-            machineChart = DeckCharts.Stacked(names, columns.Select((t, i) =>
-                (t, (IReadOnlyList<double?>)machineRows.Select(r => (double?)Math.Round(r.Cells[i].ProductionKg)).ToList())).ToList(), v => KpiCalculator.FormatMass(v));
-        }
+        return new LineSlide(line.Label, Machine.SectorLabel(line.Sector), WebDeck.ColorOf(Lines, line.Name), label, filter.Describe(),
+            overall, groupBand.Target, KpiCalculator.WeightDeviationSeverity(overall.Kpis.WeightDeviationPercent, WeightBand.Default),
+            live.Values.Count(h => h.Running), live.Values.Count(h => h.Connected && !h.Running && h.Slot == null),
+            tiles, columns, rows, teamChart, machineChart);
+    }
 
-        return new PackagingSlide(slide.DisplayTitle, slide.Trs, slide.Cumul ? $" · {ids.Count} machines" : "", label, filter.Describe(),
-            total, groupBand.Target, columns, rows, teamChart, machineChart);
+    public async Task<PlantSlide> PlantAsync(Actor actor, IReadOnlyList<(DashboardLine Line, IReadOnlyList<Machine> Machines)> lines,
+        DashboardPeriod period, DateTime? customFrom, DateTime? customTo, DashboardFilter filter, CancellationToken cancel = default)
+    {
+        filter = ForActor(actor, filter);
+        var repository = Repository(actor);
+        var machines = lines.SelectMany(l => l.Machines).ToList();
+        var (lots, label) = await GroupLotsAsync(repository, machines, period, customFrom, customTo, filter, cancel);
+        var live = await LiveAsync(repository, machines, cancel);
+        var byMachine = lots.ToLookup(l => l.MachineId);
+
+        var cards = lines.Select(x =>
+        {
+            var band = TrsBand.Average(x.Machines.Select(m => settings.TrsBandFor(m.MachineId)).ToList());
+            var lineLots = x.Machines.SelectMany(m => byMachine[m.MachineId]).ToList();
+            var states = x.Machines.Select(m => live[m.MachineId]).ToList();
+            return new PlantLine(x.Line.Label, Machine.SectorLabel(x.Line.Sector), WebDeck.ColorOf(Lines, x.Line.Name), PackCell.Of(lineLots, band), band.Target,
+                states.Select(h => new PlantMachineState(h.Name, h.State, h.StateText)).ToList(), x.Line.PlannedMachines.Count);
+        }).ToList();
+        var plantBand = TrsBand.Average(machines.Select(m => settings.TrsBandFor(m.MachineId)).ToList());
+        var overall = PackCell.Of(lots, plantBand);
+
+        var names = cards.Select(c => c.Name).ToList();
+        var colors = cards.Select(c => c.Color).ToList();
+        var targets = machines.Select(m => settings.TrsTarget(m.MachineId)).Distinct().ToList();
+        var trsChart = DeckCharts.ColoredBars(names, cards.Select(c => c.Figures.Kpis.TrsPercent is { } v ? (double?)Math.Round(v, 1) : null).ToList(),
+            colors, v => $"{v:0} %", targets.Count == 1 ? targets[0] : null);
+        var productionChart = DeckCharts.ColoredBars(names, cards.Select(c => (double?)Math.Round(c.Figures.ProductionKg)).ToList(), colors,
+            v => KpiCalculator.FormatMass(v));
+        return new PlantSlide(label, filter.Describe(), overall, plantBand.Target,
+            live.Values.Count(h => h.Running), live.Values.Count(h => h.Connected && !h.Running && h.Slot == null), cards, trsChart, productionChart);
     }
 
     private static DeckChart TrsBars(IReadOnlyList<string> labels, IReadOnlyList<double?> values, double? target)
@@ -175,27 +240,6 @@ public sealed partial class DashboardDeckService
             ? DeckCharts.Bars(labels, values.Select(v => v is { } x ? (double?)Math.Round(x, 1) : null).ToList(), "TRS", v => $"{v:0} %", target)
             : DeckChart.Empty;
 
-    // ---- État des machines ----
-
-    // Live state whatever the period: a line with a stop in progress is not
-    // running, even if a few bags moved its counter.
-    public async Task<RunStateSlide> RunStateAsync(Actor actor, string title, IReadOnlyList<Machine> machines, CancellationToken cancel = default)
-    {
-        var repository = Repository(actor);
-        var slots = await repository.GetActiveSlotKindsAsync();
-        var stops = await OngoingStopService.GetAsync(repository, settings);
-        var tiles = new List<RunTile>();
-        foreach (var m in machines)
-        {
-            cancel.ThrowIfCancellationRequested();
-            var status = await repository.GetLatestStatusAsync(m.MachineId);
-            var stop = stops.GetValueOrDefault(m.MachineId);
-            var header = new MachineHeader(m.MachineId, m.MachineName, m.Sector, status?.IsConnected ?? false,
-                (status?.BeltRunning ?? false) && stop == null, slots.TryGetValue(m.MachineId, out var slot) ? slot : null, stop, null);
-            tiles.Add(new RunTile(m.MachineName, header.State, header.StateText, header.Running, stop));
-        }
-        return new RunStateSlide(title, tiles);
-    }
     // ---- stop alert, sticky note ----
 
     // Lines of the account stopped with no cause yet, oldest first
@@ -237,13 +281,17 @@ public sealed partial class DashboardDeckService
     }
 }
 
+// The line a machine slide belongs to (badge in its title).
+public sealed record LineTag(string Label, string SectorLabel, string Color);
+
 public sealed record SynthesisLine(string Name, KpiSummary Kpis, double TrsTarget, KpiSeverity TrsSeverity, KpiSeverity WeightSeverity);
 
-public sealed record SynthesisSlide(string Sector, SynthesisPeriod Period, string PeriodLabel, string FilterLabel, KpiSummary Kpis,
-    IReadOnlyList<SynthesisLine> Lines, string Grain, DeckChart TrsChart, DeckChart DeviationChart);
+public sealed record SynthesisSlide(string Title, string Sector, string Color, SynthesisPeriod Period, string PeriodLabel, string FilterLabel,
+    KpiSummary Kpis, KpiSeverity TrsSeverity, IReadOnlyList<SynthesisLine> Lines, IReadOnlyList<string> Planned, string Grain,
+    DeckChart TrsChart, DeckChart DeviationChart);
 
 // One cell of the machine x team table: net weight produced, bags and TRS
-// (with its D / P / Q), banded against the machine's (or the group's) target.
+// (with its D / P / Q), banded against the machine's (or the line's) target.
 public sealed record PackCell(double ProductionKg, long TotalBags, KpiSummary Kpis, KpiSeverity TrsSeverity)
 {
     public bool HasProduction => TotalBags > 0 || ProductionKg > 0;
@@ -258,9 +306,19 @@ public sealed record PackCell(double ProductionKg, long TotalBags, KpiSummary Kp
 
 public sealed record PackRow(string Label, bool IsTotal, IReadOnlyList<PackCell> Cells, PackCell Total);
 
-public sealed record PackagingSlide(string Title, bool Trs, string MachinesLabel, string PeriodLabel, string FilterLabel, PackCell Overall,
-    double TrsTarget, IReadOnlyList<string> Teams, IReadOnlyList<PackRow> Rows, DeckChart TeamChart, DeckChart MachineChart);
+// A machine of a line overview: its state now and its figures over the
+// period; Planned = not connected yet (no figures).
+public sealed record LineTile(string Name, string State, string StateText, bool Running, OngoingStop? Stop, PackCell? Figures, double? TrsTarget,
+    bool Planned);
 
-public sealed record RunTile(string Name, string State, string StateText, bool Running, OngoingStop? Stop);
+public sealed record LineSlide(string Title, string Sector, string Color, string PeriodLabel, string FilterLabel, PackCell Overall, double TrsTarget,
+    KpiSeverity WeightSeverity, int Running, int Stopped, IReadOnlyList<LineTile> Tiles, IReadOnlyList<string> Teams, IReadOnlyList<PackRow> Rows,
+    DeckChart TeamChart, DeckChart MachineChart);
 
-public sealed record RunStateSlide(string Title, IReadOnlyList<RunTile> Tiles);
+public sealed record PlantMachineState(string Name, string State, string StateText);
+
+public sealed record PlantLine(string Name, string Sector, string Color, PackCell Figures, double TrsTarget, IReadOnlyList<PlantMachineState> Machines,
+    int Planned);
+
+public sealed record PlantSlide(string PeriodLabel, string FilterLabel, PackCell Overall, double TrsTarget, int Running, int Stopped,
+    IReadOnlyList<PlantLine> Lines, DeckChart TrsChart, DeckChart ProductionChart);

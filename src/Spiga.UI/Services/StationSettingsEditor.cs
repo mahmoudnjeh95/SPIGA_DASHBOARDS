@@ -41,8 +41,14 @@ public sealed class StationSettingsEditor(
     public string[] TeamNames { get; } = new string[4];
     public DateTime RotationStart { get; set; }
     public List<RosterDay> Roster { get; } = new();
+    // Rotation of the kiosk application (by sector) and of the web dashboard
+    // and TV screen (by line): two decks, two orders.
     public List<SlideRow> Slides { get; } = new();
+    public List<SlideRow> WebSlides { get; } = new();
     public int SlideDurationSeconds { get; set; }
+
+    // Paramètres > Lignes (web dashboard).
+    public List<LineRow> Lines { get; } = new();
 
     // Desktop only.
     public int DataRefreshMinutes { get; set; }
@@ -105,6 +111,8 @@ public sealed class StationSettingsEditor(
 
         ResetColors(settings.Colors);
         ResetTicker(settings.StopTicker);
+        Lines.Clear();
+        Lines.AddRange(settings.DashboardLines.Select(LineRow.Of));
         await LoadMachinesAsync();
     }
 
@@ -137,17 +145,20 @@ public sealed class StationSettingsEditor(
             if (machines.Count == 0)
                 Problems[SettingsTab.Machines] = "Aucune machine trouvée.";
             _activeMachines = machines.Where(m => m.IsActive).ToList();
-            LoadSlides(Slides.Count == 0 ? settings.Slides : CurrentSlides());
+            LoadSlides(Slides.Count == 0 ? settings.Slides : CurrentSlides(Slides));
+            LoadWebSlides(WebSlides.Count == 0 ? settings.WebSlides : CurrentSlides(WebSlides));
         }
         catch (Exception ex)
         {
             Problems[SettingsTab.Machines] = $"Impossible de charger la liste des machines : {ex.Message}";
             if (Slides.Count == 0)
                 LoadSlides(settings.Slides);
+            if (WebSlides.Count == 0)
+                LoadWebSlides(settings.WebSlides);
         }
     }
 
-    private List<SlideSetting> CurrentSlides() => Slides.Select(r => new SlideSetting
+    private static List<SlideSetting> CurrentSlides(List<SlideRow> rows) => rows.Select(r => new SlideSetting
     {
         Key = r.Key,
         Enabled = r.Enabled,
@@ -207,17 +218,57 @@ public sealed class StationSettingsEditor(
         }
     }
 
-    public void MoveSlide(SlideRow row, int offset)
+    // The web deck as the lines last saved make it (lines edited in the
+    // Lignes tab show here once saved).
+    private void LoadWebSlides(IReadOnlyList<SlideSetting> saved)
     {
-        var from = Slides.IndexOf(row);
+        WebSlides.Clear();
+        var names = _activeMachines.ToDictionary(m => m.MachineId, m => m.MachineName);
+        var catalog = WebDeck.Default(_activeMachines, _activeMachines, settings.DashboardLines);
+        foreach (var slide in SlideDeck.Arrange(catalog, saved))
+        {
+            var setting = saved.FirstOrDefault(s => s.Key == slide.Key);
+            WebSlides.Add(new SlideRow
+            {
+                Key = slide.Key,
+                Label = WebDeck.Label(slide, id => names.GetValueOrDefault(id, id), settings.DashboardLines),
+                Enabled = setting?.Enabled ?? true,
+                Duration = setting?.DurationSeconds?.ToString(CultureInfo.InvariantCulture) ?? "",
+            });
+        }
+    }
+
+    public static void MoveSlide(List<SlideRow> list, SlideRow row, int offset)
+    {
+        var from = list.IndexOf(row);
         var to = from + offset;
-        if (from < 0 || to < 0 || to >= Slides.Count)
+        if (from < 0 || to < 0 || to >= list.Count)
             return;
-        Slides.RemoveAt(from);
-        Slides.Insert(to, row);
+        list.RemoveAt(from);
+        list.Insert(to, row);
     }
 
     public void ResetSlides() => LoadSlides(Array.Empty<SlideSetting>());
+
+    public void ResetWebSlides() => LoadWebSlides(Array.Empty<SlideSetting>());
+
+    public void AddLine() => Lines.Add(new LineRow { Sector = SlideDeck.SectorOrder[0] });
+
+    public void MoveLine(LineRow row, int offset)
+    {
+        var from = Lines.IndexOf(row);
+        var to = from + offset;
+        if (from < 0 || to < 0 || to >= Lines.Count)
+            return;
+        Lines.RemoveAt(from);
+        Lines.Insert(to, row);
+    }
+
+    // The names a line's machine ids stand for ("RIC 2 PL · STV 3 PL"),
+    // unknown ids flagged.
+    public string LinePreview(LineRow row)
+        => string.Join(" · ", WebDeck.Split(row.Machines).Select(id =>
+            Machines.FirstOrDefault(m => string.Equals(m.MachineId, id, StringComparison.OrdinalIgnoreCase)) is { } m ? m.Label : $"{id} (inconnue)"));
 
     public void ResetColors(ColorThresholds? c = null)
     {
@@ -272,7 +323,8 @@ public sealed class StationSettingsEditor(
                 bad.Add(tab);
         }
         Check(SettingsTab.Machines, ParseTrsTargets() != null && ParseTrsTolerances() != null && ParseWeightBands() != null);
-        Check(SettingsTab.Affichage, ParseSlides() != null && ParseDisplay());
+        Check(SettingsTab.Lignes, Machines.Count == 0 || ParseLines() != null);
+        Check(SettingsTab.Affichage, ParseSlides() != null && ParseWebSlides() != null && ParseDisplay());
         Check(SettingsTab.Cadences, ParseRates() != null);
         Check(SettingsTab.Pauses, ParseBreaks() != null && ParseStopThreshold() != null);
         Check(SettingsTab.Couleurs, ParseColors() != null && ParseTicker() != null);
@@ -331,6 +383,9 @@ public sealed class StationSettingsEditor(
                 merged[id] = band;
             settings.MachineWeightBands = merged;
             settings.Slides = ParseSlides()!;
+            settings.WebSlides = ParseWebSlides()!;
+            // Line ids are checked against the machines: only with the list loaded.
+            settings.DashboardLines = ParseLines()!;
         }
 
         // A new connection: the databases switch first, so the shared part
@@ -416,26 +471,37 @@ public sealed class StationSettingsEditor(
         return bands;
     }
 
-    private List<SlideSetting>? ParseSlides()
+    private List<SlideSetting>? ParseSlides() => ParseSlides(Slides, settings.Slides, "");
+
+    private List<SlideSetting>? ParseWebSlides() => ParseSlides(WebSlides, settings.WebSlides, " (tableau de bord web)");
+
+    private List<DashboardLine>? ParseLines()
+    {
+        var (lines, problem) = WebDeck.Parse(Lines, Machines.Select(m => m.MachineId).ToList(),
+            settings.DashboardLines.SelectMany(l => l.MachineIds).ToList());
+        return problem != null ? Fail<List<DashboardLine>>(SettingsTab.Lignes, problem) : lines;
+    }
+
+    private List<SlideSetting>? ParseSlides(List<SlideRow> rows, List<SlideSetting> saved, string deck)
     {
         var slides = new List<SlideSetting>();
-        foreach (var row in Slides)
+        foreach (var row in rows)
         {
             int? seconds = null;
             if (row.Duration.Trim().Length > 0)
             {
                 if (!int.TryParse(row.Duration.Trim(), out var value) || value < 1 || value > 3600)
                     return Fail<List<SlideSetting>>(SettingsTab.Affichage,
-                        $"Durée invalide pour « {row.Label} » : « {row.Duration} » (1 à 3600 s, vide = durée par défaut).");
+                        $"Durée invalide pour « {row.Label} »{deck} : « {row.Duration} » (1 à 3600 s, vide = durée par défaut).");
                 seconds = value;
             }
             slides.Add(new SlideSetting { Key = row.Key, Enabled = row.Enabled, DurationSeconds = seconds });
         }
-        if (Slides.Count > 0 && !Slides.Any(r => r.Enabled))
-            return Fail<List<SlideSetting>>(SettingsTab.Affichage, "Au moins une diapositive doit être affichée.");
+        if (rows.Count > 0 && !rows.Any(r => r.Enabled))
+            return Fail<List<SlideSetting>>(SettingsTab.Affichage, $"Au moins une diapositive doit être affichée{deck}.");
         // Slides of machines no longer active keep their place for when they come back.
         var listed = slides.Select(s => s.Key).ToHashSet();
-        slides.AddRange(settings.Slides.Where(s => !listed.Contains(s.Key)));
+        slides.AddRange(saved.Where(s => !listed.Contains(s.Key)));
         return slides;
     }
 
@@ -624,7 +690,7 @@ public sealed class StationSettingsEditor(
 }
 
 // Tabs of Paramètres, in order.
-public enum SettingsTab { Connexion, Machines, Affichage, Cadences, Pauses, Equipes, Couleurs }
+public enum SettingsTab { Connexion, Machines, Lignes, Affichage, Cadences, Pauses, Equipes, Couleurs }
 
 public sealed class MachineSettingsRow
 {

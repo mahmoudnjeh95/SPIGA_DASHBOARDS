@@ -37,6 +37,9 @@ public sealed record DashboardFilter
     public int? ShiftId { get; init; }
     public string? Team { get; init; }
     public double? TargetWeight { get; init; }
+    // What MachineIds stand for when they are a whole line or sector
+    // ("Ligne CC1"): said in place of the list of machines.
+    public string? ScopeLabel { get; init; }
 
     public static DashboardFilter None { get; } = new();
 
@@ -65,7 +68,9 @@ public sealed record DashboardFilter
         var parts = new List<string>();
         if (Sector != null)
             parts.Add(Machine.SectorLabel(Sector));
-        if (MachineIds.Count > 0)
+        if (ScopeLabel != null)
+            parts.Add(ScopeLabel);
+        else if (MachineIds.Count > 0)
             parts.Add(MachinesLabel);
         if (ShiftId is { } shift)
             parts.Add("Poste " + KpiCalculator.ShiftName(shift));

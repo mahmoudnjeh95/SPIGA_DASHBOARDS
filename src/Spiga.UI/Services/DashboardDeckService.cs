@@ -9,9 +9,9 @@ using SpigaDashboards.App.ViewModels.Slides;
 namespace Spiga.UI.Services;
 
 // Production > Tableau de bord détaillé (web): the slides of the dashboard
-// (one per machine, synthesis per sector, conditionnement, run state) in the
-// order and with the durations of Paramètres > Affichage, filtered and
-// rotated as on the kiosk. Same figures as the kiosk's slide view models
+// (by production line: its overview and its machines, then a synthesis per
+// line and the plant view, see WebDeck) in the order and with the
+// durations of Paramètres > Affichage, filtered and rotated as on the kiosk. Same figures as the kiosk's slide view models
 // (MachineDaySlideViewModel...), from the shared period, filter and KPI code;
 // read through repositories limited to the account's machines; a team-bound
 // account counts its team's postes only.
@@ -29,27 +29,33 @@ public sealed partial class DashboardDeckService(
         => settings.NominalRates.Where(r => r.WeightGrams > 0).Select(r => r.WeightGrams).Distinct().Order().ToList();
 
     // The machines of the rotation the account may see: active, not hidden
-    // in Paramètres, sector then id.
+    // in Paramètres, line by line (Paramètres > Lignes), then the machines
+    // in no line, sector then id.
     public async Task<List<Machine>> MachinesAsync(Actor actor)
     {
         var repository = Repository(actor);
+        var order = Lines.SelectMany(l => l.MachineIds).Select((id, i) => (id, i))
+            .GroupBy(x => x.id, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First().i, StringComparer.OrdinalIgnoreCase);
         return (await repository.GetMachinesAsync())
             .Where(m => m.IsActive && !settings.HiddenMachineIds.Contains(m.MachineId))
-            .OrderBy(m => Array.IndexOf(SlideDeck.SectorOrder, m.Sector)).ThenBy(m => m.MachineId)
+            .OrderBy(m => order.TryGetValue(m.MachineId, out var i) ? i : int.MaxValue)
+            .ThenBy(m => Array.IndexOf(SlideDeck.SectorOrder, m.Sector) is var s && s < 0 ? int.MaxValue : s).ThenBy(m => m.MachineId)
             .ToList();
     }
 
-    // The deck for these filters: Paramètres order, slides switched off left
-    // out. The document slide is the kiosk's (a file on its PC).
+    // The deck for these filters (WebDeck: by line): its own Paramètres
+    // order, slides switched off left out. Filter.MachineIds = the machines
+    // kept by the sector / line / machine filters (empty = all).
     public List<SlideDescriptor> Deck(IReadOnlyList<Machine> machines, DashboardFilter filter)
     {
-        var off = settings.Slides.Where(s => !s.Enabled).Select(s => s.Key).ToHashSet();
-        return SlideDeck.Arrange(SlideDeck.Default(machines.Where(filter.IncludesMachine).ToList(), ""), settings.Slides)
-            .Where(s => !off.Contains(s.Key) && s is not PdfSlideDescriptor)
+        var shown = filter.MachineIds.Count == 0 ? machines : machines.Where(m => filter.MachineIds.Contains(m.MachineId)).ToList();
+        var off = settings.WebSlides.Where(s => !s.Enabled).Select(s => s.Key).ToHashSet();
+        return SlideDeck.Arrange(WebDeck.Default(machines, shown, Lines), settings.WebSlides)
+            .Where(s => !off.Contains(s.Key))
             .ToList();
     }
 
-    public double SecondsFor(SlideDescriptor slide) => Math.Max(5, settings.SlideSecondsFor(slide.Key));
+    public double SecondsFor(SlideDescriptor slide) => Math.Max(5, settings.WebSlideSecondsFor(slide.Key));
 
     // A team-bound account: its team, whatever was chosen.
     public static DashboardFilter ForActor(Actor actor, DashboardFilter filter) => actor.Team is { } team ? filter with { Team = team } : filter;
@@ -212,4 +218,8 @@ public sealed record PeriodCharts(string Grain, IReadOnlyList<TeamRow> Teams, De
 
 // A machine slide: the poste layout (Main + Previous, Period null) or the period layout (Period set).
 public sealed record MachineSlide(MachineHeader Header, string PeriodLabel, string ProductionLabel, string FilterLabel, PosteFigures Main,
-    IReadOnlyList<PosteFigures> Previous, PeriodCharts? Period);
+    IReadOnlyList<PosteFigures> Previous, PeriodCharts? Period)
+{
+    // Its production line (badge in the title), if it is in one.
+    public LineTag? Line { get; init; }
+}

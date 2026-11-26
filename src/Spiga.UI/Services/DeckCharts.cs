@@ -160,6 +160,20 @@ public static class DeckCharts
         return new DeckChart(labels, series, format, 0);
     }
 
+    // One bar per label in its own colour (one per production line), each
+    // its own series so the legend names the colours.
+    public static DeckChart ColoredBars(IReadOnlyList<string> labels, IReadOnlyList<double?> values, IReadOnlyList<string> colors,
+        Func<double, string> format, double? target = null)
+    {
+        if (labels.Count == 0 || values.All(v => v is null or 0))
+            return DeckChart.Empty;
+        var series = labels.Select((label, i) => new ChartSeries(label,
+            labels.Select((_, j) => j == i ? values[i] : null).ToList(), colors[i], Stack: "lines")).ToList();
+        if (target is { } t)
+            series.Add(new ChartSeries($"Cible {t:0} %", labels.Select(_ => (double?)t).ToList(), Green, ChartKind.Line, Reference: true));
+        return new DeckChart(labels, series, format, 0);
+    }
+
     // One bar per label, piled up by series (production per machine and team).
     public static DeckChart Stacked(IReadOnlyList<string> labels, IReadOnlyList<(string Name, IReadOnlyList<double?> Values)> parts,
         Func<double, string> format)

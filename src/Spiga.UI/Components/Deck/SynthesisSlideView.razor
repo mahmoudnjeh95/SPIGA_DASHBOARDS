@@ -1,14 +1,15 @@
-@* Synthèse of a sector (kiosk: SynthesisPanel): its lines over the current
-   month, the last 3 months or the year (buttons on the slide), each with
-   the weights it ran, then the TRS and weight-deviation trends, one curve
-   per line. *@
+@* Synthèse of a production line (kiosk: SynthesisPanel, by sector): its
+   machines over the current month, the last 3 months or the year (buttons
+   on the slide), each with the weights it ran, then the TRS and
+   weight-deviation trends, one curve per machine. A machine not connected
+   yet shows as a greyed card. *@
 @using SpigaDashboards.App.ViewModels
 @using SpigaDashboards.App.Services
 
-<section class="card dk-head plain">
+<section class="card dk-head plain dk-lhead" style="--lc:@Slide.Color">
     <div class="dk-title">
-        <span class="pre">Synthèse</span>
-        <h2>@Slide.Sector</h2>
+        <span class="pre">Synthèse · @Slide.Sector</span>
+        <h2><i class="dk-lc" aria-hidden="true"></i>@Slide.Title</h2>
         <p class="dk-sub">
             <b>@Slide.PeriodLabel</b>
             @if (Slide.FilterLabel.Length > 0)
@@ -26,7 +27,7 @@
 </section>
 
 <div class="row dk-kpis">
-    <KpiTile Label="TRS du secteur" Value="@Fmt.Pct(Slide.Kpis.TrsPercent)" />
+    <KpiTile Label="TRS de la ligne" Value="@Fmt.Pct(Slide.Kpis.TrsPercent)" Css="@Fmt.Css(Slide.TrsSeverity)" />
     <KpiTile Label="Production" Value="@KpiCalculator.FormatMass(Slide.Kpis.ProductionKg)" Sub="@($"{Fmt.Num(Slide.Kpis.TotalBags)} sacs")" />
     <KpiTile Label="Écart de poids" Value="@Fmt.SignedPct(Slide.Kpis.WeightDeviationPercent)" Sub="@Slide.Kpis.GiveawayLabel" />
     <KpiTile Label="Vitesse moyenne" Hint="sacs/min" Value="@Fmt.Num(Slide.Kpis.SpeedBagsPerMinute, 1)" />
@@ -66,6 +67,16 @@
                     </table>
                 </div>
             }
+        </section>
+    }
+    @foreach (var name in Slide.Planned)
+    {
+        <section class="card dk-planned">
+            <div class="card-head">
+                <h2>@name</h2>
+                <span class="chip">En préparation</span>
+            </div>
+            <p class="empty">Machine pas encore raccordée : elle apparaîtra ici dès ses premières données.</p>
         </section>
     }
 </div>

@@ -157,6 +157,16 @@ public class AppSettings
     public int SlideSecondsFor(string key)
         => Math.Max(1, Slides.FirstOrDefault(s => s.Key == key)?.DurationSeconds ?? SlideDurationSeconds);
 
+    // The web dashboard's own rotation (it is organised by line, the
+    // kiosk's deck above by sector). Empty = the default order.
+    public List<SlideSetting> WebSlides { get; set; } = new();
+
+    public int WebSlideSecondsFor(string key)
+        => Math.Max(1, WebSlides.FirstOrDefault(s => s.Key == key)?.DurationSeconds ?? SlideDurationSeconds);
+
+    // Production lines of the web dashboard (Paramètres > Lignes).
+    public List<DashboardLine> DashboardLines { get; set; } = DashboardLine.Defaults();
+
     // How often the slide deck itself is rebuilt (drops/reinstates disconnected
     // machines, refreshes underlying data). Spec calls for 1-5 min, configurable.
     public int DataRefreshIntervalMinutes { get; set; } = 1;

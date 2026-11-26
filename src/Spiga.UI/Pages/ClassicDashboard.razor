@@ -23,7 +23,7 @@ else
         <div class="head">
             <div>
                 <span class="pre">Production</span><h1>Tableau de bord détaillé</h1>
-                <p>@(_slides.Count == 0 ? "" : $"{_index + 1} / {_slides.Count} · {SlideDeck.Label(_slides[_index], NameOf)}")</p>
+                <p>@(_slides.Count == 0 ? "" : $"{_index + 1} / {_slides.Count} · {LabelOf(_slides[_index])}")</p>
             </div>
             <div class="head-tools">
                 <a class="bar" href="@HistoryLink">@Icons.Svg("clock")Historique</a>
@@ -55,12 +55,26 @@ else
                 <span>Secteur</span>
                 <div class="segs" role="group" aria-label="Secteur">
                     <button type="button" class="seg @(_sector == null ? "on" : "")" @onclick="() => SetSectorAsync(null)">Tous</button>
-                    @foreach (var s in _machines.Select(m => m.Sector).Distinct())
+                    @foreach (var s in Sectors)
                     {
                         <button type="button" class="seg @(_sector == s ? "on" : "")" @onclick="() => SetSectorAsync(s)">@Machine.SectorLabel(s)</button>
                     }
                 </div>
             </div>
+            @if (SectorLines.Count > 0)
+            {
+                <div class="f">
+                    <span>Ligne</span>
+                    <div class="segs" role="group" aria-label="Ligne">
+                        <button type="button" class="seg @(_line == null ? "on" : "")" @onclick="() => SetLineAsync(null)">Toutes</button>
+                        @foreach (var l in SectorLines)
+                        {
+                            <button type="button" class="seg @(_line == l.Name ? "on" : "")" style="--lc:@WebDeck.ColorOf(Deck.Lines, l.Name)"
+                                    @onclick="() => SetLineAsync(l.Name)"><i class="dk-lc small" aria-hidden="true"></i>@l.Name</button>
+                        }
+                    </div>
+                </div>
+            }
             <div class="f">
                 <span>Machines</span>
                 <details class="pb-lines">
@@ -130,7 +144,7 @@ else
                 @for (var i = 0; i < _slides.Count; i++)
                 {
                     var n = i;
-                    <button type="button" class="dk-dot @(n == _index ? "on" : "")" title="@SlideDeck.Label(_slides[n], NameOf)" aria-label="@SlideDeck.Label(_slides[n], NameOf)" @onclick="() => GoAsync(n)"></button>
+                    <button type="button" class="dk-dot @(n == _index ? "on" : "")" title="@LabelOf(_slides[n])" aria-label="@LabelOf(_slides[n])" @onclick="() => GoAsync(n)"></button>
                 }
             </div>
         </div>
@@ -140,7 +154,7 @@ else
         @* Écran TV: the slides alone, full screen; the timer bar and two discreet buttons. *@
         <div class="tv-bar">
             <div class="dk-timer"><i style="width:@((_seconds <= 0 ? 0 : Math.Min(100, _elapsed / _seconds * 100)).ToString("0.#", CultureInfo.InvariantCulture))%"></i></div>
-            <span class="tv-title">@(_slides.Count == 0 ? "" : SlideDeck.Label(_slides[_index], NameOf))</span>
+            <span class="tv-title">@(_slides.Count == 0 ? "" : LabelOf(_slides[_index]))</span>
             @if (_shiftLabel.Length > 0)
             {
                 <span class="tv-shift @(_shiftChanges > 0 ? "announce" : "")" @key="_shiftChanges"><span class="dot"></span>@_shiftLabel</span>
@@ -183,11 +197,11 @@ else
                 case SynthesisSlide synthesis:
                     <SynthesisSlideView Slide="synthesis" OnPeriod="SetSynthesisPeriodAsync" />
                     break;
-                case PackagingSlide packaging:
-                    <PackagingSlideView Slide="packaging" />
+                case LineSlide line:
+                    <LineSlideView Slide="line" />
                     break;
-                case RunStateSlide runState:
-                    <RunStateSlideView Slide="runState" />
+                case PlantSlide plant:
+                    <PlantSlideView Slide="plant" />
                     break;
             }
         </div>
@@ -264,6 +278,7 @@ else
     private DateTime _from;
     private DateTime _to;
     private string? _sector;
+    private string? _line;
     private readonly HashSet<string> _unticked = new(StringComparer.OrdinalIgnoreCase);
     private int? _shift;
     private string? _team;
@@ -320,26 +335,45 @@ else
     private CancellationTokenSource? _life;
     private DateTime _loadedAt;
 
-    private IEnumerable<Machine> SectorMachines => _machines.Where(m => _sector == null || m.Sector == _sector);
+    // Sectors of the lines (a machine counts in its line's sector), then
+    // those of the machines in no line.
+    private IEnumerable<string> Sectors => _machines.Select(m => WebDeck.SectorOf(Deck.Lines, m)).Distinct()
+        .OrderBy(s => Array.IndexOf(SlideDeck.SectorOrder, s) is var i && i < 0 ? int.MaxValue : i);
 
+    private List<SpigaDashboards.App.Models.DashboardLine> SectorLines
+        => Deck.Lines.Where(l => (_sector == null || l.Sector == _sector)
+                                 && (l.PlannedMachines.Count > 0 || _machines.Any(m => l.MachineIds.Contains(m.MachineId, StringComparer.OrdinalIgnoreCase))))
+            .ToList();
+
+    private IEnumerable<Machine> SectorMachines => _machines.Where(m => (_sector == null || WebDeck.SectorOf(Deck.Lines, m) == _sector)
+                                                                       && (_line == null || WebDeck.LineOf(Deck.Lines, m.MachineId)?.Name == _line));
+
+    // Sector, line and machine boxes narrow the machines: they go to the
+    // deck as MachineIds (a machine's line can be in a sector its database
+    // row doesn't say), with what they stand for said on the slides.
     private DashboardFilter Filter
     {
         get
         {
             var shown = SectorMachines.ToList();
             var ticked = shown.Where(m => !_unticked.Contains(m.MachineId)).ToList();
-            var all = ticked.Count == shown.Count;
+            var narrowed = ticked.Count < _machines.Count;
+            var scope = ticked.Count < shown.Count ? null
+                : _line != null ? SpigaDashboards.App.Models.DashboardLine.LabelOf(_line)
+                : _sector != null ? Machine.SectorLabel(_sector) : null;
             return new DashboardFilter
             {
-                Sector = _sector,
-                MachineIds = all ? Array.Empty<string>() : ticked.Select(m => m.MachineId).ToList(),
-                MachineNames = all ? Array.Empty<string>() : ticked.Select(m => m.MachineName).ToList(),
+                MachineIds = narrowed ? ticked.Select(m => m.MachineId).ToList() : Array.Empty<string>(),
+                MachineNames = narrowed ? ticked.Select(m => m.MachineName).ToList() : Array.Empty<string>(),
+                ScopeLabel = narrowed ? scope : null,
                 ShiftId = _shift,
                 Team = _team,
                 TargetWeight = _weight,
             };
         }
     }
+
+    private string LabelOf(SlideDescriptor slide) => WebDeck.Label(slide, NameOf, Deck.Lines);
 
     private string MachinesLabel
     {
@@ -378,7 +412,8 @@ else
     private void Rebuild()
     {
         var key = _slides.Count > _index ? _slides[_index].Key : null;
-        _slides = Deck.Deck(_machines, Filter);
+        // Every box unticked: nothing to show (no MachineIds would mean all).
+        _slides = SectorMachines.All(m => _unticked.Contains(m.MachineId)) ? new List<SlideDescriptor>() : Deck.Deck(_machines, Filter);
         _index = Math.Max(0, _slides.FindIndex(s => s.Key == key));
     }
 
@@ -457,10 +492,14 @@ else
             var ok = await Run(async () => content = await Task.Run(async () => slide switch
             {
                 MachineSlideDescriptor ms when machines.FirstOrDefault(m => m.MachineId == ms.MachineId) is { } machine
-                    => await Deck.MachineAsync(actor, machine, period, from, to, filter, cancel),
-                SynthesisSlideDescriptor sd => await Deck.SynthesisAsync(actor, sd.Sector, Of(sd.MachineIds), synthesisPeriod, filter, cancel),
-                PackagingSlideDescriptor pd => await Deck.PackagingAsync(actor, pd, Of(pd.MachineIds), period, from, to, filter, cancel),
-                RunStateSlideDescriptor rd => await Deck.RunStateAsync(actor, rd.Title, Of(rd.MachineIds), cancel),
+                    => await Deck.MachineAsync(actor, machine, period, from, to, filter, cancel) with { Line = Deck.TagOf(machine.MachineId) },
+                LineSlideDescriptor ld when Deck.Line(ld.Line) is { } line
+                    => await Deck.LineAsync(actor, line, Of(ld.MachineIds), ld.Planned, period, from, to, filter, cancel),
+                LineSynthesisSlideDescriptor sd when Deck.Line(sd.Line) is { } line
+                    => await Deck.SynthesisAsync(actor, line, Of(sd.MachineIds), sd.Planned, synthesisPeriod, filter, cancel),
+                PlantSlideDescriptor pd => await Deck.PlantAsync(actor, pd.Lines.Select(Deck.Line).OfType<SpigaDashboards.App.Models.DashboardLine>()
+                    .Select(l => (l, (IReadOnlyList<Machine>)Of(l.MachineIds.Where(id => filter.MachineIds.Count == 0 || filter.MachineIds.Contains(id))))).ToList(),
+                    period, from, to, filter, cancel),
                 _ => (object?)null,
             }, cancel));
             if (version != _version || !ok)
@@ -597,6 +636,14 @@ else
     private Task SetSectorAsync(string? sector)
     {
         _sector = sector;
+        _line = null;
+        _unticked.Clear();
+        return ApplyAsync();
+    }
+
+    private Task SetLineAsync(string? line)
+    {
+        _line = line;
         _unticked.Clear();
         return ApplyAsync();
     }
@@ -636,7 +683,7 @@ else
 
     private Task ResetAsync()
     {
-        (_period, _sector, _shift, _team, _weight) = (DashboardPeriod.Day, null, null, null, null);
+        (_period, _sector, _line, _shift, _team, _weight) = (DashboardPeriod.Day, null, null, null, null, null);
         _unticked.Clear();
         return ApplyAsync();
     }
@@ -650,7 +697,7 @@ else
                 : PeriodRanges.Get(_period == DashboardPeriod.PreviousShift ? DashboardPeriod.Day : _period, Deck.Now);
             var f = Filter;
             var q = new List<string> { $"du={from:yyyy-MM-dd}", $"au={to.AddDays(-1):yyyy-MM-dd}" };
-            if (f.Sector != null) q.Add("secteur=" + Uri.EscapeDataString(f.Sector));
+            // Sector and line go as their machines (a line's sector isn't always its machines').
             if (f.MachineIds.Count > 0) q.Add("machines=" + Uri.EscapeDataString(string.Join(",", f.MachineIds)));
             if (f.ShiftId != null) q.Add($"poste={f.ShiftId}");
             if (f.Team != null) q.Add("equipe=" + Uri.EscapeDataString(f.Team));

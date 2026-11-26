@@ -30,6 +30,10 @@ public class SharedSettings
     // Scrolling stop bar. null = saved by a version before it existed: each
     // PC keeps its own.
     public StopTickerSettings? StopTicker { get; set; }
+    // Web dashboard: its lines and its rotation. null = saved by a version
+    // before they existed: kept as they are.
+    public List<DashboardLine>? DashboardLines { get; set; }
+    public List<SlideSetting>? WebSlides { get; set; }
 
     public static SharedSettings From(AppSettings settings) => new()
     {
@@ -45,6 +49,8 @@ public class SharedSettings
         SlideDurationSeconds = settings.SlideDurationSeconds,
         Colors = settings.Colors,
         StopTicker = settings.StopTicker,
+        DashboardLines = settings.DashboardLines,
+        WebSlides = settings.WebSlides,
     };
 
     public void ApplyTo(AppSettings settings)
@@ -67,6 +73,10 @@ public class SharedSettings
             settings.Colors = Colors;
         if (StopTicker != null)
             settings.StopTicker = StopTicker;
+        if (DashboardLines != null)
+            settings.DashboardLines = DashboardLines;
+        if (WebSlides != null)
+            settings.WebSlides = WebSlides;
     }
 
     public static string Serialize(AppSettings settings) => JsonSerializer.Serialize(From(settings));
